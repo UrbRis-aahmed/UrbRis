@@ -10,11 +10,22 @@
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{--bg:#0e1012;--sf:#181a1d;--sf2:#1f2124;--b:rgba(255,255,255,.08);--b2:rgba(255,255,255,.14);--tx:#e8e6e0;--mu:#888680;--ac:#d45a2a;--ac2:#e8703f;--ok:#97c459;--wn:#ef9f27;--er:#f09595;--r:8px}
 body{background:var(--bg);color:var(--tx);font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;line-height:1.5;min-height:100vh}
+*{scrollbar-width:thin;scrollbar-color:var(--b2) transparent}
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--b2);border-radius:4px}
+::-webkit-scrollbar-thumb:hover{background:var(--mu)}
 header{padding:18px 24px;border-bottom:.5px solid var(--b);display:flex;align-items:center;gap:12px}
 .logo{font-size:18px;font-weight:600;letter-spacing:-.02em}.logo span{color:var(--ac)}
 .badge{font-size:11px;background:rgba(212,90,42,.15);color:var(--ac2);border:.5px solid rgba(212,90,42,.3);border-radius:4px;padding:2px 7px}
-.layout{display:grid;grid-template-columns:300px 1fr;height:calc(100vh - 57px)}
-.sidebar{border-right:.5px solid var(--b);padding:20px;overflow-y:auto;display:flex;flex-direction:column;gap:16px}
+.layout{display:grid;grid-template-columns:300px 1fr;height:calc(100vh - 57px);transition:grid-template-columns .2s ease}
+.layout.collapsed{grid-template-columns:40px 1fr}
+.sidebar{border-right:.5px solid var(--b);padding:20px;overflow-y:auto;display:flex;flex-direction:column;gap:16px;transition:padding .2s ease}
+.layout.collapsed .sidebar{padding:12px 6px;overflow:hidden}
+.layout.collapsed .sidebar>*:not(#sbToggle){display:none}
+#sbToggle{background:var(--sf2);border:.5px solid var(--b2);border-radius:6px;color:var(--mu);width:26px;height:26px;display:flex;align-items:center;justify-content:center;cursor:pointer;align-self:flex-end;flex:0 0 auto;font-size:13px}
+#sbToggle:hover{border-color:var(--ac);color:var(--ac2)}
+.layout.collapsed #sbToggle{align-self:center}
 .sl{font-size:11px;font-weight:500;color:var(--mu);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px}
 .fl{font-size:12px;color:var(--mu);display:block;margin-bottom:4px}
 input[type=text],input[type=password],input[type=number]{width:100%;background:var(--sf2);border:.5px solid var(--b2);border-radius:var(--r);color:var(--tx);font-size:12px;padding:7px 10px;outline:none}
@@ -85,8 +96,9 @@ input[type=number]{width:70px;text-align:right}
   <div class="logo">urb<span>ris</span></div>
   <span class="badge">iRAP Street View</span>
 </header>
-<div class="layout">
+<div class="layout" id="layout">
 <div class="sidebar">
+  <button id="sbToggle" onclick="toggleSidebar()" title="Collapse sidebar">&#8249;</button>
   <div>
     <div class="sl">API Keys</div>
     <label class="fl">Google Maps key</label>
@@ -102,7 +114,20 @@ input[type=number]{width:70px;text-align:right}
     <label class="fl" style="margin-top:8px">End address</label>
     <input type="text" id="endAddr" placeholder="456 Oak Ave, City" />
     <button class="btn" id="rb" style="margin-top:8px" onclick="getRoute()">Get route</button>
+    <button class="savebtn" id="drawToggle" style="margin-top:8px" onclick="startDraw()">Or draw route on map instead</button>
     <div id="fn" style="font-size:11px;color:var(--ok);margin-top:6px"></div>
+    <button class="savebtn" id="sendPhone" style="margin-top:8px;display:none">Send to phone (Google Maps)</button>
+    <div id="phonePanel" style="display:none;margin-top:8px;text-align:center;background:var(--sf2);border:.5px solid var(--b);border-radius:8px;padding:10px">
+      <img id="qrImg" style="width:150px;height:150px;border-radius:6px;background:#fff;padding:6px" alt="QR code for Google Maps directions"/>
+      <div style="font-size:11px;color:var(--mu);margin-top:6px">Scan with your phone, or</div>
+      <a id="gmapsLink" href="#" target="_blank" rel="noopener" style="font-size:12px;color:var(--ac2);word-break:break-all;display:block;margin-top:4px">Open in Google Maps</a>
+    </div>
+  </div>
+  <div>
+    <div class="sl">Coverage Gap Scanner</div>
+    <div class="hint">Click a point on the map to scan every road within an area for Street View gaps - a fast way to find where to point a GoPro instead of checking one route at a time.</div>
+    <div class="or" style="margin-top:8px"><label>Area (sq km)</label><input type="number" id="scanArea" value="10" min="1" max="50" step="1" style="width:60px"/></div>
+    <button class="btn" id="scanBtn" style="margin-top:8px" onclick="startScan()">Scan area for gaps</button>
   </div>
   <div>
     <div class="sl">Options</div>
@@ -110,6 +135,7 @@ input[type=number]{width:70px;text-align:right}
     <div class="or" style="margin-top:8px"><label>Snap to road</label><input type="checkbox" id="snap" checked style="width:auto;cursor:pointer"/></div>
     <div class="or" style="margin-top:8px"><label>Auto-analyse iRAP</label><input type="checkbox" id="auto" style="width:auto;cursor:pointer"/></div>
     <div class="or" style="margin-top:8px"><label>Light pollution</label><input type="checkbox" id="lp" style="width:auto;cursor:pointer"/></div>
+    <div class="or" style="margin-top:8px"><label>Street addresses</label><input type="checkbox" id="addr" style="width:auto;cursor:pointer"/></div>
     <div class="or" style="margin-top:8px"><label>Departure time</label><input type="datetime-local" id="dep" style="width:150px"/></div>
     <div class="or" style="margin-top:8px"><label>Avg speed (km/h)</label><input type="number" id="spd" value="60" min="10" max="200" style="width:70px"/></div>
   </div>
@@ -141,19 +167,30 @@ input[type=number]{width:70px;text-align:right}
   <div id="rw" style="display:none">
     <div class="rh">
       <div class="rt" id="rt">Route frames</div>
-      <div style="display:flex;gap:6px;align-items:center">
+      <div style="display:flex;gap:10px;align-items:center">
+        <div style="display:flex;align-items:center;gap:6px">
+          <label style="font-size:11px;color:var(--mu)">Min risk</label>
+          <input type="range" id="rf" min="0" max="100" value="0" step="5" style="width:80px;cursor:pointer"/>
+          <span id="rfv" style="font-size:11px;color:var(--mu);width:38px">0%+</span>
+        </div>
         <span id="cs" style="font-size:12px;color:var(--mu)"></span>
         <button class="vb on" id="bg" onclick="sv('grid')">Images</button>
         <button class="vb" id="bm" onclick="sv('map')">Map</button>
         <button class="vb" id="bbt" onclick="sv('brief')">Briefing</button>
       </div>
     </div>
+    <div id="fs" style="display:none;font-size:11px;color:var(--mu);margin:-8px 0 12px">Points not yet analysed are hidden while a filter is active - they might still be risky, they just haven't been coded yet.</div>
     <div id="wxbar" style="display:none">
       <div id="wxwarnmsg" class="wxwarnmsg" style="display:none">&#9888; Rain or high wind flagged along part of this route - check the cards below.</div>
       <div id="wxstrip" class="wxstrip"></div>
     </div>
     <div id="vg"><div class="grid" id="grid"></div></div>
     <div id="vm" style="display:none">
+      <div id="drawBar" style="display:none;margin-bottom:10px;gap:8px;align-items:center">
+        <button class="vb" id="finishDraw" onclick="finishDraw()">Finish drawing</button>
+        <button class="vb" id="clearDraw" onclick="clearDraw()">Clear</button>
+        <span id="drawCount" style="font-size:12px;color:var(--mu)">0 points placed - click the map to trace your route</span>
+      </div>
       <div style="font-size:11px;color:var(--mu);margin-bottom:10px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
         <div style="display:flex;align-items:center;gap:6px">
           <span>Low risk</span>
@@ -172,6 +209,7 @@ input[type=number]{width:70px;text-align:right}
 <script>
 const $ = id => document.getElementById(id);
 let rp = [], sp = [], res = [], gmap = null, gm = [], gp = null, gs = [], lpLayer = null, wxData = [], denseCurve = null, densePts = null;
+let drawMode = false, drawPts = [], drawPoly = null, drawMarkers = [];
 
 window.addEventListener('load', () => {
   const gk = localStorage.getItem('urbris_gkey');
@@ -180,7 +218,19 @@ window.addEventListener('load', () => {
   if (ak) $('akey').value = ak;
   const now = new Date(Date.now() - new Date().getTimezoneOffset() * 60000);
   $('dep').value = now.toISOString().slice(0, 16);
+  if (localStorage.getItem('urbris_sbCollapsed') === '1') {
+    $('layout').classList.add('collapsed');
+    $('sbToggle').innerHTML = '&#8250;';
+    $('sbToggle').title = 'Expand sidebar';
+  }
 });
+
+function toggleSidebar() {
+  const collapsed = $('layout').classList.toggle('collapsed');
+  $('sbToggle').innerHTML = collapsed ? '&#8250;' : '&#8249;';
+  $('sbToggle').title = collapsed ? 'Expand sidebar' : 'Collapse sidebar';
+  localStorage.setItem('urbris_sbCollapsed', collapsed ? '1' : '0');
+}
 
 function saveKeys() {
   localStorage.setItem('urbris_gkey', $('gkey').value.trim());
@@ -238,6 +288,14 @@ function getRoute() {
   if (!start || !end) { log('Enter start and end addresses', 'er'); return; }
   $('rb').disabled = true;
   $('rb').textContent = 'Loading route...';
+  $('sendPhone').style.display = 'none';
+  $('phonePanel').style.display = 'none';
+  scanMode = false;
+  if (scanRect) { scanRect.setMap(null); scanRect = null; }
+  scanPolys.forEach(p => p.setMap(null));
+  scanPolys = [];
+  const oldScanPanel = $('scanResults');
+  if (oldScanPanel) oldScanPanel.remove();
   ensureMaps(gk, () => {
     const ds = new google.maps.DirectionsService();
     ds.route({
@@ -260,6 +318,7 @@ function getRoute() {
       const from = route.legs[0].start_address.split(',')[0];
       const to = route.legs[route.legs.length - 1].end_address.split(',')[0];
       $('fn').textContent = '+ ' + from + ' \u2192 ' + to;
+      $('sendPhone').style.display = '';
       ust();
       $('run').disabled = false;
       $('run').textContent = 'Extract Street View frames';
@@ -267,6 +326,349 @@ function getRoute() {
       log('Route loaded: ' + (dist / 1000).toFixed(1) + ' km, ' + pts.length + ' points', 'ok');
     });
   });
+}
+
+function buildMapsUrl() {
+  if (!rp.length) return null;
+  const dest = rp[rp.length - 1];
+  // No "origin" is set on purpose - Google Maps will use the phone's live
+  // current location as the starting point, and navigate from there to the
+  // route's actual start (included as the first waypoint), then through it.
+  const n = Math.min(6, rp.length - 1);
+  const wps = [rp[0]];
+  const extra = n - 1;
+  if (extra > 0 && rp.length > 2) {
+    for (let i = 1; i <= extra; i++) {
+      const idx = Math.min(rp.length - 2, Math.round(i * (rp.length - 2) / (extra + 1)) + 1);
+      wps.push(rp[idx]);
+    }
+  }
+  const params = new URLSearchParams({
+    api: '1',
+    destination: dest.lat.toFixed(6) + ',' + dest.lon.toFixed(6),
+    travelmode: 'driving'
+  });
+  params.set('waypoints', wps.map(p => p.lat.toFixed(6) + ',' + p.lon.toFixed(6)).join('|'));
+  return 'https://www.google.com/maps/dir/?' + params.toString();
+}
+
+function sendToPhone() {
+  const url = buildMapsUrl();
+  if (!url) return;
+  $('gmapsLink').href = url;
+  $('gmapsLink').textContent = 'Open in Google Maps';
+  $('qrImg').src = 'https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=' + encodeURIComponent(url);
+  $('phonePanel').style.display = '';
+  log('Google Maps link ready - it will navigate from wherever you are when you open it, to the start of this route and through it', 'ok');
+}
+$('sendPhone').addEventListener('click', sendToPhone);
+
+function startDraw() {
+  const gk = $('gkey').value.trim();
+  if (!gk) { log('Enter Google API key first', 'er'); return; }
+  drawMode = true;
+  drawPts = [];
+  $('sendPhone').style.display = 'none';
+  $('phonePanel').style.display = 'none';
+  scanMode = false;
+  if (scanRect) { scanRect.setMap(null); scanRect = null; }
+  scanPolys.forEach(p => p.setMap(null));
+  scanPolys = [];
+  const oldScanPanel2 = $('scanResults');
+  if (oldScanPanel2) oldScanPanel2.remove();
+  $('empty').style.display = 'none';
+  $('rw').style.display = '';
+  $('rt').textContent = 'Draw your route';
+  $('vg').style.display = 'none';
+  $('vbr').style.display = 'none';
+  $('vm').style.display = '';
+  $('bg').className = 'vb';
+  $('bm').className = 'vb on';
+  $('bbt').className = 'vb';
+  $('drawBar').style.display = 'flex';
+  $('drawCount').textContent = '0 points placed - click the map to trace your route';
+  log('Draw mode - click along the road to trace your route, then click Finish drawing', '');
+  ensureMaps(gk, initDrawMap);
+}
+
+function initDrawMap() {
+  if (!gmap) {
+    gmap = new google.maps.Map($('gmap'), {
+      center: { lat: 43.65, lng: -79.38 }, zoom: 8,
+      styles: [
+        { elementType: 'geometry', stylers: [{ color: '#1a1a2e' }] },
+        { elementType: 'labels.text.fill', stylers: [{ color: '#8a8a9a' }] },
+        { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#2d2d44' }] },
+        { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0d1b2a' }] },
+        { featureType: 'poi', stylers: [{ visibility: 'off' }] }
+      ]
+    });
+    $('lp').addEventListener('change', toggleLightPollution);
+  }
+  if (!drawPoly) {
+    drawPoly = new google.maps.Polyline({ path: [], strokeColor: '#3a7d5c', strokeWeight: 4, map: gmap, clickable: false });
+  } else {
+    drawPoly.setMap(gmap);
+    drawPoly.setPath([]);
+  }
+  google.maps.event.clearListeners(gmap, 'click');
+  gmap.addListener('click', onDrawClick);
+}
+
+function onDrawClick(e) {
+  if (!drawMode) return;
+  const pt = { lat: e.latLng.lat(), lon: e.latLng.lng() };
+  drawPts.push(pt);
+  drawPoly.getPath().push(e.latLng);
+  const m = new google.maps.Marker({
+    position: e.latLng, map: gmap,
+    icon: { path: google.maps.SymbolPath.CIRCLE, scale: 4, fillColor: '#4f9d76', fillOpacity: 1, strokeWeight: 0 }
+  });
+  drawMarkers.push(m);
+  $('drawCount').textContent = drawPts.length + ' point' + (drawPts.length === 1 ? '' : 's') + ' placed';
+}
+
+function clearDraw() {
+  drawPts = [];
+  drawMarkers.forEach(m => m.setMap(null));
+  drawMarkers = [];
+  if (drawPoly) drawPoly.setPath([]);
+  $('drawCount').textContent = '0 points placed - click the map to trace your route';
+}
+
+async function routeThroughPoints(points, gk) {
+  // Directions API allows origin + up to 25 waypoints + destination per request.
+  // Chunk into overlapping segments so longer drawn routes still work.
+  const CHUNK = 23;
+  const chunks = [];
+  let i = 0;
+  while (i < points.length - 1) {
+    const end = Math.min(i + CHUNK + 1, points.length - 1);
+    chunks.push(points.slice(i, end + 1));
+    i = end;
+  }
+  const ds = new google.maps.DirectionsService();
+  let out = [];
+  for (const chunk of chunks) {
+    const origin = chunk[0], destination = chunk[chunk.length - 1];
+    const waypoints = chunk.slice(1, -1).map(p => ({ location: new google.maps.LatLng(p.lat, p.lon), stopover: false }));
+    const result = await new Promise((resolve, reject) => {
+      ds.route({
+        origin: { lat: origin.lat, lng: origin.lon },
+        destination: { lat: destination.lat, lng: destination.lon },
+        waypoints: waypoints,
+        travelMode: google.maps.TravelMode.DRIVING
+      }, (res, status) => {
+        if (status === 'OK') resolve(res);
+        else reject(new Error('Directions failed for a segment: ' + status));
+      });
+    });
+    result.routes[0].legs.forEach(leg => {
+      leg.steps.forEach(step => {
+        step.path.forEach(p => out.push({ lat: p.lat(), lon: p.lng() }));
+      });
+    });
+  }
+  return out;
+}
+
+let scanMode = false, scanRect = null, scanPolys = [], scanResults = [];
+
+function startScan() {
+  const gk = $('gkey').value.trim();
+  if (!gk) { log('Enter Google API key first', 'er'); return; }
+  scanMode = true;
+  $('empty').style.display = 'none';
+  $('rw').style.display = '';
+  $('rt').textContent = 'Click a point on the map to set the scan center';
+  $('vg').style.display = 'none';
+  $('vbr').style.display = 'none';
+  $('vm').style.display = '';
+  $('bg').className = 'vb';
+  $('bm').className = 'vb on';
+  $('bbt').className = 'vb';
+  $('drawBar').style.display = 'none';
+  const old = $('scanResults');
+  if (old) old.remove();
+  log('Scan mode - click a point on the map to set the scan center', '');
+  ensureMaps(gk, initScanMap);
+}
+
+function initScanMap() {
+  if (!gmap) {
+    gmap = new google.maps.Map($('gmap'), {
+      center: { lat: 43.65, lng: -79.38 }, zoom: 8,
+      styles: [
+        { elementType: 'geometry', stylers: [{ color: '#1a1a2e' }] },
+        { elementType: 'labels.text.fill', stylers: [{ color: '#8a8a9a' }] },
+        { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#2d2d44' }] },
+        { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0d1b2a' }] },
+        { featureType: 'poi', stylers: [{ visibility: 'off' }] }
+      ]
+    });
+    $('lp').addEventListener('change', toggleLightPollution);
+  }
+  google.maps.event.clearListeners(gmap, 'click');
+  gmap.addListener('click', onScanClick);
+}
+
+function bboxFromCenter(lat, lon, sqKm) {
+  const halfSideKm = Math.sqrt(sqKm) / 2;
+  const latOff = halfSideKm / 111.32;
+  const lonOff = halfSideKm / (111.32 * Math.cos(lat * Math.PI / 180));
+  return { south: lat - latOff, north: lat + latOff, west: lon - lonOff, east: lon + lonOff };
+}
+
+async function onScanClick(e) {
+  if (!scanMode) return;
+  scanMode = false;
+  google.maps.event.clearListeners(gmap, 'click');
+
+  const lat = e.latLng.lat(), lon = e.latLng.lng();
+  const sqKm = +$('scanArea').value || 10;
+  const bbox = bboxFromCenter(lat, lon, sqKm);
+
+  scanPolys.forEach(p => p.setMap(null));
+  scanPolys = [];
+  scanResults = [];
+  const oldPanel = $('scanResults');
+  if (oldPanel) oldPanel.remove();
+
+  if (scanRect) scanRect.setMap(null);
+  scanRect = new google.maps.Rectangle({
+    bounds: { north: bbox.north, south: bbox.south, east: bbox.east, west: bbox.west },
+    strokeColor: '#4f9d76', strokeWeight: 2, fillOpacity: 0.05, fillColor: '#4f9d76', map: gmap, clickable: false
+  });
+  gmap.fitBounds(scanRect.getBounds());
+
+  log('Fetching road network for ' + sqKm + ' sq km area...', '');
+  try {
+    const bboxStr = bbox.south.toFixed(6) + ',' + bbox.west.toFixed(6) + ',' + bbox.north.toFixed(6) + ',' + bbox.east.toFixed(6);
+    const resp = await fetch('/roadsinarea', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ bbox: bboxStr })
+    });
+    const data = await resp.json();
+    if (data.error) { log(data.error, 'er'); $('rt').textContent = 'Scan failed - click elsewhere to try again'; return; }
+    const ways = (data.elements || []).filter(el => el.type === 'way' && el.geometry && el.geometry.length > 1);
+    if (!ways.length) { log('No roads found in this area', 'wn'); $('rt').textContent = 'No roads found - click elsewhere to try again'; return; }
+    log('Found ' + ways.length + ' road segments - checking coverage...', '');
+    await scanWays(ways);
+  } catch (err) {
+    log('Scan failed: ' + err.message, 'er');
+  }
+}
+
+async function scanWays(ways) {
+  const gk = $('gkey').value.trim();
+  let done = 0;
+  $('pw').style.display = '';
+  $('pl').textContent = 'Scanning';
+  $('pf').style.width = '0%';
+  $('pp').textContent = '0%';
+
+  for (const way of ways) {
+    const pts = way.geometry.map(p => ({ lat: p.lat, lon: p.lon }));
+    const name = (way.tags && way.tags.name) || 'Unnamed road';
+
+    const samplePts = [pts[0]];
+    let acc = 0;
+    for (let i = 1; i < pts.length; i++) {
+      acc += hav(pts[i - 1], pts[i]);
+      if (acc >= 300) { samplePts.push(pts[i]); acc = 0; }
+    }
+    if (samplePts[samplePts.length - 1] !== pts[pts.length - 1]) samplePts.push(pts[pts.length - 1]);
+
+    let covered = 0;
+    for (const p of samplePts) {
+      const ok = await chk(gk, p.lat, p.lon);
+      if (ok) covered++;
+    }
+    const pct = Math.round((covered / samplePts.length) * 100);
+    let lengthKm = 0;
+    for (let i = 1; i < pts.length; i++) lengthKm += hav(pts[i - 1], pts[i]) / 1000;
+
+    scanResults.push({ name, pct, lengthKm, pts });
+
+    const color = pct >= 80 ? '#97c459' : pct >= 40 ? '#ef9f27' : '#f09595';
+    scanPolys.push(new google.maps.Polyline({
+      path: pts.map(p => ({ lat: p.lat, lng: p.lon })),
+      strokeColor: color, strokeWeight: 4, strokeOpacity: 0.85, map: gmap
+    }));
+
+    done++;
+    $('pf').style.width = Math.round(done / ways.length * 100) + '%';
+    $('pp').textContent = Math.round(done / ways.length * 100) + '%';
+  }
+  $('pw').style.display = 'none';
+
+  scanResults.sort((a, b) => a.pct - b.pct);
+  renderScanResults();
+  const gaps = scanResults.filter(r => r.pct < 80).length;
+  $('rt').textContent = 'Coverage scan - ' + scanResults.length + ' roads, ' + gaps + ' with gaps';
+  log('Scan complete - ' + scanResults.length + ' roads checked, ' + gaps + ' flagged with gaps', gaps ? 'wn' : 'ok');
+}
+
+function renderScanResults() {
+  const gaps = scanResults.filter(r => r.pct < 80).length;
+  let rows = scanResults.map(r => {
+    const color = r.pct >= 80 ? 'var(--ok)' : r.pct >= 40 ? 'var(--wn)' : 'var(--er)';
+    return '<tr><td style="padding:5px 8px;border-top:.5px solid var(--b)">' + r.name + '</td><td style="padding:5px 8px;border-top:.5px solid var(--b)">' + r.lengthKm.toFixed(1) + ' km</td><td style="padding:5px 8px;border-top:.5px solid var(--b);color:' + color + '">' + r.pct + '%</td></tr>';
+  }).join('');
+  let panel = $('scanResults');
+  if (!panel) {
+    panel = document.createElement('div');
+    panel.id = 'scanResults';
+    panel.style.marginTop = '16px';
+    $('vm').appendChild(panel);
+  }
+  panel.innerHTML = '<div style="font-size:13px;font-weight:500;margin-bottom:8px">Coverage by road (' + scanResults.length + ' total, ' + gaps + ' with gaps &lt;80%)</div>'
+    + '<div style="font-size:11px;color:var(--mu);margin-bottom:8px;display:flex;gap:16px">'
+    + '<span><span style="color:var(--ok)">&#9679;</span> 80%+ covered</span>'
+    + '<span><span style="color:var(--wn)">&#9679;</span> 40-79%</span>'
+    + '<span><span style="color:var(--er)">&#9679;</span> under 40% - best filming targets</span>'
+    + '</div>'
+    + '<table style="width:100%;border-collapse:collapse;font-size:12px">'
+    + '<tr><th style="text-align:left;padding:5px 8px;color:var(--mu)">Road</th><th style="text-align:left;padding:5px 8px;color:var(--mu)">Length</th><th style="text-align:left;padding:5px 8px;color:var(--mu)">Coverage</th></tr>'
+    + rows + '</table>';
+}
+
+async function finishDraw() {
+  if (drawPts.length < 2) { log('Click at least 2 points to draw a route', 'er'); return; }
+  const gk = $('gkey').value.trim();
+  $('finishDraw').disabled = true;
+  $('finishDraw').textContent = 'Processing...';
+  log('Snapping drawn route to roads (' + drawPts.length + ' clicks)...', '');
+  try {
+    const dense = await routeThroughPoints(drawPts, gk);
+    if (!dense.length) throw new Error('No points returned from road snapping');
+    rp = dense;
+    drawMode = false;
+    google.maps.event.clearListeners(gmap, 'click');
+    drawMarkers.forEach(m => m.setMap(null));
+    drawMarkers = [];
+    if (drawPoly) {
+      drawPoly.setPath(dense.map(p => ({ lat: p.lat, lng: p.lon })));
+      drawPoly.setOptions({ strokeColor: '#4f9d76', strokeWeight: 4 });
+      const bounds = new google.maps.LatLngBounds();
+      dense.forEach(p => bounds.extend({ lat: p.lat, lng: p.lon }));
+      gmap.fitBounds(bounds);
+    }
+    $('drawBar').style.display = 'none';
+    $('fn').textContent = '+ Drawn route (' + drawPts.length + ' clicks \u2192 ' + dense.length + ' road points)';
+    $('sendPhone').style.display = '';
+    $('rt').textContent = 'Route confirmed - click "Extract Street View frames" in the sidebar to continue';
+    ust();
+    $('run').disabled = false;
+    $('run').textContent = 'Extract Street View frames';
+    log('Route ready: ' + (td(rp) / 1000).toFixed(1) + ' km from drawn path - click Extract Street View frames to continue', 'ok');
+  } catch (e) {
+    log('Failed to process drawn route: ' + e.message, 'er');
+  } finally {
+    $('finishDraw').disabled = false;
+    $('finishDraw').textContent = 'Finish drawing';
+  }
 }
 
 function ust() {
@@ -336,7 +738,7 @@ async function snapRd(pts, gk) {
   return out;
 }
 
-const PROMPT = 'You are an iRAP road safety assessor. Analyse this Street View image. Return ONLY valid JSON, no markdown, no explanation. Use exactly this structure: {"number_of_lanes":"1/2/3/4+","road_surface":"paved/unpaved/mixed","carriageway_type":"single/dual/one-way","lane_width":"narrow/standard/wide","median_type":"none/painted/raised/barrier","curvature":"straight/slight/moderate/sharp","grade":"flat/undulating/significant","road_condition":"good/fair/poor/very poor","delineation":"good/fair/poor/none","centreline_marking":"yes/no/partial","edge_marking":"yes/no/partial","shoulder_type":"none/unpaved/paved","shoulder_width":"none/narrow/moderate/wide","roadside_object":"none/pole/tree/wall/barrier/cliff/other","roadside_distance":"0-1m/1-5m/5-10m/>10m","safety_barrier":"none/wire rope/guardrail/concrete/damaged","street_lighting":"yes/no/partial","area_type":"rural/semi-rural/suburban/urban","speed_environment":"<60/60-80/80-100/>100","confidence":"high/medium/low","notes":"max 12 words on dominant risk"}';
+const PROMPT = 'You are an iRAP road safety assessor. Analyse this Street View image. This is a single archived photo that may be months or years old, not a live view - describe only the permanent road infrastructure. Ignore and never mention anything transient that happens to be in the frame: vehicles, pedestrians, cyclists, weather, lighting, or time of day. Return ONLY valid JSON, no markdown, no explanation. Use exactly this structure: {"number_of_lanes":"1/2/3/4+","road_surface":"paved/unpaved/mixed","carriageway_type":"single/dual/one-way","lane_width":"narrow/standard/wide","median_type":"none/painted/raised/barrier","curvature":"straight/slight/moderate/sharp","grade":"flat/undulating/significant","road_condition":"good/fair/poor/very poor","delineation":"good/fair/poor/none","centreline_marking":"yes/no/partial","edge_marking":"yes/no/partial","shoulder_type":"none/unpaved/paved","shoulder_width":"none/narrow/moderate/wide","roadside_object":"none/pole/tree/wall/barrier/cliff/other","roadside_distance":"0-1m/1-5m/5-10m/>10m","safety_barrier":"none/wire rope/guardrail/concrete/damaged","street_lighting":"yes/no/partial","area_type":"rural/semi-rural/suburban/urban","speed_environment":"<60/60-80/80-100/>100","confidence":"high/medium/low","notes":"max 12 words on dominant road-infrastructure risk - never mention vehicles, pedestrians, or weather"}';
 
 const RF = {
   road_surface: ['unpaved', 'mixed'],
@@ -415,6 +817,7 @@ async function ac(btn, url, idx) {
     btn.classList.add('done');
     btn.disabled = false;
     log('km ' + (res[idx] && res[idx].km ? res[idx].km.toFixed(2) : idx) + ' coded', 'ok');
+    applyFilter();
   } catch (e) {
     const msg = (e && e.message) ? e.message : String(e);
     p.innerHTML = '<div style="font-size:11px;color:var(--er);padding:4px">' + msg + '</div>';
@@ -463,6 +866,91 @@ async function fetchWeather(points, forecastDays) {
   if (!r.ok) throw new Error('Weather request failed: HTTP ' + r.status);
   const data = await r.json();
   return Array.isArray(data) ? data : [data];
+}
+
+let geocoder = null, addrChecked = false;
+
+function reverseGeocode(lat, lon) {
+  return new Promise((resolve) => {
+    if (!geocoder) geocoder = new google.maps.Geocoder();
+    geocoder.geocode({ location: { lat, lng: lon } }, (results, status) => {
+      if (status !== 'OK' || !results.length) { resolve({ street: null, postal: null }); return; }
+      const comps = results[0].address_components;
+      const streetNum = comps.find(c => c.types.includes('street_number'));
+      const route = comps.find(c => c.types.includes('route'));
+      const postal = comps.find(c => c.types.includes('postal_code'));
+      const street = route ? (streetNum ? streetNum.long_name + ' ' : '') + route.long_name : null;
+      resolve({ street, postal: postal ? postal.long_name : null });
+    });
+  });
+}
+
+async function fetchAddresses() {
+  if (!res.length) return;
+  const gk = $('gkey').value.trim();
+  if (!gk) { log('Enter Google API key first', 'er'); return; }
+  ensureMaps(gk, async () => {
+    log('Looking up street addresses (' + res.length + ' points)...', '');
+    let found = 0;
+    for (let i = 0; i < res.length; i++) {
+      const r = res[i];
+      const g = await reverseGeocode(r.lat, r.lon);
+      r.street = g.street;
+      r.postal = g.postal;
+      if (g.street || g.postal) found++;
+      const slot = $('addr' + i);
+      if (slot) {
+        slot.textContent = (g.street || 'Unnamed road') + (g.postal ? ' \u00b7 ' + g.postal : '');
+      }
+      await new Promise(r2 => setTimeout(r2, 150));
+    }
+    addrChecked = true;
+    log('Street addresses looked up (' + found + '/' + res.length + ' resolved)', 'ok');
+  });
+}
+
+let cellChecked = false;
+
+async function fetchCellCoverage() {
+  if (!res.length) return;
+  try {
+    log('Checking cell tower coverage along route...', '');
+    const resp = await fetch('/cellcoverage', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ points: res.map(r => ({ lat: r.lat, lon: r.lon })) })
+    });
+    const d = await resp.json();
+    const distances = d.distances || [];
+    let gaps = 0, haveData = false;
+    res.forEach((r, i) => {
+      const dist = distances[i];
+      if (dist != null) haveData = true;
+      let cls;
+      if (dist == null) cls = 'No tower data';
+      else if (dist <= 5) cls = 'Good coverage';
+      else if (dist <= 12) cls = 'Marginal coverage';
+      else cls = 'Likely dead zone';
+      const risky = cls === 'Likely dead zone';
+      if (risky) gaps++;
+      r.cellDist = dist;
+      r.cellClass = cls;
+      r.cellRisky = risky;
+
+      const slot = $('cell' + i);
+      if (slot && dist != null) {
+        slot.innerHTML = 'Signal: ' + dist.toFixed(1) + 'km to tower &middot; <span style="color:' + (risky ? 'var(--er)' : 'var(--mu)') + '">' + cls + '</span>';
+      }
+    });
+    cellChecked = true;
+    if (!haveData) {
+      log('No cell tower data loaded on the server (cell_towers.csv missing) - coverage check skipped', 'wn');
+    } else {
+      log('Cell coverage checked' + (gaps ? ' - ' + gaps + ' likely dead zone point(s) flagged' : ' - no dead zones flagged'), gaps ? 'wn' : 'ok');
+    }
+  } catch (e) {
+    log('Cell coverage check failed: ' + e.message, 'er');
+  }
 }
 
 async function fetchAndRenderWeather() {
@@ -585,6 +1073,29 @@ function extractDistinctCurves(dense, pts, maxN, minSepM) {
   return picked.sort((a, b) => a.km - b.km);
 }
 
+function applyFilter() {
+  const th = +$('rf').value;
+  $('rfv').textContent = th + '%+';
+  $('fs').style.display = th > 0 ? '' : 'none';
+  if (!res.length) return;
+  const cardEls = $('grid').children;
+  let shown = 0;
+  res.forEach((r, i) => {
+    let match;
+    if (r.irap) {
+      match = riskScore(r.irap) * 100 >= th;
+    } else {
+      match = th === 0;
+    }
+    if (match) shown++;
+    const el = cardEls[i];
+    if (el) el.style.display = match ? '' : 'none';
+    if (gm[i]) gm[i].setVisible(match);
+  });
+  if (th > 0) $('cs').textContent = shown + ' of ' + res.length + ' shown';
+}
+$('rf').addEventListener('input', applyFilter);
+
 $('run').addEventListener('click', async () => {
   const gk = $('gkey').value.trim();
   if (!gk) { log('Enter Google API key', 'er'); return; }
@@ -600,6 +1111,9 @@ $('run').addEventListener('click', async () => {
   $('xw').style.display = 'none';
   $('wxbar').style.display = 'none';
   $('wxstrip').innerHTML = '';
+  $('rf').value = 0;
+  $('rfv').textContent = '0%+';
+  $('fs').style.display = 'none';
 
   let pts = [...sp];
   if ($('snap').checked) {
@@ -625,22 +1139,13 @@ $('run').addEventListener('click', async () => {
     card.className = 'card';
 
     if (!ok) {
-      card.innerHTML = '<div class="nc">No Street View coverage</div><div class="cb"><span class="ckm">km ' + pt.distKm.toFixed(2) + '</span><div class="cc">' + pt.lat.toFixed(6) + ', ' + pt.lon.toFixed(6) + '</div></div>';
+      card.innerHTML = '<div class="nc">No Street View coverage</div><div class="cb"><span class="ckm">km ' + pt.distKm.toFixed(2) + '</span><div class="cc">' + pt.lat.toFixed(6) + ', ' + pt.lon.toFixed(6) + '</div><div class="cc" id="curve' + i + '"></div><div class="cc" id="cell' + i + '"></div><div class="cc" id="addr' + i + '"></div></div>';
       res.push({ km: pt.distKm, lat: pt.lat, lon: pt.lon, heading: pt.heading, imageUrl: '', hasCoverage: false });
     } else {
       const url = svurl(gk, pt.lat, pt.lon, pt.heading);
       card.dataset.url = url;
-      card.innerHTML = '<img src="' + url + '" alt="km ' + pt.distKm.toFixed(2) + '" loading="lazy"/><div class="cb"><span class="ckm">km ' + pt.distKm.toFixed(2) + '</span><div class="cc">' + pt.lat.toFixed(6) + ', ' + pt.lon.toFixed(6) + '</div><button class="ab" data-idx="' + i + '">Code iRAP attributes</button></div><div class="ip" id="ip' + i + '"></div>';
+      card.innerHTML = '<img src="' + url + '" alt="km ' + pt.distKm.toFixed(2) + '" loading="lazy"/><div class="cb"><span class="ckm">km ' + pt.distKm.toFixed(2) + '</span><div class="cc">' + pt.lat.toFixed(6) + ', ' + pt.lon.toFixed(6) + '</div><div class="cc" id="curve' + i + '"></div><div class="cc" id="cell' + i + '"></div><div class="cc" id="addr' + i + '"></div><button class="ab" data-idx="' + i + '">Code iRAP attributes</button></div><div class="ip" id="ip' + i + '"></div>';
       res.push({ km: pt.distKm, lat: pt.lat, lon: pt.lon, heading: pt.heading, imageUrl: url, hasCoverage: true });
-      if (aa) {
-        $('grid').appendChild(card);
-        const btn = card.querySelector('.ab');
-        await ac(btn, url, i);
-        await new Promise(r => setTimeout(r, 400));
-        $('pf').style.width = Math.round((i+1)/tot*100) + '%';
-        $('pp').textContent = Math.round((i+1)/tot*100) + '%';
-        continue;
-      }
     }
     $('grid').appendChild(card);
     $('pf').style.width = Math.round((i+1)/tot*100) + '%';
@@ -649,6 +1154,7 @@ $('run').addEventListener('click', async () => {
   }
 
   // Wire up analyse buttons after all cards are added
+  const cardEls = $('grid').children;
   document.querySelectorAll('.ab[data-idx]').forEach(btn => {
     btn.addEventListener('click', function() {
       const idx = parseInt(this.dataset.idx);
@@ -657,32 +1163,50 @@ $('run').addEventListener('click', async () => {
     });
   });
 
+  // Curvature annotation - pure GPS geometry, independent of AI analysis,
+  // so it (and weather, cell coverage, the map) show up immediately rather
+  // than waiting behind a potentially multi-minute auto-analyse pass.
   res.forEach(r => {
     const t = tightestInWindow(denseCurve, r.km * 1000, Math.max(iv, 30));
     r.curveRadius = t.radius;
     r.curveClass = t.cls;
   });
-  const cardEls = $('grid').children;
   res.forEach((r, i) => {
-    const cb = cardEls[i] && cardEls[i].querySelector('.cb');
-    if (!cb || !r.curveClass) return;
-    const line = document.createElement('div');
-    line.className = 'cc';
-    line.style.marginTop = '2px';
+    if (!r.curveClass) return;
+    const slot = $('curve' + i);
+    if (!slot) return;
     const risky = r.curveClass === 'Sharp curve' || r.curveClass === 'Hairpin';
-    line.innerHTML = 'Measured: ' + (isFinite(r.curveRadius) ? Math.round(r.curveRadius) + 'm radius' : '\u221e') + ' &middot; <span style="color:' + (risky ? 'var(--er)' : 'var(--mu)') + '">' + r.curveClass + '</span>';
-    const abBtn = cb.querySelector('.ab');
-    cb.insertBefore(line, abBtn || null);
+    slot.innerHTML = 'Measured: ' + (isFinite(r.curveRadius) ? Math.round(r.curveRadius) + 'm radius' : '\u221e') + ' &middot; <span style="color:' + (risky ? 'var(--er)' : 'var(--mu)') + '">' + r.curveClass + '</span>';
   });
 
-  $('run').disabled = false;
-  $('run').textContent = 'Re-run';
   $('xw').style.display = '';
   const c = res.filter(r => r.hasCoverage).length;
   $('cs').textContent = c + '/' + res.length + ' covered (' + Math.round(c/res.length*100) + '%)';
-  log('Done - ' + c + '/' + res.length + ' covered', 'ok');
+  log('Extracted ' + c + '/' + res.length + ' covered', 'ok');
   drawMap(gk);
   fetchAndRenderWeather();
+  fetchCellCoverage();
+  if ($('addr').checked) fetchAddresses();
+
+  if (aa) {
+    $('pl').textContent = 'Analysing';
+    $('pf').style.width = '0%';
+    $('pp').textContent = '0%';
+    const coveredIdxs = res.map((r, i) => r.hasCoverage ? i : -1).filter(i => i >= 0);
+    for (let j = 0; j < coveredIdxs.length; j++) {
+      const i = coveredIdxs[j];
+      const btn = cardEls[i].querySelector('.ab');
+      await ac(btn, res[i].imageUrl, i);
+      await new Promise(r => setTimeout(r, 400));
+      $('pf').style.width = Math.round((j+1)/coveredIdxs.length*100) + '%';
+      $('pp').textContent = Math.round((j+1)/coveredIdxs.length*100) + '%';
+    }
+    log('Auto-analysis complete', 'ok');
+  }
+
+  $('pw').style.display = 'none';
+  $('run').disabled = false;
+  $('run').textContent = 'Re-run';
 });
 
 function sv(v) {
@@ -810,7 +1334,15 @@ function iMap() {
       const risky = r.curveClass === 'Sharp curve' || r.curveClass === 'Hairpin';
       curve = '<br><span style="color:' + (risky ? '#f09595' : '#8a8a9a') + '">Measured: ' + (isFinite(r.curveRadius) ? Math.round(r.curveRadius) + 'm radius' : '\u221e') + ' &middot; ' + r.curveClass + '</span>';
     }
-    let body = '<div style="font-size:12px"><b>km ' + r.km.toFixed(2) + '</b><br>' + r.lat.toFixed(6) + ', ' + r.lon.toFixed(6) + '<br>' + status + risk + curve + '</div>';
+    let cell = '';
+    if (r.cellClass && r.cellDist != null) {
+      cell = '<br><span style="color:' + (r.cellRisky ? '#f09595' : '#8a8a9a') + '">Signal: ' + r.cellDist.toFixed(1) + 'km to tower &middot; ' + r.cellClass + '</span>';
+    }
+    let addr = '';
+    if (r.street || r.postal) {
+      addr = '<br>' + (r.street || 'Unnamed road') + (r.postal ? ' &middot; ' + r.postal : '');
+    }
+    let body = '<div style="font-size:12px"><b>km ' + r.km.toFixed(2) + '</b><br>' + r.lat.toFixed(6) + ', ' + r.lon.toFixed(6) + addr + '<br>' + status + risk + curve + cell + '</div>';
     if (r.hasCoverage) {
       body += '<div id="mip" style="margin-top:6px;max-width:260px"></div>';
       if (!r.irap) body += '<button class="ab" id="mab" style="margin-top:6px">Code iRAP attributes</button>';
@@ -837,14 +1369,15 @@ function iMap() {
     gm.push(m);
   });
   gmap.fitBounds(bounds);
+  applyFilter();
 }
 
 const IK = ['number_of_lanes','road_surface','carriageway_type','lane_width','median_type','curvature','grade','road_condition','delineation','centreline_marking','edge_marking','shoulder_type','shoulder_width','roadside_object','roadside_distance','safety_barrier','street_lighting','area_type','speed_environment','confidence','notes'];
 
 $('xb').addEventListener('click', () => {
   if (!res.length) return;
-  const hdr = ['km','lat','lon','heading','has_coverage','measured_radius_m','measured_curve_class',...IK].join(',');
-  const rows = res.map(r => [r.km.toFixed(3), r.lat.toFixed(6), r.lon.toFixed(6), r.heading, r.hasCoverage, isFinite(r.curveRadius) ? Math.round(r.curveRadius) : '', r.curveClass || '', ...IK.map(k => r.irap ? '"' + (r.irap[k] || '') + '"' : '')].join(','));
+  const hdr = ['km','lat','lon','heading','has_coverage','measured_radius_m','measured_curve_class','cell_dist_km','cell_class','street','postal_code',...IK].join(',');
+  const rows = res.map(r => [r.km.toFixed(3), r.lat.toFixed(6), r.lon.toFixed(6), r.heading, r.hasCoverage, isFinite(r.curveRadius) ? Math.round(r.curveRadius) : '', r.curveClass || '', r.cellDist != null ? r.cellDist : '', r.cellClass || '', '"' + (r.street || '') + '"', r.postal || '', ...IK.map(k => r.irap ? '"' + (r.irap[k] || '') + '"' : '')].join(','));
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([[hdr,...rows].join('\n')], { type: 'text/csv' }));
   a.download = 'urbris-irap.csv';
@@ -888,7 +1421,7 @@ function buildBriefingData() {
   if (analysed.length) {
     if (highRisk.length) {
       const worst = highRisk[0];
-      overview += 'Road conditions average ' + Math.round(avgRisk * 100) + '% risk across the ' + analysed.length + ' coded sections, with the most significant hazard around km ' + worst.r.km.toFixed(1) + ' at ' + Math.round(worst.sc * 100) + '% risk' + (worst.r.irap.notes ? ' (' + worst.r.irap.notes + ')' : '') + '.';
+      overview += 'Road conditions average ' + Math.round(avgRisk * 100) + '% risk across the ' + analysed.length + ' coded sections, with the most significant hazard around km ' + worst.r.km.toFixed(1) + ' (' + (totalKm - worst.r.km).toFixed(1) + ' km from the end) at ' + Math.round(worst.sc * 100) + '% risk' + (worst.r.irap.notes ? ' (' + worst.r.irap.notes + ')' : '') + '.';
       if (flaggedWx.length) overview += ' Treat that stretch with extra caution given the weather flagged nearby.';
     } else {
       overview += 'Road conditions across the ' + analysed.length + ' coded sections average a low ' + Math.round(avgRisk * 100) + '% risk, with nothing flagged as a significant hazard.';
@@ -901,22 +1434,51 @@ function buildBriefingData() {
 
   if (tightCurves.length) {
     const tc = tightCurves.slice().sort((a, b) => a.radius - b.radius)[0];
-    overview += ' Independent of the AI coding, route geometry flags ' + tightCurves.length + ' distinct sharp curve' + (tightCurves.length > 1 ? 's' : '') + ' measured directly from the full-resolution GPS route, the tightest being about ' + Math.round(tc.radius) + 'm radius near km ' + tc.km.toFixed(1) + '.';
+    overview += ' Independent of the AI coding, route geometry flags ' + tightCurves.length + ' distinct sharp curve' + (tightCurves.length > 1 ? 's' : '') + ' measured directly from the full-resolution GPS route, the tightest being about ' + Math.round(tc.radius) + 'm radius near km ' + tc.km.toFixed(1) + ' (' + (totalKm - tc.km).toFixed(1) + ' km from the end).';
+  }
+
+  if (analysed.length || tightCurves.length) {
+    overview += ' Zero your trip meter at the route start to match "From start" below, or use your live Google Maps distance-to-destination to match "Remaining" - the latter tracks best for hazards near the end of the route.';
   }
 
   const wxRows = wxData.map(w =>
     '<tr><td>' + w.km.toFixed(1) + ' km</td><td>' + w.etaLabel + '</td><td>' + w.emoji + ' ' + w.label + '</td><td>' + w.temp + '&deg;C</td><td>' + w.wind + ' (gust ' + w.gusts + ') km/h</td><td>' + (w.precip != null ? w.precip + '%' : '-') + '</td><td>' + (w.risky ? '<b style="color:#b33">FLAGGED</b>' : '') + '</td></tr>'
   ).join('');
 
+  function locCell(lat, lon, street, postal) {
+    if (street) return street + (postal ? ' (' + postal + ')' : '') + '<br><span style="font-size:10px;color:#888">' + lat.toFixed(5) + ', ' + lon.toFixed(5) + '</span>';
+    return lat.toFixed(5) + ', ' + lon.toFixed(5);
+  }
+  function nearestAddr(km) {
+    let best = null, bestDiff = Infinity;
+    for (const r of res) {
+      const diff = Math.abs(r.km - km);
+      if (diff < bestDiff) { bestDiff = diff; best = r; }
+    }
+    return best ? { street: best.street, postal: best.postal } : { street: null, postal: null };
+  }
+
   const hazardRows = highRisk.map(x =>
-    '<tr><td>' + x.r.km.toFixed(1) + ' km</td><td>' + x.r.lat.toFixed(5) + ', ' + x.r.lon.toFixed(5) + '</td><td>' + Math.round(x.sc * 100) + '%</td><td>' + (x.r.irap.notes || '') + '</td></tr>'
+    '<tr><td>' + x.r.km.toFixed(1) + ' km</td><td>' + (totalKm - x.r.km).toFixed(1) + ' km</td><td>' + locCell(x.r.lat, x.r.lon, x.r.street, x.r.postal) + '</td><td>' + Math.round(x.sc * 100) + '%</td><td>' + (x.r.irap.notes || '') + '</td></tr>'
   ).join('');
 
-  const curveRows = tightCurves.map(c =>
-    '<tr><td>' + c.km.toFixed(1) + ' km</td><td>' + c.lat.toFixed(5) + ', ' + c.lon.toFixed(5) + '</td><td>' + Math.round(c.radius) + 'm</td><td>' + c.cls + '</td></tr>'
-  ).join('');
+  const curveRows = tightCurves.map(c => {
+    const a = nearestAddr(c.km);
+    return '<tr><td>' + c.km.toFixed(1) + ' km</td><td>' + (totalKm - c.km).toFixed(1) + ' km</td><td>' + locCell(c.lat, c.lon, a.street, a.postal) + '</td><td>' + Math.round(c.radius) + 'm</td><td>' + c.cls + '</td></tr>';
+  }).join('');
 
-  return { depMs, spd, totalKm, analysed, highRisk, avgRisk, overview, wxRows, hazardRows, curveRows, hasWarn: wxData.some(w => w.risky) };
+  const cellGaps = res.filter(r => r.cellRisky);
+  const cellRows = cellGaps.map(r =>
+    '<tr><td>' + r.km.toFixed(1) + ' km</td><td>' + (totalKm - r.km).toFixed(1) + ' km</td><td>' + locCell(r.lat, r.lon, r.street, r.postal) + '</td><td>' + r.cellDist.toFixed(1) + ' km</td></tr>'
+  ).join('');
+  if (cellGaps.length) {
+    overview += ' Cell coverage was checked against known tower locations: ' + cellGaps.length + ' point' + (cellGaps.length > 1 ? 's' : '') + ' along the route sit more than 12km from the nearest known tower - treat those stretches as likely dead zones for calling for help.';
+  }
+
+  const mapsUrl = buildMapsUrl();
+  const qrUrl = mapsUrl ? 'https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=' + encodeURIComponent(mapsUrl) : null;
+
+  return { depMs, spd, totalKm, analysed, highRisk, avgRisk, overview, wxRows, hazardRows, curveRows, cellRows, hasWarn: wxData.some(w => w.risky), mapsUrl, qrUrl };
 }
 
 function renderBriefingTab() {
@@ -931,13 +1493,16 @@ function renderBriefingTab() {
     + '<div class="stat"><b>' + d.highRisk.length + '</b><span>flagged hazards</span></div>'
     + '</div>'
     + '<div class="overview">' + d.overview + '</div>'
+    + (d.qrUrl ? '<div style="display:flex;align-items:center;gap:14px;background:var(--sf2);border:.5px solid var(--b);border-radius:8px;padding:12px 16px;margin-top:16px"><img src="' + d.qrUrl + '" style="width:110px;height:110px;border-radius:6px;background:#fff;padding:4px" alt="QR code for Google Maps directions"/><div style="font-size:12px;color:var(--mu)">Scan to navigate this route from wherever you are.<br><a href="' + d.mapsUrl + '" target="_blank" rel="noopener" style="color:var(--ac2)">Open in Google Maps</a></div></div>' : '')
     + (d.hasWarn ? '<div class="warn">&#9888; Rain or high wind flagged along part of this route - see weather table below.</div>' : '')
     + '<h2>Weather along route</h2>'
     + '<table><tr><th>Point</th><th>ETA</th><th>Conditions</th><th>Temp</th><th>Wind</th><th>Rain chance</th><th></th></tr>' + (d.wxRows || '<tr><td colspan="7">No weather data loaded</td></tr>') + '</table>'
     + '<h2>Flagged hazard points (iRAP risk &ge; 30%)</h2>'
-    + '<table><tr><th>Point</th><th>Coordinates</th><th>Risk score</th><th>Notes</th></tr>' + (d.hazardRows || '<tr><td colspan="4">No high-risk points flagged</td></tr>') + '</table>'
+    + '<table><tr><th>From start</th><th>Remaining</th><th>Location</th><th>Risk score</th><th>Notes</th></tr>' + (d.hazardRows || '<tr><td colspan="5">No high-risk points flagged</td></tr>') + '</table>'
     + '<h2>Tightest measured curves (from GPS geometry, all points)</h2>'
-    + '<table><tr><th>Point</th><th>Coordinates</th><th>Radius</th><th>Class</th></tr>' + (d.curveRows || '<tr><td colspan="4">No sharp curves or hairpins detected on this route</td></tr>') + '</table>'
+    + '<table><tr><th>From start</th><th>Remaining</th><th>Location</th><th>Radius</th><th>Class</th></tr>' + (d.curveRows || '<tr><td colspan="5">No sharp curves or hairpins detected on this route</td></tr>') + '</table>'
+    + '<h2>Cell coverage gaps (&gt;12km from nearest known tower)</h2>'
+    + '<table><tr><th>From start</th><th>Remaining</th><th>Location</th><th>Nearest tower</th></tr>' + (d.cellRows || '<tr><td colspan="4">No coverage gaps flagged, or no tower data loaded</td></tr>') + '</table>'
     + '</div>';
 }
 
@@ -971,13 +1536,16 @@ function generateBriefing() {
     + '<div class="stat"><b>' + d.highRisk.length + '</b><span>flagged hazards</span></div>'
     + '</div>'
     + '<div class="overview">' + d.overview + '</div>'
+    + (d.qrUrl ? '<div style="display:flex;align-items:center;gap:16px;background:#f7f7f7;border-radius:8px;padding:14px 18px;margin-top:16px"><img src="' + d.qrUrl + '" style="width:120px;height:120px;border-radius:6px" alt="QR code for Google Maps directions"/><div style="font-size:13px;color:#444">Scan to navigate this route from wherever you are.<br><a href="' + d.mapsUrl + '" target="_blank">Open in Google Maps</a></div></div>' : '')
     + (d.hasWarn ? '<div class="warn">&#9888; Rain or high wind flagged along part of this route - see weather table below.</div>' : '')
     + '<h2>Weather along route</h2>'
     + '<table><tr><th>Point</th><th>ETA</th><th>Conditions</th><th>Temp</th><th>Wind</th><th>Rain chance</th><th></th></tr>' + (d.wxRows || '<tr><td colspan="7">No weather data loaded</td></tr>') + '</table>'
     + '<h2>Flagged hazard points (iRAP risk &ge; 30%)</h2>'
-    + '<table><tr><th>Point</th><th>Coordinates</th><th>Risk score</th><th>Notes</th></tr>' + (d.hazardRows || '<tr><td colspan="4">No high-risk points flagged</td></tr>') + '</table>'
+    + '<table><tr><th>From start</th><th>Remaining</th><th>Location</th><th>Risk score</th><th>Notes</th></tr>' + (d.hazardRows || '<tr><td colspan="5">No high-risk points flagged</td></tr>') + '</table>'
     + '<h2>Tightest measured curves (from GPS geometry, all points)</h2>'
-    + '<table><tr><th>Point</th><th>Coordinates</th><th>Radius</th><th>Class</th></tr>' + (d.curveRows || '<tr><td colspan="4">No sharp curves or hairpins detected on this route</td></tr>') + '</table>'
+    + '<table><tr><th>From start</th><th>Remaining</th><th>Location</th><th>Radius</th><th>Class</th></tr>' + (d.curveRows || '<tr><td colspan="5">No sharp curves or hairpins detected on this route</td></tr>') + '</table>'
+    + '<h2>Cell coverage gaps (&gt;12km from nearest known tower)</h2>'
+    + '<table><tr><th>From start</th><th>Remaining</th><th>Location</th><th>Nearest tower</th></tr>' + (d.cellRows || '<tr><td colspan="4">No coverage gaps flagged, or no tower data loaded</td></tr>') + '</table>'
     + '<button class="pbtn" onclick="window.print()">Print / Save as PDF</button>'
     + '</body></html>';
 
