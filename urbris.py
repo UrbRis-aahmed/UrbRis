@@ -124,6 +124,19 @@ class H(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(json.dumps(obj).encode())
     def do_GET(self):
+        if self.path == "/gopro-telemetry.bundle.js":
+            bundle_path = os.path.join(BASE, "gopro-telemetry.bundle.js")
+            if os.path.exists(bundle_path):
+                self.send_response(200)
+                self.send_header("Content-Type", "application/javascript")
+                self.send_header("Cache-Control", "public, max-age=604800")  # vendored, rarely changes
+                self.end_headers()
+                with open(bundle_path, "rb") as f:
+                    self.wfile.write(f.read())
+            else:
+                self.send_response(404)
+                self.end_headers()
+            return
         self.send_response(200)
         self.send_header("Content-Type", "text/html")
         self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")

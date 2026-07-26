@@ -49,6 +49,8 @@ input[type=number]{width:70px;text-align:right}
 .sr-rename:hover{color:var(--ac2);background:rgba(212,90,42,.1)}
 .sr-del:hover{color:var(--er);background:rgba(240,149,149,.1)}
 .sr-empty{font-size:11px;color:var(--mu);padding:4px 2px}
+.vld-item{margin-top:8px;border-top:1px dashed var(--b2);padding-top:8px}
+.vld-label{font-size:11px;color:var(--ac2);font-weight:500;text-transform:uppercase;letter-spacing:.04em}
 .stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px}
 .st{background:var(--sf2);border:.5px solid var(--b);border-radius:var(--r);padding:8px;text-align:center}
 .sv{font-size:18px;font-weight:600}.sl2{font-size:10px;color:var(--mu);margin-top:2px}
@@ -101,6 +103,7 @@ input[type=number]{width:70px;text-align:right}
 #gmap{width:100%;height:500px;border-radius:8px;border:.5px solid var(--b);overflow:hidden}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/exif-js/2.3.0/exif.js"></script>
+<script src="/gopro-telemetry.bundle.js"></script>
 </head>
 <body>
 <header>
@@ -146,11 +149,11 @@ input[type=number]{width:70px;text-align:right}
     <button class="btn" id="scanBtn" style="margin-top:8px" onclick="startScan()">Scan area for gaps</button>
   </div>
   <div>
-    <div class="sl">Drone Photos</div>
-    <div class="hint">Fly the gaps flagged "No Street View coverage" below, then drop the geotagged photos here - they're matched to the nearest gap point by GPS automatically and fed straight into iRAP analysis, no re-running anything.</div>
+    <div class="sl">Field Media</div>
+    <div class="hint">Drop photos or video from a drone/GoPro flight - matched to the nearest point by GPS automatically. Fills points marked "No Street View coverage", and attaches as a separate validation image on points that already have coverage, so you can compare what was actually seen against the Street View baseline.</div>
     <div class="dz" style="margin-top:8px">
-      <div style="font-size:12px;color:var(--mu)">Drop or click to select drone photos (JPEG)</div>
-      <input type="file" id="dronePhotos" accept="image/jpeg" multiple />
+      <div style="font-size:12px;color:var(--mu)">Drop or click to select photos/video</div>
+      <input type="file" id="dronePhotos" accept="image/jpeg,video/mp4,video/quicktime,.srt" multiple />
     </div>
     <div id="droneStatus" class="hint" style="margin-top:6px"></div>
   </div>
@@ -853,6 +856,54 @@ async function ac(btn, url, idx) {
   }
 }
 
+// A point that already has Street View coverage gets field media attached as a
+// separate validation image alongside it, rather than replacing the original -
+// the point is to compare what the AI/Street View assumed against what was
+// actually seen in the field, not to overwrite the baseline.
+function renderValidationBlock(idx) {
+  const el = document.getElementById('vld' + idx);
+  if (!el) return;
+  const pt = res[idx];
+  if (!pt || !pt.validationImage) { el.innerHTML = ''; return; }
+  const abLabel = pt.validationIrap ? 'Re-analyse field photo' : 'Code iRAP on field photo';
+  el.innerHTML = '<div class="vld-item"><div class="vld-label">Field validation &middot; ' + (pt.validationSource || 'field media') + '</div>'
+    + '<img src="' + pt.validationImage + '" alt="field validation" loading="lazy" style="width:100%;border-radius:6px;margin-top:4px"/>'
+    + '<button class="ab' + (pt.validationIrap ? ' done' : '') + '" data-vidx="' + idx + '" style="margin-top:6px">' + abLabel + '</button>'
+    + '<div class="ip" id="vip' + idx + '"></div></div>';
+  el.querySelector('.ab[data-vidx]').addEventListener('click', function () {
+    acValidation(this, pt.validationImage, idx);
+  });
+  if (pt.validationIrap) {
+    const vipSlot = document.getElementById('vip' + idx);
+    if (vipSlot) rIRAP(vipSlot, pt.validationIrap);
+  }
+}
+
+async function acValidation(btn, url, idx) {
+  btn.textContent = 'Analysing...';
+  btn.classList.add('loading');
+  btn.disabled = true;
+  const p = document.getElementById('vip' + idx);
+  try {
+    const a = await aiAn(url);
+    rIRAP(p, a);
+    if (res[idx]) res[idx].validationIrap = a;
+    btn.textContent = 'Re-analyse field photo';
+    btn.classList.remove('loading');
+    btn.classList.add('done');
+    btn.disabled = false;
+    log('km ' + (res[idx] && res[idx].km ? res[idx].km.toFixed(2) : idx) + ' field validation coded', 'ok');
+  } catch (e) {
+    const msg = (e && e.message) ? e.message : String(e);
+    p.innerHTML = '<div style="font-size:11px;color:var(--er);padding:4px">' + msg + '</div>';
+    p.classList.add('open');
+    btn.textContent = 'Retry';
+    btn.classList.remove('loading');
+    btn.disabled = false;
+    log('Error: ' + e.message, 'er');
+  }
+}
+
 // ---- Drone photo import: fills "No Street View coverage" gaps by matching ----
 // ---- each photo's embedded GPS tag to the nearest gap point on the route. ----
 const DRONE_MATCH_RADIUS_M = 75; // photo must be within this distance of a gap point to auto-attach
@@ -895,52 +946,189 @@ function attachDronePhotoToPoint(idx, dataUrl) {
   const card = cardEls[idx];
   if (!card) return;
   card.dataset.url = dataUrl;
-  card.innerHTML = '<img src="' + dataUrl + '" alt="km ' + pt.km.toFixed(2) + ' (drone)" loading="lazy"/><div class="cb"><span class="ckm">km ' + pt.km.toFixed(2) + ' &middot; drone photo</span><div class="cc">' + pt.lat.toFixed(6) + ', ' + pt.lon.toFixed(6) + '</div><div class="cc" id="curve' + idx + '"></div><div class="cc" id="cell' + idx + '"></div><div class="cc" id="addr' + idx + '"></div><button class="ab" data-idx="' + idx + '">Code iRAP attributes</button></div><div class="ip" id="ip' + idx + '"></div>';
+  card.innerHTML = '<img src="' + dataUrl + '" alt="km ' + pt.km.toFixed(2) + ' (drone)" loading="lazy"/><div class="cb"><span class="ckm">km ' + pt.km.toFixed(2) + ' &middot; drone photo</span><div class="cc">' + pt.lat.toFixed(6) + ', ' + pt.lon.toFixed(6) + '</div><div class="cc" id="curve' + idx + '"></div><div class="cc" id="cell' + idx + '"></div><div class="cc" id="addr' + idx + '"></div><button class="ab" data-idx="' + idx + '">Code iRAP attributes</button></div><div class="ip" id="ip' + idx + '"></div><div id="vld' + idx + '"></div>';
   card.querySelector('.ab').addEventListener('click', function () {
     ac(this, dataUrl, idx);
   });
 }
 
-async function handleDronePhotos(files) {
-  if (!res.length) { log('Run or load a route first, so there are gap points to fill', 'er'); return; }
-  const gapIdxs = res.map((r, i) => (!r.hasCoverage ? i : -1)).filter(i => i >= 0);
-  if (!gapIdxs.length) {
-    $('droneStatus').textContent = 'No coverage gaps on this route - nothing to fill.';
-    return;
+// ---- DJI video: parse the companion .SRT telemetry file ----
+// SRT text layout varies a bit by drone model, so this tries a few known patterns
+// rather than assuming one exact format.
+function parseDjiSrt(text) {
+  const points = [];
+  const blocks = text.split(/\r?\n\r?\n+/);
+  for (const block of blocks) {
+    const tcMatch = block.match(/(\d{2}):(\d{2}):(\d{2})[,.](\d{3})/);
+    if (!tcMatch) continue;
+    const timeSec = (+tcMatch[1]) * 3600 + (+tcMatch[2]) * 60 + (+tcMatch[3]) + (+tcMatch[4]) / 1000;
+    let lat = null, lon = null;
+    let m = block.match(/latitude\s*:?\s*(-?\d+\.\d+)/i);
+    let n = block.match(/longitude\s*:?\s*(-?\d+\.\d+)/i);
+    if (m && n) { lat = parseFloat(m[1]); lon = parseFloat(n[1]); }
+    if (lat == null) {
+      const g = block.match(/GPS\s*\(\s*(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)\s*,/i);
+      if (g) { lon = parseFloat(g[1]); lat = parseFloat(g[2]); } // DJI's GPS() tuple is typically (lon, lat, alt)
+    }
+    if (lat != null && lon != null && isFinite(lat) && isFinite(lon)) {
+      points.push({ timeSec, lat, lon });
+    }
   }
-  $('droneStatus').textContent = 'Reading GPS tags from ' + files.length + ' photo(s)...';
-  let matched = 0, noGps = 0, tooFar = 0;
+  return points;
+}
+
+// ---- GoPro video: parse embedded GPMF telemetry (no sidecar file needed) ----
+async function getGoProTelemetryPoints(file) {
+  if (typeof window.gpmfExtract !== 'function' || typeof window.goproTelemetry !== 'function') {
+    throw new Error('GoPro telemetry parser did not load - check /gopro-telemetry.bundle.js is deployed alongside urbris.py');
+  }
+  const extracted = await window.gpmfExtract(file, { browserMode: true });
+  const telemetry = await window.goproTelemetry(extracted, { stream: 'GPS5', groupTimes: 1000 });
+  const points = [];
+  for (const devKey in telemetry) {
+    const gps = telemetry[devKey] && telemetry[devKey].streams && telemetry[devKey].streams.GPS5;
+    if (!gps || !gps.samples) continue;
+    for (const s of gps.samples) {
+      if (!s.value) continue;
+      points.push({ timeSec: (s.cts || 0) / 1000, lat: s.value[0], lon: s.value[1] });
+    }
+  }
+  return points;
+}
+
+// ---- Grab a single still frame from a video file at a given timestamp ----
+function extractVideoFrame(file, timeSec) {
+  return new Promise((resolve, reject) => {
+    const video = document.createElement('video');
+    video.preload = 'auto';
+    video.muted = true;
+    video.playsInline = true;
+    const url = URL.createObjectURL(file);
+    video.src = url;
+    const cleanup = () => URL.revokeObjectURL(url);
+    video.addEventListener('loadedmetadata', () => {
+      video.currentTime = Math.max(0, Math.min(timeSec, video.duration - 0.05));
+    });
+    video.addEventListener('seeked', () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        canvas.getContext('2d').drawImage(video, 0, 0);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+        cleanup();
+        resolve(dataUrl);
+      } catch (e) {
+        cleanup();
+        reject(e);
+      }
+    }, { once: true });
+    video.addEventListener('error', () => { cleanup(); reject(new Error('Could not read video file')); });
+  });
+}
+
+// Attaches field media to a point: if the point has no Street View coverage, the
+// field media becomes its primary image (fills the gap); if it already has Street
+// View coverage, the field media is attached as a separate validation image instead
+// of overwriting the original - the point is to compare AI/Street View against what
+// was actually seen, not replace the baseline.
+function attachFieldMedia(idx, dataUrl, sourceLabel) {
+  const pt = res[idx];
+  if (!pt.hasCoverage) {
+    attachDronePhotoToPoint(idx, dataUrl);
+    return 'filled';
+  }
+  pt.validationImage = dataUrl;
+  pt.validationSource = sourceLabel || 'field media';
+  renderValidationBlock(idx);
+  return 'validated';
+}
+
+async function handleFieldMedia(files) {
+  if (!res.length) { log('Run or load a route first, so there are points to match against', 'er'); return; }
+  const targetIdxs = res.map((r, i) => i);
+  const images = files.filter(f => /\.(jpe?g)$/i.test(f.name));
+  const videos = files.filter(f => /\.(mp4|mov)$/i.test(f.name));
+  const srts = files.filter(f => /\.srt$/i.test(f.name));
   const usedIdxs = new Set();
-  for (const file of files) {
+  let filled = 0, validated = 0, noGps = 0, tooFar = 0;
+
+  // Photos - matched one-to-one by GPS EXIF tag
+  if (images.length) $('droneStatus').textContent = 'Reading GPS tags from ' + images.length + ' photo(s)...';
+  for (const file of images) {
     const gps = await readPhotoGPS(file);
     if (!gps) { noGps++; continue; }
     let best = null, bestDist = Infinity;
-    for (const i of gapIdxs) {
+    for (const i of targetIdxs) {
       if (usedIdxs.has(i)) continue;
       const d = hav(gps, res[i]);
       if (d < bestDist) { bestDist = d; best = i; }
     }
     if (best == null || bestDist > DRONE_MATCH_RADIUS_M) { tooFar++; continue; }
     const dataUrl = await readFileAsDataURL(file);
-    attachDronePhotoToPoint(best, dataUrl);
+    const outcome = attachFieldMedia(best, dataUrl, 'photo');
     usedIdxs.add(best);
-    matched++;
+    if (outcome === 'filled') filled++; else validated++;
   }
+
+  // Video - one flight can fill/validate several points, since it's a continuous telemetry track
+  for (const video of videos) {
+    const stem = video.name.replace(/\.[^.]+$/, '');
+    const pairedSrt = srts.find(s => s.name.replace(/\.[^.]+$/, '') === stem);
+    let telemetry = [], sourceLabel;
+    try {
+      if (pairedSrt) {
+        telemetry = parseDjiSrt(await pairedSrt.text());
+        sourceLabel = 'DJI video (' + video.name + ')';
+      } else {
+        $('droneStatus').textContent = 'Reading GoPro telemetry from ' + video.name + '...';
+        telemetry = await getGoProTelemetryPoints(video);
+        sourceLabel = 'GoPro video (' + video.name + ')';
+      }
+    } catch (e) {
+      log('Could not read telemetry from ' + video.name + ': ' + e.message, 'er');
+      continue;
+    }
+    if (!telemetry.length) {
+      log('No GPS telemetry found in ' + video.name + (pairedSrt ? ' - the .SRT format may differ from what this parser expects' : ' - was GPS enabled when this was recorded?'), 'er');
+      continue;
+    }
+    for (const i of targetIdxs) {
+      if (usedIdxs.has(i)) continue;
+      let best = null, bestDist = Infinity;
+      for (const t of telemetry) {
+        const d = hav(t, res[i]);
+        if (d < bestDist) { bestDist = d; best = t; }
+      }
+      if (!best || bestDist > DRONE_MATCH_RADIUS_M) continue;
+      try {
+        const frameDataUrl = await extractVideoFrame(video, best.timeSec);
+        const outcome = attachFieldMedia(i, frameDataUrl, sourceLabel);
+        usedIdxs.add(i);
+        if (outcome === 'filled') filled++; else validated++;
+      } catch (e) {
+        log('Frame extraction failed for ' + sourceLabel + ': ' + e.message, 'er');
+      }
+    }
+  }
+
   applyFilter();
   const c = res.filter(r => r.hasCoverage).length;
   $('cs').textContent = c + '/' + res.length + ' covered (' + Math.round(c / res.length * 100) + '%)';
-  let msg = matched + ' of ' + files.length + ' photo(s) matched to gap points';
-  if (noGps) msg += ' - ' + noGps + ' had no GPS data';
-  if (tooFar) msg += ' - ' + tooFar + " didn't land within " + DRONE_MATCH_RADIUS_M + 'm of a gap point';
+  const totalFiles = images.length + videos.length;
+  let msg = filled + ' gap(s) filled, ' + validated + ' point(s) validated, from ' + totalFiles + ' file(s)';
+  if (noGps) msg += ' - ' + noGps + ' photo(s) had no GPS data';
+  if (tooFar) msg += ' - ' + tooFar + " photo(s) didn't land within " + DRONE_MATCH_RADIUS_M + 'm of any point';
   $('droneStatus').textContent = msg;
-  log(msg, matched ? 'ok' : 'wn');
+  log(msg, (filled || validated) ? 'ok' : 'wn');
 }
 
 $('dronePhotos').addEventListener('change', e => {
   const files = Array.from(e.target.files || []);
-  if (files.length) handleDronePhotos(files);
+  if (files.length) handleFieldMedia(files);
   e.target.value = '';
 });
+
 
 function wmoDesc(code, isDay) {
   const M = {
@@ -1257,7 +1445,7 @@ $('run').addEventListener('click', async () => {
     } else {
       const url = svurl(gk, pt.lat, pt.lon, pt.heading);
       card.dataset.url = url;
-      card.innerHTML = '<img src="' + url + '" alt="km ' + pt.distKm.toFixed(2) + '" loading="lazy"/><div class="cb"><span class="ckm">km ' + pt.distKm.toFixed(2) + '</span><div class="cc">' + pt.lat.toFixed(6) + ', ' + pt.lon.toFixed(6) + '</div><div class="cc" id="curve' + i + '"></div><div class="cc" id="cell' + i + '"></div><div class="cc" id="addr' + i + '"></div><button class="ab" data-idx="' + i + '">Code iRAP attributes</button></div><div class="ip" id="ip' + i + '"></div>';
+      card.innerHTML = '<img src="' + url + '" alt="km ' + pt.distKm.toFixed(2) + '" loading="lazy"/><div class="cb"><span class="ckm">km ' + pt.distKm.toFixed(2) + '</span><div class="cc">' + pt.lat.toFixed(6) + ', ' + pt.lon.toFixed(6) + '</div><div class="cc" id="curve' + i + '"></div><div class="cc" id="cell' + i + '"></div><div class="cc" id="addr' + i + '"></div><button class="ab" data-idx="' + i + '">Code iRAP attributes</button></div><div class="ip" id="ip' + i + '"></div><div id="vld' + i + '"></div>';
       res.push({ km: pt.distKm, lat: pt.lat, lon: pt.lon, heading: pt.heading, imageUrl: url, hasCoverage: true });
     }
     $('grid').appendChild(card);
@@ -1459,7 +1647,7 @@ function rebuildViewFromRes() {
     } else {
       card.dataset.url = pt.imageUrl;
       const abLabel = pt.irap ? 'Re-analyse' : 'Code iRAP attributes';
-      card.innerHTML = '<img src="' + pt.imageUrl + '" alt="km ' + pt.km.toFixed(2) + '" loading="lazy"/><div class="cb"><span class="ckm">km ' + pt.km.toFixed(2) + '</span><div class="cc">' + pt.lat.toFixed(6) + ', ' + pt.lon.toFixed(6) + '</div><div class="cc" id="curve' + i + '"></div><div class="cc" id="cell' + i + '"></div><div class="cc" id="addr' + i + '"></div><button class="ab' + (pt.irap ? ' done' : '') + '" data-idx="' + i + '">' + abLabel + '</button></div><div class="ip" id="ip' + i + '"></div>';
+      card.innerHTML = '<img src="' + pt.imageUrl + '" alt="km ' + pt.km.toFixed(2) + '" loading="lazy"/><div class="cb"><span class="ckm">km ' + pt.km.toFixed(2) + '</span><div class="cc">' + pt.lat.toFixed(6) + ', ' + pt.lon.toFixed(6) + '</div><div class="cc" id="curve' + i + '"></div><div class="cc" id="cell' + i + '"></div><div class="cc" id="addr' + i + '"></div><button class="ab' + (pt.irap ? ' done' : '') + '" data-idx="' + i + '">' + abLabel + '</button></div><div class="ip" id="ip' + i + '"></div><div id="vld' + i + '"></div>';
     }
     $('grid').appendChild(card);
   });
@@ -1490,6 +1678,7 @@ function rebuildViewFromRes() {
       const ipSlot = $('ip' + i);
       if (ipSlot) rIRAP(ipSlot, r.irap);
     }
+    if (r.validationImage) renderValidationBlock(i);
   });
   const c = res.filter(r => r.hasCoverage).length;
   $('cs').textContent = c + '/' + res.length + ' covered (' + Math.round(c / res.length * 100) + '%)';
