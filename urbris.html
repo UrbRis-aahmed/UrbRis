@@ -738,25 +738,6 @@ function svurl(gk, lat, lon, h) {
 // A top-down satellite card summarizing a small group of points - rendering-time
 // only, built fresh from coordinates each time, never stored in res/saved_routes.json
 // (so it never touches the key-redaction handling used for Street View URLs).
-function topdownMapUrl(gk, points) {
-  const path = 'path=color:0x3a7d5c|weight:4|' + points.map(p => p.lat + ',' + p.lon).join('|');
-  const markers = points.map((p, i) => 'markers=color:0xf0f0f0|label:' + (i + 1) + '|' + p.lat + ',' + p.lon).join('&');
-  return 'https://maps.googleapis.com/maps/api/staticmap?size=400x400&maptype=hybrid&' + path + '&' + markers + '&key=' + encodeURIComponent(gk);
-}
-
-function buildTopdownCard(gk, points) {
-  const card = document.createElement('div');
-  card.className = 'card';
-  if (!gk || !points.length) {
-    card.innerHTML = '<div class="nc">Enter your Google Maps key to view the top-down map</div>';
-    return card;
-  }
-  const from = points[0].km, to = points[points.length - 1].km;
-  const url = topdownMapUrl(gk, points);
-  card.innerHTML = '<img src="' + url + '" alt="Top-down view km ' + from.toFixed(2) + '-' + to.toFixed(2) + '" loading="lazy"/><div class="cb"><span class="ckm">Top-down &middot; km ' + from.toFixed(2) + ' - ' + to.toFixed(2) + '</span></div>';
-  return card;
-}
-
 function murl(gk, lat, lon) {
   return 'https://maps.googleapis.com/maps/api/streetview/metadata?location=' + lat + ',' + lon + '&key=' + gk;
 }
@@ -1472,7 +1453,6 @@ $('run').addEventListener('click', async () => {
   const aa = $('auto').checked && $('akey').value.trim();
   $('rt').textContent = 'Route frames - ' + tot + ' points';
   $('pl').textContent = 'Extracting';
-  let groupStart = 0;
 
   for (let i = 0; i < pts.length; i++) {
     const pt = pts[i];
@@ -1491,10 +1471,6 @@ $('run').addEventListener('click', async () => {
       res.push({ km: pt.distKm, lat: pt.lat, lon: pt.lon, heading: pt.heading, imageUrl: url, hasCoverage: true });
     }
     $('grid').appendChild(card);
-    if ((i + 1) % 5 === 0 || i === pts.length - 1) {
-      $('grid').appendChild(buildTopdownCard(gk, res.slice(groupStart, i + 1)));
-      groupStart = i + 1;
-    }
     $('pf').style.width = Math.round((i+1)/tot*100) + '%';
     $('pp').textContent = Math.round((i+1)/tot*100) + '%';
     await new Promise(r => setTimeout(r, 50));
@@ -1692,8 +1668,6 @@ function rebuildViewFromRes() {
   $('rf').value = 0;
   $('rfv').textContent = '0%+';
   $('grid').innerHTML = '';
-  const gk = $('gkey').value.trim();
-  let groupStart = 0;
   res.forEach((pt, i) => {
     const card = document.createElement('div');
     card.className = 'card';
@@ -1706,10 +1680,6 @@ function rebuildViewFromRes() {
       card.innerHTML = '<img src="' + pt.imageUrl + '" alt="km ' + pt.km.toFixed(2) + '" loading="lazy"/><div class="cb"><span class="ckm">km ' + pt.km.toFixed(2) + '</span><div class="cc">' + pt.lat.toFixed(6) + ', ' + pt.lon.toFixed(6) + '</div><div class="cc" id="curve' + i + '"></div><div class="cc" id="cell' + i + '"></div><div class="cc" id="addr' + i + '"></div><button class="ab' + (pt.irap ? ' done' : '') + '" data-idx="' + i + '">' + abLabel + '</button></div><div class="ip" id="ip' + i + '"></div><div id="vld' + i + '"></div>';
     }
     $('grid').appendChild(card);
-    if ((i + 1) % 5 === 0 || i === res.length - 1) {
-      $('grid').appendChild(buildTopdownCard(gk, res.slice(groupStart, i + 1)));
-      groupStart = i + 1;
-    }
   });
   document.querySelectorAll('.ab[data-idx]').forEach(btn => {
     btn.addEventListener('click', function() {
@@ -1978,6 +1948,7 @@ function iMap() {
   }
 
   const info = new google.maps.InfoWindow(), bounds = new google.maps.LatLngBounds();
+  const hoverInfo = new google.maps.InfoWindow({ disableAutoPan: true });
   let curInfoIdx = null;
 
   info.addListener('domready', () => {
@@ -2051,7 +2022,17 @@ function iMap() {
       position: { lat: r.lat, lng: r.lon }, map: gmap,
       icon: { path: google.maps.SymbolPath.CIRCLE, scale: 6, fillColor: fill, fillOpacity: ($('traffic').checked ? 0.55 : 1), strokeColor: stroke, strokeWeight: 1.5 }
     });
+    if (r.hasCoverage && r.imageUrl) {
+      m.addListener('mouseover', () => {
+        let html = '<img src="' + r.imageUrl + '" alt="km ' + r.km.toFixed(2) + '" style="width:220px;height:140px;object-fit:cover;border-radius:4px;display:block"/>';
+        if (r.validationImage) html += '<img src="' + r.validationImage + '" alt="field validation" style="width:220px;height:140px;object-fit:cover;border-radius:4px;display:block;margin-top:4px"/>';
+        hoverInfo.setContent(html);
+        hoverInfo.open(gmap, m);
+      });
+      m.addListener('mouseout', () => hoverInfo.close());
+    }
     m.addListener('click', () => {
+      hoverInfo.close();
       curInfoIdx = idx;
       info.setContent(infoHTML(r));
       info.open(gmap, m);
