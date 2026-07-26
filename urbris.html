@@ -31,6 +31,7 @@ header{padding:18px 24px;border-bottom:.5px solid var(--b);display:flex;align-it
 input[type=text],input[type=password],input[type=number]{width:100%;background:var(--sf2);border:.5px solid var(--b2);border-radius:var(--r);color:var(--tx);font-size:12px;padding:7px 10px;outline:none}
 input:focus{border-color:var(--ac)}
 .dz{border:1.5px dashed var(--b2);border-radius:var(--r);padding:20px;text-align:center;cursor:pointer;position:relative;transition:.15s}
+.hint{font-size:11px;color:var(--mu);line-height:1.4}
 .dz:hover,.dz.over{border-color:var(--ac);background:rgba(212,90,42,.05)}
 .dz input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
 .or{display:flex;align-items:center;justify-content:space-between;font-size:13px;color:var(--mu)}
@@ -99,6 +100,7 @@ input[type=number]{width:70px;text-align:right}
 .xb:hover{border-color:var(--ac);color:var(--ac2)}
 #gmap{width:100%;height:500px;border-radius:8px;border:.5px solid var(--b);overflow:hidden}
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exif-js/2.3.0/exif.js"></script>
 </head>
 <body>
 <header>
@@ -114,7 +116,7 @@ input[type=number]{width:70px;text-align:right}
     <input type="text" id="gkey" placeholder="AIza..." />
     <label class="fl" style="margin-top:8px">Anthropic key</label>
     <input type="password" id="akey" placeholder="sk-ant-..." />
-    <button class="savebtn" onclick="saveKeys()">Save keys for next time</button>
+    <div class="hint" style="margin-top:8px">Not saved anywhere - cleared on refresh. Re-enter each session.</div>
   </div>
   <div>
     <div class="sl">Saved Routes</div>
@@ -142,6 +144,15 @@ input[type=number]{width:70px;text-align:right}
     <div class="hint">Click a point on the map to scan every road within an area for Street View gaps - a fast way to find where to point a GoPro instead of checking one route at a time.</div>
     <div class="or" style="margin-top:8px"><label>Area (sq km)</label><input type="number" id="scanArea" value="10" min="1" max="50" step="1" style="width:60px"/></div>
     <button class="btn" id="scanBtn" style="margin-top:8px" onclick="startScan()">Scan area for gaps</button>
+  </div>
+  <div>
+    <div class="sl">Drone Photos</div>
+    <div class="hint">Fly the gaps flagged "No Street View coverage" below, then drop the geotagged photos here - they're matched to the nearest gap point by GPS automatically and fed straight into iRAP analysis, no re-running anything.</div>
+    <div class="dz" style="margin-top:8px">
+      <div style="font-size:12px;color:var(--mu)">Drop or click to select drone photos (JPEG)</div>
+      <input type="file" id="dronePhotos" accept="image/jpeg" multiple />
+    </div>
+    <div id="droneStatus" class="hint" style="margin-top:6px"></div>
   </div>
   <div>
     <div class="sl">Options</div>
@@ -226,10 +237,6 @@ let rp = [], sp = [], res = [], gmap = null, gm = [], gp = null, gs = [], lpLaye
 let drawMode = false, drawPts = [], drawPoly = null, drawMarkers = [];
 
 window.addEventListener('load', () => {
-  const gk = localStorage.getItem('urbris_gkey');
-  const ak = localStorage.getItem('urbris_akey');
-  if (gk) $('gkey').value = gk;
-  if (ak) $('akey').value = ak;
   const now = new Date(Date.now() - new Date().getTimezoneOffset() * 60000);
   $('dep').value = now.toISOString().slice(0, 16);
   if (localStorage.getItem('urbris_sbCollapsed') === '1') {
@@ -245,12 +252,6 @@ function toggleSidebar() {
   $('sbToggle').innerHTML = collapsed ? '&#8250;' : '&#8249;';
   $('sbToggle').title = collapsed ? 'Expand sidebar' : 'Collapse sidebar';
   localStorage.setItem('urbris_sbCollapsed', collapsed ? '1' : '0');
-}
-
-function saveKeys() {
-  localStorage.setItem('urbris_gkey', $('gkey').value.trim());
-  localStorage.setItem('urbris_akey', $('akey').value.trim());
-  log('Keys saved', 'ok');
 }
 
 function hav(a, b) {
@@ -786,10 +787,18 @@ function riskColor(score) {
 async function aiAn(url) {
   const ak = $('akey').value.trim();
   if (!ak) throw new Error('Enter your Anthropic API key first');
+  let body;
+  if (url.startsWith('data:')) {
+    const m = url.match(/^data:([^;]+);base64,([\s\S]*)$/);
+    if (!m) throw new Error('Could not read drone photo data');
+    body = { imageBase64: m[2], mediaType: m[1], prompt: PROMPT, akey: ak };
+  } else {
+    body = { imageUrl: url, prompt: PROMPT, akey: ak };
+  }
   const r = await fetch('/analyse', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ imageUrl: url, prompt: PROMPT, akey: ak })
+    body: JSON.stringify(body)
   });
   const raw = await r.text();
   if (!r.ok) {
@@ -843,6 +852,95 @@ async function ac(btn, url, idx) {
     log('Error: ' + e.message, 'er');
   }
 }
+
+// ---- Drone photo import: fills "No Street View coverage" gaps by matching ----
+// ---- each photo's embedded GPS tag to the nearest gap point on the route. ----
+const DRONE_MATCH_RADIUS_M = 75; // photo must be within this distance of a gap point to auto-attach
+
+function dmsToDecimal(dms, ref) {
+  const deg = dms[0].valueOf(), min = dms[1].valueOf(), sec = dms[2].valueOf();
+  let dec = deg + min / 60 + sec / 3600;
+  if (ref === 'S' || ref === 'W') dec = -dec;
+  return dec;
+}
+
+function readPhotoGPS(file) {
+  return new Promise(resolve => {
+    EXIF.getData(file, function () {
+      const lat = EXIF.getTag(this, 'GPSLatitude');
+      const lon = EXIF.getTag(this, 'GPSLongitude');
+      const latRef = EXIF.getTag(this, 'GPSLatitudeRef');
+      const lonRef = EXIF.getTag(this, 'GPSLongitudeRef');
+      if (!lat || !lon) { resolve(null); return; }
+      resolve({ lat: dmsToDecimal(lat, latRef), lon: dmsToDecimal(lon, lonRef) });
+    });
+  });
+}
+
+function readFileAsDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result);
+    r.onerror = () => reject(new Error('Could not read file'));
+    r.readAsDataURL(file);
+  });
+}
+
+function attachDronePhotoToPoint(idx, dataUrl) {
+  const pt = res[idx];
+  pt.imageUrl = dataUrl;
+  pt.hasCoverage = true;
+  pt.imageSource = 'drone';
+  const cardEls = $('grid').children;
+  const card = cardEls[idx];
+  if (!card) return;
+  card.dataset.url = dataUrl;
+  card.innerHTML = '<img src="' + dataUrl + '" alt="km ' + pt.km.toFixed(2) + ' (drone)" loading="lazy"/><div class="cb"><span class="ckm">km ' + pt.km.toFixed(2) + ' &middot; drone photo</span><div class="cc">' + pt.lat.toFixed(6) + ', ' + pt.lon.toFixed(6) + '</div><div class="cc" id="curve' + idx + '"></div><div class="cc" id="cell' + idx + '"></div><div class="cc" id="addr' + idx + '"></div><button class="ab" data-idx="' + idx + '">Code iRAP attributes</button></div><div class="ip" id="ip' + idx + '"></div>';
+  card.querySelector('.ab').addEventListener('click', function () {
+    ac(this, dataUrl, idx);
+  });
+}
+
+async function handleDronePhotos(files) {
+  if (!res.length) { log('Run or load a route first, so there are gap points to fill', 'er'); return; }
+  const gapIdxs = res.map((r, i) => (!r.hasCoverage ? i : -1)).filter(i => i >= 0);
+  if (!gapIdxs.length) {
+    $('droneStatus').textContent = 'No coverage gaps on this route - nothing to fill.';
+    return;
+  }
+  $('droneStatus').textContent = 'Reading GPS tags from ' + files.length + ' photo(s)...';
+  let matched = 0, noGps = 0, tooFar = 0;
+  const usedIdxs = new Set();
+  for (const file of files) {
+    const gps = await readPhotoGPS(file);
+    if (!gps) { noGps++; continue; }
+    let best = null, bestDist = Infinity;
+    for (const i of gapIdxs) {
+      if (usedIdxs.has(i)) continue;
+      const d = hav(gps, res[i]);
+      if (d < bestDist) { bestDist = d; best = i; }
+    }
+    if (best == null || bestDist > DRONE_MATCH_RADIUS_M) { tooFar++; continue; }
+    const dataUrl = await readFileAsDataURL(file);
+    attachDronePhotoToPoint(best, dataUrl);
+    usedIdxs.add(best);
+    matched++;
+  }
+  applyFilter();
+  const c = res.filter(r => r.hasCoverage).length;
+  $('cs').textContent = c + '/' + res.length + ' covered (' + Math.round(c / res.length * 100) + '%)';
+  let msg = matched + ' of ' + files.length + ' photo(s) matched to gap points';
+  if (noGps) msg += ' - ' + noGps + ' had no GPS data';
+  if (tooFar) msg += ' - ' + tooFar + " didn't land within " + DRONE_MATCH_RADIUS_M + 'm of a gap point';
+  $('droneStatus').textContent = msg;
+  log(msg, matched ? 'ok' : 'wn');
+}
+
+$('dronePhotos').addEventListener('change', e => {
+  const files = Array.from(e.target.files || []);
+  if (files.length) handleDronePhotos(files);
+  e.target.value = '';
+});
 
 function wmoDesc(code, isDay) {
   const M = {
@@ -1280,6 +1378,16 @@ function autoRouteName() {
   return range + ' (' + dateStr + ')';
 }
 
+function redactKeyFromUrl(url) {
+  if (!url) return url;
+  return url.replace(/([?&]key=)[^&]*/, '$1REDACTED');
+}
+
+function reinjectKeyIntoUrl(url, gk) {
+  if (!url) return url;
+  return url.replace(/([?&]key=)REDACTED/, '$1' + encodeURIComponent(gk));
+}
+
 async function saveCurrentRoute() {
   if (!res.length) { log('Nothing to save yet - run a route first', 'er'); return; }
   const btn = $('saveRouteBtn');
@@ -1289,7 +1397,10 @@ async function saveCurrentRoute() {
   const cellGaps = res.filter(r => r.cellRisky).length;
   const highRisk = res.filter(r => r.irap && riskScore(r.irap) >= 0.7).length;
   const meta = { totalKm, points: res.length, cellGaps, highRisk };
-  const payload = { name: autoRouteName(), meta, data: { res, scanResults: (typeof scanResults !== 'undefined' ? scanResults : []) } };
+  // Never persist the Google Maps key: it's embedded in Street View URLs, so strip it
+  // before it goes to the server. Drone photo data: URLs have no key and pass through untouched.
+  const safeRes = res.map(r => ({ ...r, imageUrl: redactKeyFromUrl(r.imageUrl) }));
+  const payload = { name: autoRouteName(), meta, data: { res: safeRes, scanResults: (typeof scanResults !== 'undefined' ? scanResults : []) } };
   try {
     const resp = await fetch('/routes/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
     const out = await resp.json();
@@ -1310,10 +1421,22 @@ async function loadSavedRoute(id) {
     if (entry.error) { log(entry.error, 'er'); return; }
     res = (entry.data && entry.data.res) || [];
     if (entry.data && entry.data.scanResults) scanResults = entry.data.scanResults;
+    // Street View image URLs were saved with their key redacted - re-add the key
+    // currently typed into this session so images can actually load, without ever
+    // having stored it on the server.
+    const gk = $('gkey').value.trim();
+    let needsKey = false;
+    res.forEach(r => {
+      if (r.imageUrl && r.imageUrl.includes('key=REDACTED')) {
+        if (gk) r.imageUrl = reinjectKeyIntoUrl(r.imageUrl, gk);
+        else needsKey = true;
+      }
+    });
     rebuildViewFromRes();
     $('saveRouteBtn').disabled = false;
     $('saveRouteBtn').textContent = 'Save current route';
-    log('Loaded "' + entry.name + '" (' + res.length + ' points) - no API calls needed', 'ok');
+    if (needsKey) log('Loaded "' + entry.name + '" - enter your Google Maps key to view the Street View images', 'wn');
+    else log('Loaded "' + entry.name + '" (' + res.length + ' points) - no API calls needed', 'ok');
   } catch (e) {
     log('Load failed: ' + e.message, 'er');
   }

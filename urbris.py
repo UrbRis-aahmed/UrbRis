@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import json, urllib.request, urllib.error, urllib.parse, webbrowser, os, sys, csv, math, uuid, threading
+import json, urllib.request, urllib.error, urllib.parse, webbrowser, os, sys, csv, math, uuid, threading, base64
 from datetime import datetime, timezone
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
@@ -227,15 +227,20 @@ class H(BaseHTTPRequestHandler):
                 akey = data.get("akey", "")
                 if not akey:
                     raise ValueError("No Anthropic API key")
-                # Fetch the Street View image and convert to base64
-                # (Anthropic cannot access Google Maps URLs directly)
-                img_url = data["imageUrl"]
-                img_req = urllib.request.Request(img_url)
-                with urllib.request.urlopen(img_req) as img_resp:
-                    img_data = img_resp.read()
-                    content_type = img_resp.headers.get("Content-Type", "image/jpeg").split(";")[0]
-                import base64
-                img_b64 = base64.b64encode(img_data).decode("utf-8")
+                if data.get("imageBase64"):
+                    # Drone photo (or any locally-supplied image) sent straight from
+                    # the browser - no fetch needed, unlike the Street View path below.
+                    img_b64 = data["imageBase64"]
+                    content_type = data.get("mediaType", "image/jpeg")
+                else:
+                    # Fetch the Street View image and convert to base64
+                    # (Anthropic cannot access Google Maps URLs directly)
+                    img_url = data["imageUrl"]
+                    img_req = urllib.request.Request(img_url)
+                    with urllib.request.urlopen(img_req) as img_resp:
+                        img_data = img_resp.read()
+                        content_type = img_resp.headers.get("Content-Type", "image/jpeg").split(";")[0]
+                    img_b64 = base64.b64encode(img_data).decode("utf-8")
                 payload = json.dumps({
                     "model": "claude-opus-4-6", "max_tokens": 800,
                     "messages": [{"role": "user", "content": [
