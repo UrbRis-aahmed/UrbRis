@@ -735,6 +735,28 @@ function svurl(gk, lat, lon, h) {
   return 'https://maps.googleapis.com/maps/api/streetview?size=640x400&location=' + lat + ',' + lon + '&heading=' + h + '&pitch=0&fov=90&key=' + gk;
 }
 
+// A top-down satellite card summarizing a small group of points - rendering-time
+// only, built fresh from coordinates each time, never stored in res/saved_routes.json
+// (so it never touches the key-redaction handling used for Street View URLs).
+function topdownMapUrl(gk, points) {
+  const path = 'path=color:0x3a7d5c|weight:4|' + points.map(p => p.lat + ',' + p.lon).join('|');
+  const markers = points.map((p, i) => 'markers=color:0xf0f0f0|label:' + (i + 1) + '|' + p.lat + ',' + p.lon).join('&');
+  return 'https://maps.googleapis.com/maps/api/staticmap?size=400x400&maptype=hybrid&' + path + '&' + markers + '&key=' + encodeURIComponent(gk);
+}
+
+function buildTopdownCard(gk, points) {
+  const card = document.createElement('div');
+  card.className = 'card';
+  if (!gk || !points.length) {
+    card.innerHTML = '<div class="nc">Enter your Google Maps key to view the top-down map</div>';
+    return card;
+  }
+  const from = points[0].km, to = points[points.length - 1].km;
+  const url = topdownMapUrl(gk, points);
+  card.innerHTML = '<img src="' + url + '" alt="Top-down view km ' + from.toFixed(2) + '-' + to.toFixed(2) + '" loading="lazy"/><div class="cb"><span class="ckm">Top-down &middot; km ' + from.toFixed(2) + ' - ' + to.toFixed(2) + '</span></div>';
+  return card;
+}
+
 function murl(gk, lat, lon) {
   return 'https://maps.googleapis.com/maps/api/streetview/metadata?location=' + lat + ',' + lon + '&key=' + gk;
 }
@@ -962,8 +984,7 @@ function attachDronePhotoToPoint(idx, dataUrl) {
   pt.imageUrl = dataUrl;
   pt.hasCoverage = true;
   pt.imageSource = 'drone';
-  const cardEls = $('grid').children;
-  const card = cardEls[idx];
+  const card = $('grid').querySelector('[data-res-idx="' + idx + '"]');
   if (!card) return;
   card.dataset.url = dataUrl;
   card.innerHTML = '<img src="' + dataUrl + '" alt="km ' + pt.km.toFixed(2) + ' (drone)" loading="lazy"/><div class="cb"><span class="ckm">km ' + pt.km.toFixed(2) + ' &middot; drone photo</span><div class="cc">' + pt.lat.toFixed(6) + ', ' + pt.lon.toFixed(6) + '</div><div class="cc" id="curve' + idx + '"></div><div class="cc" id="cell' + idx + '"></div><div class="cc" id="addr' + idx + '"></div><button class="ab" data-idx="' + idx + '">Code iRAP attributes</button></div><div class="ip" id="ip' + idx + '"></div><div id="vld' + idx + '"></div>';
@@ -1399,7 +1420,6 @@ function applyFilter() {
   $('rfv').textContent = th + '%+';
   $('fs').style.display = th > 0 ? '' : 'none';
   if (!res.length) return;
-  const cardEls = $('grid').children;
   let shown = 0;
   res.forEach((r, i) => {
     let match;
@@ -1409,7 +1429,7 @@ function applyFilter() {
       match = th === 0;
     }
     if (match) shown++;
-    const el = cardEls[i];
+    const el = $('grid').querySelector('[data-res-idx="' + i + '"]');
     if (el) el.style.display = match ? '' : 'none';
     if (gm[i]) gm[i].setVisible(match);
   });
@@ -1452,12 +1472,14 @@ $('run').addEventListener('click', async () => {
   const aa = $('auto').checked && $('akey').value.trim();
   $('rt').textContent = 'Route frames - ' + tot + ' points';
   $('pl').textContent = 'Extracting';
+  let groupStart = 0;
 
   for (let i = 0; i < pts.length; i++) {
     const pt = pts[i];
     const ok = await chk(gk, pt.lat, pt.lon);
     const card = document.createElement('div');
     card.className = 'card';
+    card.dataset.resIdx = i;
 
     if (!ok) {
       card.innerHTML = '<div class="nc">No Street View coverage</div><div class="cb"><span class="ckm">km ' + pt.distKm.toFixed(2) + '</span><div class="cc">' + pt.lat.toFixed(6) + ', ' + pt.lon.toFixed(6) + '</div><div class="cc" id="curve' + i + '"></div><div class="cc" id="cell' + i + '"></div><div class="cc" id="addr' + i + '"></div></div>';
@@ -1469,13 +1491,16 @@ $('run').addEventListener('click', async () => {
       res.push({ km: pt.distKm, lat: pt.lat, lon: pt.lon, heading: pt.heading, imageUrl: url, hasCoverage: true });
     }
     $('grid').appendChild(card);
+    if ((i + 1) % 5 === 0 || i === pts.length - 1) {
+      $('grid').appendChild(buildTopdownCard(gk, res.slice(groupStart, i + 1)));
+      groupStart = i + 1;
+    }
     $('pf').style.width = Math.round((i+1)/tot*100) + '%';
     $('pp').textContent = Math.round((i+1)/tot*100) + '%';
     await new Promise(r => setTimeout(r, 50));
   }
 
   // Wire up analyse buttons after all cards are added
-  const cardEls = $('grid').children;
   document.querySelectorAll('.ab[data-idx]').forEach(btn => {
     btn.addEventListener('click', function() {
       const idx = parseInt(this.dataset.idx);
@@ -1516,7 +1541,7 @@ $('run').addEventListener('click', async () => {
     const coveredIdxs = res.map((r, i) => r.hasCoverage ? i : -1).filter(i => i >= 0);
     for (let j = 0; j < coveredIdxs.length; j++) {
       const i = coveredIdxs[j];
-      const btn = cardEls[i].querySelector('.ab');
+      const btn = $('grid').querySelector('[data-res-idx="' + i + '"] .ab');
       await ac(btn, res[i].imageUrl, i);
       await new Promise(r => setTimeout(r, 400));
       $('pf').style.width = Math.round((j+1)/coveredIdxs.length*100) + '%';
@@ -1667,9 +1692,12 @@ function rebuildViewFromRes() {
   $('rf').value = 0;
   $('rfv').textContent = '0%+';
   $('grid').innerHTML = '';
+  const gk = $('gkey').value.trim();
+  let groupStart = 0;
   res.forEach((pt, i) => {
     const card = document.createElement('div');
     card.className = 'card';
+    card.dataset.resIdx = i;
     if (!pt.hasCoverage) {
       card.innerHTML = '<div class="nc">No Street View coverage</div><div class="cb"><span class="ckm">km ' + pt.km.toFixed(2) + '</span><div class="cc">' + pt.lat.toFixed(6) + ', ' + pt.lon.toFixed(6) + '</div><div class="cc" id="curve' + i + '"></div><div class="cc" id="cell' + i + '"></div><div class="cc" id="addr' + i + '"></div></div>';
     } else {
@@ -1678,6 +1706,10 @@ function rebuildViewFromRes() {
       card.innerHTML = '<img src="' + pt.imageUrl + '" alt="km ' + pt.km.toFixed(2) + '" loading="lazy"/><div class="cb"><span class="ckm">km ' + pt.km.toFixed(2) + '</span><div class="cc">' + pt.lat.toFixed(6) + ', ' + pt.lon.toFixed(6) + '</div><div class="cc" id="curve' + i + '"></div><div class="cc" id="cell' + i + '"></div><div class="cc" id="addr' + i + '"></div><button class="ab' + (pt.irap ? ' done' : '') + '" data-idx="' + i + '">' + abLabel + '</button></div><div class="ip" id="ip' + i + '"></div><div id="vld' + i + '"></div>';
     }
     $('grid').appendChild(card);
+    if ((i + 1) % 5 === 0 || i === res.length - 1) {
+      $('grid').appendChild(buildTopdownCard(gk, res.slice(groupStart, i + 1)));
+      groupStart = i + 1;
+    }
   });
   document.querySelectorAll('.ab[data-idx]').forEach(btn => {
     btn.addEventListener('click', function() {
@@ -1785,6 +1817,7 @@ async function compareTrafficTimes() {
   const origin = res[0], dest = res[res.length - 1];
   const model = $('trafficModel').value;
   const nowMs = Date.now();
+  const anchorPassed = anchor.getTime() < nowMs;
   const offsetsHrs = [-2, -1, 0, 1, 2];
   const candidates = offsetsHrs
     .map(h => new Date(anchor.getTime() + h * 3600 * 1000))
@@ -1825,7 +1858,7 @@ async function compareTrafficTimes() {
       + '<span>' + r.trafficMin + ' min' + (isFastest ? ' \u2713 fastest' : '') + '</span>'
       + '</div>';
   }).join('');
-  out.innerHTML = rows;
+  out.innerHTML = (anchorPassed ? '<div style="margin-bottom:6px">Your set departure time has already passed, so it\'s excluded below - showing upcoming times instead.</div>' : '') + rows;
   const summary = fastest.time.getTime() === anchorMs
     ? 'Your set departure time is already the fastest of the times checked.'
     : 'Leaving at ' + fastest.time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' instead predicts ' + (results.find(r => Math.abs(r.time.getTime() - anchorMs) < 60000) ? (results.find(r => Math.abs(r.time.getTime() - anchorMs) < 60000).trafficMin - fastest.trafficMin) + ' min faster than your set time.' : 'the shortest travel time among the times checked.');
