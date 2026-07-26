@@ -170,7 +170,7 @@ input[type=number]{width:70px;text-align:right}
   </div>
   <div>
     <div class="sl">Traffic Prediction</div>
-    <div class="hint">Predicts travel time for the departure time set above, using Google's historical + live traffic model - the farther out the departure time, the more it leans on historical patterns rather than live conditions. Gives one duration for the whole route, not a per-point breakdown.</div>
+    <div class="hint">Predicts travel time for the departure time set above, using Google's historical + live traffic model - the farther out the departure time, the more it leans on historical patterns rather than live conditions. "Compare nearby departure times" checks the 2 hours before and after too, to help pick when to leave rather than just confirming one time.</div>
     <div class="or" style="margin-top:8px"><label>Model</label>
       <select id="trafficModel" style="width:150px">
         <option value="best_guess">Best guess</option>
@@ -180,6 +180,8 @@ input[type=number]{width:70px;text-align:right}
     </div>
     <button class="btn" id="predictTrafficBtn" style="margin-top:8px" onclick="predictTraffic()" disabled>Run a route first</button>
     <div id="trafficResult" class="hint" style="margin-top:6px"></div>
+    <button class="btn" id="compareTrafficBtn" style="margin-top:8px" onclick="compareTrafficTimes()" disabled>Compare nearby departure times</button>
+    <div id="trafficCompareResult" class="hint" style="margin-top:6px"></div>
   </div>
   <div id="sw" style="display:none">
     <div class="sl">Route</div>
@@ -250,7 +252,7 @@ input[type=number]{width:70px;text-align:right}
 </div>
 <script>
 const $ = id => document.getElementById(id);
-let rp = [], sp = [], res = [], gmap = null, gm = [], gp = null, gs = [], lpLayer = null, trafficLayer = null, wxData = [], denseCurve = null, densePts = null;
+let rp = [], sp = [], res = [], gmap = null, gm = [], gp = null, gs = [], lpLayer = null, trafficLayer = null, trafficPrediction = null, wxData = [], denseCurve = null, densePts = null;
 let drawMode = false, drawPts = [], drawPoly = null, drawMarkers = [];
 
 window.addEventListener('load', () => {
@@ -1530,6 +1532,8 @@ $('run').addEventListener('click', async () => {
   $('saveRouteBtn').textContent = 'Save current route';
   $('predictTrafficBtn').disabled = false;
   $('predictTrafficBtn').textContent = 'Predict travel time';
+  $('compareTrafficBtn').disabled = false;
+  $('compareTrafficBtn').textContent = 'Compare nearby departure times';
 });
 
 function sv(v) {
@@ -1645,6 +1649,8 @@ async function loadSavedRoute(id) {
     $('saveRouteBtn').textContent = 'Save current route';
     $('predictTrafficBtn').disabled = false;
     $('predictTrafficBtn').textContent = 'Predict travel time';
+    $('compareTrafficBtn').disabled = false;
+    $('compareTrafficBtn').textContent = 'Compare nearby departure times';
     if (needsKey) log('Loaded "' + entry.name + '" - enter your Google Maps key to view the Street View images', 'wn');
     else log('Loaded "' + entry.name + '" (' + res.length + ' points) - no API calls needed', 'ok');
   } catch (e) {
@@ -1709,6 +1715,30 @@ function rebuildViewFromRes() {
   sv('grid');
 }
 
+// Calls the /traffic endpoint for one specific departure time. Shared by the
+// single-time predictor and the multi-time comparison below.
+async function fetchTrafficForTime(gk, origin, dest, depUnix, model) {
+  const resp = await fetch('/traffic', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      gkey: gk,
+      originLat: origin.lat, originLon: origin.lon,
+      destLat: dest.lat, destLon: dest.lon,
+      departureTime: depUnix,
+      trafficModel: model
+    })
+  });
+  const data = await resp.json();
+  if (data.error) throw new Error(typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail || data.error));
+  const leg = data.routes && data.routes[0] && data.routes[0].legs && data.routes[0].legs[0];
+  if (!leg) throw new Error('No route returned - check the departure time and API key');
+  if (!leg.duration_in_traffic) throw new Error('Google did not return a traffic-based estimate for this departure time');
+  const trafficMin = Math.round(leg.duration_in_traffic.value / 60);
+  const staticMin = Math.round(leg.duration.value / 60);
+  return { trafficMin, staticMin, deltaMin: trafficMin - staticMin };
+}
+
 async function predictTraffic() {
   if (!res.length) { log('Run or load a route first', 'er'); return; }
   const gk = $('gkey').value.trim();
@@ -1725,25 +1755,9 @@ async function predictTraffic() {
     // times in the present or future - if the picked time has already passed, use now.
     const depUnix = Math.max(Math.floor(depDate.getTime() / 1000), Math.floor(Date.now() / 1000));
     const origin = res[0], dest = res[res.length - 1];
-    const resp = await fetch('/traffic', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        gkey: gk,
-        originLat: origin.lat, originLon: origin.lon,
-        destLat: dest.lat, destLon: dest.lon,
-        departureTime: depUnix,
-        trafficModel: $('trafficModel').value
-      })
-    });
-    const data = await resp.json();
-    if (data.error) throw new Error(typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail || data.error));
-    const leg = data.routes && data.routes[0] && data.routes[0].legs && data.routes[0].legs[0];
-    if (!leg) throw new Error('No route returned - check the departure time and API key');
-    if (!leg.duration_in_traffic) throw new Error('Google did not return a traffic-based estimate for this departure time');
-    const trafficMin = Math.round(leg.duration_in_traffic.value / 60);
-    const staticMin = Math.round(leg.duration.value / 60);
-    const deltaMin = trafficMin - staticMin;
+    const model = $('trafficModel').value;
+    const { trafficMin, staticMin, deltaMin } = await fetchTrafficForTime(gk, origin, dest, depUnix, model);
+    trafficPrediction = { trafficMin, staticMin, deltaMin, model, depMs: depDate.getTime() };
     let msg = 'Predicted: ' + trafficMin + ' min with traffic (' + staticMin + ' min with no traffic)';
     if (deltaMin > 0) msg += ' - about ' + deltaMin + ' min slower than free-flow';
     else msg += ' - close to free-flow conditions';
@@ -1755,6 +1769,69 @@ async function predictTraffic() {
   }
   btn.disabled = false;
   btn.textContent = 'Predict travel time';
+}
+
+async function compareTrafficTimes() {
+  if (!res.length) { log('Run or load a route first', 'er'); return; }
+  const gk = $('gkey').value.trim();
+  if (!gk) { log('Enter your Google Maps key to predict traffic', 'er'); return; }
+  const depVal = $('dep').value;
+  const anchor = depVal ? new Date(depVal) : new Date();
+  const btn = $('compareTrafficBtn');
+  const out = $('trafficCompareResult');
+  btn.disabled = true;
+  btn.textContent = 'Comparing...';
+  out.innerHTML = 'Checking nearby departure times...';
+  const origin = res[0], dest = res[res.length - 1];
+  const model = $('trafficModel').value;
+  const nowMs = Date.now();
+  const offsetsHrs = [-2, -1, 0, 1, 2];
+  const candidates = offsetsHrs
+    .map(h => new Date(anchor.getTime() + h * 3600 * 1000))
+    .filter(d => d.getTime() >= nowMs); // don't bother predicting a departure time that's already passed
+
+  if (!candidates.length) {
+    out.textContent = "The set departure time and the hours around it have all passed - set a time in the future first.";
+    btn.disabled = false;
+    btn.textContent = 'Compare nearby departure times';
+    return;
+  }
+
+  const results = [];
+  for (const c of candidates) {
+    try {
+      const r = await fetchTrafficForTime(gk, origin, dest, Math.floor(c.getTime() / 1000), model);
+      results.push({ time: c, ...r });
+    } catch (e) {
+      log('Skipped ' + c.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ': ' + e.message, 'wn');
+    }
+  }
+
+  if (!results.length) {
+    out.textContent = 'Could not get a prediction for any nearby departure time - check the API key.';
+    btn.disabled = false;
+    btn.textContent = 'Compare nearby departure times';
+    return;
+  }
+
+  const fastest = results.reduce((best, r) => (r.trafficMin < best.trafficMin ? r : best), results[0]);
+  const anchorMs = anchor.getTime();
+  const rows = results.slice().sort((a, b) => a.time - b.time).map(r => {
+    const isAnchor = Math.abs(r.time.getTime() - anchorMs) < 60 * 1000;
+    const isFastest = r === fastest;
+    const timeLabel = r.time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return '<div style="display:flex;justify-content:space-between;padding:3px 0' + (isAnchor ? ';font-weight:600' : '') + '">'
+      + '<span>' + timeLabel + (isAnchor ? ' (set time)' : '') + '</span>'
+      + '<span>' + r.trafficMin + ' min' + (isFastest ? ' \u2713 fastest' : '') + '</span>'
+      + '</div>';
+  }).join('');
+  out.innerHTML = rows;
+  const summary = fastest.time.getTime() === anchorMs
+    ? 'Your set departure time is already the fastest of the times checked.'
+    : 'Leaving at ' + fastest.time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' instead predicts ' + (results.find(r => Math.abs(r.time.getTime() - anchorMs) < 60000) ? (results.find(r => Math.abs(r.time.getTime() - anchorMs) < 60000).trafficMin - fastest.trafficMin) + ' min faster than your set time.' : 'the shortest travel time among the times checked.');
+  log(summary, 'ok');
+  btn.disabled = false;
+  btn.textContent = 'Compare nearby departure times';
 }
 
 async function renameSavedRoute(id, oldName) {
@@ -1819,6 +1896,15 @@ function toggleTraffic() {
   } else if (trafficLayer) {
     trafficLayer.setMap(null);
   }
+  // Route point markers sit in the overlay pane above the traffic tile layer (Google
+  // always renders markers above map tiles, so they can't be pushed behind it) - fading
+  // them out when traffic is on lets the congestion colors show through underneath instead
+  // of being fully painted over, especially where points are closely spaced.
+  const opacity = on ? 0.55 : 1;
+  gm.forEach(m => {
+    const icon = m.getIcon();
+    if (icon) { icon.fillOpacity = opacity; m.setIcon(icon); }
+  });
 }
 
 function iMap() {
@@ -1930,7 +2016,7 @@ function iMap() {
     }
     const m = new google.maps.Marker({
       position: { lat: r.lat, lng: r.lon }, map: gmap,
-      icon: { path: google.maps.SymbolPath.CIRCLE, scale: 6, fillColor: fill, fillOpacity: 1, strokeColor: stroke, strokeWeight: 1.5 }
+      icon: { path: google.maps.SymbolPath.CIRCLE, scale: 6, fillColor: fill, fillOpacity: ($('traffic').checked ? 0.55 : 1), strokeColor: stroke, strokeWeight: 1.5 }
     });
     m.addListener('click', () => {
       curInfoIdx = idx;
@@ -1987,6 +2073,18 @@ function buildBriefingData() {
     }
   } else {
     overview += 'No weather data has been loaded for this route yet. ';
+  }
+
+  if (trafficPrediction) {
+    const tp = trafficPrediction;
+    const stale = Math.abs(tp.depMs - depMs) > 5 * 60 * 1000; // predicted for a different departure time than currently set
+    const modelLabel = tp.model === 'pessimistic' ? 'bad-day' : tp.model === 'optimistic' ? 'good-day' : 'best-guess';
+    if (tp.deltaMin > 5) {
+      overview += "Google's " + modelLabel + ' traffic model predicts about ' + tp.deltaMin + ' minutes slower than free-flow (' + tp.trafficMin + ' vs ' + tp.staticMin + ' min) for a departure at ' + new Date(tp.depMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + '. ';
+    } else {
+      overview += "Google's " + modelLabel + ' traffic model predicts close to free-flow conditions (' + tp.trafficMin + ' min) for a departure at ' + new Date(tp.depMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + '. ';
+    }
+    if (stale) overview += "(That prediction was for a different departure time than what's set now - re-run it if the time changed.) ";
   }
 
   if (analysed.length) {
