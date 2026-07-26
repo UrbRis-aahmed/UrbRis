@@ -164,6 +164,7 @@ input[type=number]{width:70px;text-align:right}
     <div class="or" style="margin-top:8px"><label>Auto-analyse iRAP</label><input type="checkbox" id="auto" style="width:auto;cursor:pointer"/></div>
     <div class="or" style="margin-top:8px"><label>Light pollution</label><input type="checkbox" id="lp" style="width:auto;cursor:pointer"/></div>
     <div class="or" style="margin-top:8px"><label>Live traffic</label><input type="checkbox" id="traffic" style="width:auto;cursor:pointer"/></div>
+    <div class="or" style="margin-top:8px"><label>Place labels</label><input type="checkbox" id="placeLabels" style="width:auto;cursor:pointer"/></div>
     <div class="or" style="margin-top:8px"><label>Street addresses</label><input type="checkbox" id="addr" style="width:auto;cursor:pointer"/></div>
     <div class="or" style="margin-top:8px"><label>Departure time</label><input type="datetime-local" id="dep" style="width:150px"/></div>
     <div class="or" style="margin-top:8px"><label>Avg speed (km/h)</label><input type="number" id="spd" value="60" min="10" max="200" style="width:70px"/></div>
@@ -430,14 +431,9 @@ function initDrawMap() {
   if (!gmap) {
     gmap = new google.maps.Map($('gmap'), {
       center: { lat: 43.65, lng: -79.38 }, zoom: 8,
-      styles: [
-        { elementType: 'geometry', stylers: [{ color: '#1a1a2e' }] },
-        { elementType: 'labels.text.fill', stylers: [{ color: '#8a8a9a' }] },
-        { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#2d2d44' }] },
-        { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0d1b2a' }] },
-        { featureType: 'poi', stylers: [{ visibility: 'off' }] }
-      ]
+      styles: mapStyles($('placeLabels').checked)
     });
+    $('placeLabels').addEventListener('change', toggleLabels);
     $('lp').addEventListener('change', toggleLightPollution);
     $('traffic').addEventListener('change', toggleTraffic);
     if ($('traffic').checked) toggleTraffic();
@@ -535,14 +531,9 @@ function initScanMap() {
   if (!gmap) {
     gmap = new google.maps.Map($('gmap'), {
       center: { lat: 43.65, lng: -79.38 }, zoom: 8,
-      styles: [
-        { elementType: 'geometry', stylers: [{ color: '#1a1a2e' }] },
-        { elementType: 'labels.text.fill', stylers: [{ color: '#8a8a9a' }] },
-        { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#2d2d44' }] },
-        { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0d1b2a' }] },
-        { featureType: 'poi', stylers: [{ visibility: 'off' }] }
-      ]
+      styles: mapStyles($('placeLabels').checked)
     });
+    $('placeLabels').addEventListener('change', toggleLabels);
     $('lp').addEventListener('change', toggleLightPollution);
     $('traffic').addEventListener('change', toggleTraffic);
     if ($('traffic').checked) toggleTraffic();
@@ -1910,19 +1901,37 @@ function toggleTraffic() {
   });
 }
 
+// Shared base style for every map instance in the app. Google's styling has no
+// built-in "hide below this zoom" option, so the labels toggle is all-or-nothing
+// rather than zoom-conditional.
+function mapStyles(showLabels) {
+  const s = [
+    { elementType: 'geometry', stylers: [{ color: '#1a1a2e' }] },
+    { elementType: 'labels.text.fill', stylers: [{ color: '#8a8a9a' }] },
+    { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#2d2d44' }] },
+    { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0d1b2a' }] },
+    { featureType: 'poi', stylers: [{ visibility: 'off' }] }
+  ];
+  if (!showLabels) {
+    s.push({ featureType: 'administrative.province', elementType: 'labels', stylers: [{ visibility: 'off' }] });
+    s.push({ featureType: 'administrative.locality', elementType: 'labels', stylers: [{ visibility: 'off' }] });
+  }
+  return s;
+}
+
+function toggleLabels() {
+  if (!gmap) return;
+  gmap.setOptions({ styles: mapStyles($('placeLabels').checked) });
+}
+
 function iMap() {
   const mid = res[Math.floor(res.length/2)];
   if (!gmap) {
     gmap = new google.maps.Map($('gmap'), {
       center: { lat: mid.lat, lng: mid.lon }, zoom: 13,
-      styles: [
-        { elementType: 'geometry', stylers: [{ color: '#1a1a2e' }] },
-        { elementType: 'labels.text.fill', stylers: [{ color: '#8a8a9a' }] },
-        { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#2d2d44' }] },
-        { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0d1b2a' }] },
-        { featureType: 'poi', stylers: [{ visibility: 'off' }] }
-      ]
+      styles: mapStyles($('placeLabels').checked)
     });
+    $('placeLabels').addEventListener('change', toggleLabels);
     $('lp').addEventListener('change', toggleLightPollution);
     if ($('lp').checked) toggleLightPollution();
     $('traffic').addEventListener('change', toggleTraffic);
@@ -1983,6 +1992,22 @@ function iMap() {
     }
   }
 
+  function hoverKpiLine(r) {
+    const parts = ['<b>km ' + r.km.toFixed(2) + '</b>'];
+    if (r.irap) {
+      const sc = riskScore(r.irap);
+      parts.push('<span style="color:' + riskColor(sc) + '">Risk ' + Math.round(sc * 100) + '%</span>');
+    }
+    if (r.curveClass) {
+      const risky = r.curveClass === 'Sharp curve' || r.curveClass === 'Hairpin';
+      parts.push('<span style="color:' + (risky ? '#c94b4b' : '#666') + '">' + r.curveClass + '</span>');
+    }
+    if (r.cellClass) {
+      parts.push('<span style="color:' + (r.cellRisky ? '#c94b4b' : '#666') + '">' + r.cellClass + '</span>');
+    }
+    return '<div style="font-size:11px;margin-top:4px">' + parts.join(' &middot; ') + '</div>';
+  }
+
   function infoHTML(r) {
     let status = r.hasCoverage ? '<span style="color:#97c459">Street View OK</span>' : '<span style="color:#f09595">No coverage</span>';
     let risk = '';
@@ -2026,6 +2051,7 @@ function iMap() {
       m.addListener('mouseover', () => {
         let html = '<img src="' + r.imageUrl + '" alt="km ' + r.km.toFixed(2) + '" style="width:220px;height:140px;object-fit:cover;border-radius:4px;display:block"/>';
         if (r.validationImage) html += '<img src="' + r.validationImage + '" alt="field validation" style="width:220px;height:140px;object-fit:cover;border-radius:4px;display:block;margin-top:4px"/>';
+        html += hoverKpiLine(r);
         hoverInfo.setContent(html);
         hoverInfo.open(gmap, m);
       });
