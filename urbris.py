@@ -1,11 +1,40 @@
 #!/usr/bin/env python3
-import json, urllib.request, urllib.error, urllib.parse, webbrowser, os, sys, csv, math
+import json, urllib.request, urllib.error, urllib.parse, webbrowser, os, sys, csv, math, uuid, threading
+from datetime import datetime, timezone
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 CELL_CSV = os.path.join(BASE, "cell_towers.csv")
 GRID_SIZE = 0.1  # degrees, roughly 11km - buckets towers for fast nearest-neighbor lookup
 TOWER_GRID = {}
+
+# ---- Saved-routes storage --------------------------------------------------
+# Deliberately isolated behind these three functions. Right now it's a JSON
+# file next to the script, which is fine for testing but does NOT survive a
+# Render free-tier restart/redeploy (ephemeral filesystem). If/when this
+# needs to actually persist, swap these three functions for calls to
+# Supabase (or another DB) - nothing else in this file needs to change.
+ROUTES_FILE = os.path.join(BASE, "saved_routes.json")
+_routes_lock = threading.Lock()
+
+def load_routes_db():
+    if not os.path.exists(ROUTES_FILE):
+        return {}
+    try:
+        with open(ROUTES_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return {}
+
+def save_routes_db(db):
+    with _routes_lock:
+        tmp = ROUTES_FILE + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(db, f)
+        os.replace(tmp, ROUTES_FILE)
+
+def now_iso():
+    return datetime.now(timezone.utc).isoformat()
 
 def load_towers():
     if not os.path.exists(CELL_CSV):
@@ -88,6 +117,12 @@ def fetch_overpass(query):
 class H(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         print(" ", args[0], self.path)
+    def _json(self, obj, code=200):
+        self.send_response(code)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(json.dumps(obj).encode())
     def do_GET(self):
         self.send_response(200)
         self.send_header("Content-Type", "text/html")
@@ -111,6 +146,57 @@ class H(BaseHTTPRequestHandler):
             self.send_header("Content-Type", "application/json")
             self.end_headers()
             self.wfile.write(json.dumps({"distances": distances}).encode())
+            return
+        if self.path == "/routes/save":
+            db = load_routes_db()
+            rid = data.get("id") or uuid.uuid4().hex[:12]
+            existing = db.get(rid, {})
+            entry = {
+                "id": rid,
+                "name": data.get("name") or ("Route " + now_iso()),
+                "savedAt": existing.get("savedAt") or now_iso(),
+                "updatedAt": now_iso(),
+                "meta": data.get("meta", {}),
+                "data": data.get("data", {}),
+            }
+            db[rid] = entry
+            save_routes_db(db)
+            self._json({"id": rid, "name": entry["name"], "savedAt": entry["savedAt"]})
+            return
+        if self.path == "/routes/list":
+            db = load_routes_db()
+            items = [
+                {"id": v["id"], "name": v["name"], "savedAt": v.get("savedAt"), "meta": v.get("meta", {})}
+                for v in db.values()
+            ]
+            items.sort(key=lambda x: x.get("savedAt") or "", reverse=True)
+            self._json({"routes": items})
+            return
+        if self.path == "/routes/load":
+            db = load_routes_db()
+            entry = db.get(data.get("id", ""))
+            if not entry:
+                self._json({"error": "Route not found - it may have been lost in a server restart"}, code=404)
+                return
+            self._json(entry)
+            return
+        if self.path == "/routes/rename":
+            db = load_routes_db()
+            rid = data.get("id", "")
+            if rid in db:
+                db[rid]["name"] = data.get("name", db[rid]["name"])
+                save_routes_db(db)
+                self._json({"ok": True})
+            else:
+                self._json({"error": "Route not found"}, code=404)
+            return
+        if self.path == "/routes/delete":
+            db = load_routes_db()
+            rid = data.get("id", "")
+            if rid in db:
+                del db[rid]
+                save_routes_db(db)
+            self._json({"ok": True})
             return
         if self.path == "/roadsinarea":
             bbox = data.get("bbox", "")  # "south,west,north,east"

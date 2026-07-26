@@ -39,6 +39,15 @@ input[type=number]{width:70px;text-align:right}
 .btn:hover{background:var(--ac2)}.btn:disabled{background:var(--sf2);color:var(--mu);cursor:not-allowed}
 .savebtn{width:100%;background:var(--sf2);border:.5px solid var(--b2);border-radius:var(--r);color:var(--mu);font-size:12px;padding:6px;cursor:pointer;margin-top:6px}
 .savebtn:hover{border-color:var(--ac);color:var(--ac2)}
+.sr-item{display:flex;align-items:center;gap:4px;background:var(--sf2);border:.5px solid var(--b);border-radius:var(--r);padding:6px 8px}
+.sr-main{flex:1;cursor:pointer;min-width:0}
+.sr-main:hover .sr-name{color:var(--ac2)}
+.sr-name{font-size:12px;color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sr-meta{font-size:10px;color:var(--mu);margin-top:1px}
+.sr-rename,.sr-del{background:none;border:none;color:var(--mu);cursor:pointer;font-size:13px;flex:0 0 auto;padding:2px 5px;border-radius:4px}
+.sr-rename:hover{color:var(--ac2);background:rgba(212,90,42,.1)}
+.sr-del:hover{color:var(--er);background:rgba(240,149,149,.1)}
+.sr-empty{font-size:11px;color:var(--mu);padding:4px 2px}
 .stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px}
 .st{background:var(--sf2);border:.5px solid var(--b);border-radius:var(--r);padding:8px;text-align:center}
 .sv{font-size:18px;font-weight:600}.sl2{font-size:10px;color:var(--mu);margin-top:2px}
@@ -106,6 +115,11 @@ input[type=number]{width:70px;text-align:right}
     <label class="fl" style="margin-top:8px">Anthropic key</label>
     <input type="password" id="akey" placeholder="sk-ant-..." />
     <button class="savebtn" onclick="saveKeys()">Save keys for next time</button>
+  </div>
+  <div>
+    <div class="sl">Saved Routes</div>
+    <div id="savedList" style="display:flex;flex-direction:column;gap:6px;max-height:220px;overflow-y:auto"></div>
+    <button class="savebtn" id="saveRouteBtn" style="margin-top:8px" onclick="saveCurrentRoute()" disabled>Run a route to enable saving</button>
   </div>
   <div>
     <div class="sl">Route</div>
@@ -223,6 +237,7 @@ window.addEventListener('load', () => {
     $('sbToggle').innerHTML = '&#8250;';
     $('sbToggle').title = 'Expand sidebar';
   }
+  refreshSavedList();
 });
 
 function toggleSidebar() {
@@ -1207,6 +1222,8 @@ $('run').addEventListener('click', async () => {
   $('pw').style.display = 'none';
   $('run').disabled = false;
   $('run').textContent = 'Re-run';
+  $('saveRouteBtn').disabled = false;
+  $('saveRouteBtn').textContent = 'Save current route';
 });
 
 function sv(v) {
@@ -1218,6 +1235,165 @@ function sv(v) {
   $('bbt').className = 'vb' + (v === 'brief' ? ' on' : '');
   if (v === 'map') drawMap($('gkey').value.trim());
   if (v === 'brief') renderBriefingTab();
+}
+
+// ---- Saved routes (server-side storage, so extraction/analysis never has to re-run) ----
+
+async function refreshSavedList() {
+  const list = $('savedList');
+  try {
+    const resp = await fetch('/routes/list', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    const data = await resp.json();
+    list.innerHTML = '';
+    if (!data.routes || !data.routes.length) {
+      list.innerHTML = '<div class="sr-empty">No saved routes yet</div>';
+      return;
+    }
+    data.routes.forEach(r => {
+      const km = (r.meta && r.meta.totalKm) ? r.meta.totalKm.toFixed(1) + ' km' : '';
+      const dt = r.savedAt ? new Date(r.savedAt).toLocaleDateString() : '';
+      const gaps = (r.meta && r.meta.cellGaps) ? r.meta.cellGaps + ' dead zone' + (r.meta.cellGaps > 1 ? 's' : '') : '';
+      const div = document.createElement('div');
+      div.className = 'sr-item';
+      div.innerHTML = '<div class="sr-main"><div class="sr-name"></div><div class="sr-meta"></div></div>'
+        + '<button class="sr-rename" title="Rename">&#9998;</button><button class="sr-del" title="Delete">&times;</button>';
+      div.querySelector('.sr-name').textContent = r.name;
+      div.querySelector('.sr-meta').textContent = [km, gaps, dt].filter(Boolean).join(' \u00b7 ');
+      div.querySelector('.sr-main').addEventListener('click', () => loadSavedRoute(r.id));
+      div.querySelector('.sr-rename').addEventListener('click', e => { e.stopPropagation(); renameSavedRoute(r.id, r.name); });
+      div.querySelector('.sr-del').addEventListener('click', e => { e.stopPropagation(); deleteSavedRoute(r.id); });
+      list.appendChild(div);
+    });
+  } catch (e) {
+    list.innerHTML = '<div class="sr-empty">Couldn\'t load saved routes</div>';
+  }
+}
+
+function autoRouteName() {
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('en-CA') + ' ' + now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  if (!res.length) return 'Route (' + dateStr + ')';
+  const a = res[0], b = res[res.length - 1];
+  const label = a.street || (a.lat.toFixed(3) + ',' + a.lon.toFixed(3));
+  const endLabel = b.street || (b.lat.toFixed(3) + ',' + b.lon.toFixed(3));
+  const range = (endLabel && endLabel !== label) ? (label + ' \u2192 ' + endLabel) : label;
+  return range + ' (' + dateStr + ')';
+}
+
+async function saveCurrentRoute() {
+  if (!res.length) { log('Nothing to save yet - run a route first', 'er'); return; }
+  const btn = $('saveRouteBtn');
+  btn.disabled = true;
+  btn.textContent = 'Saving...';
+  const totalKm = res[res.length - 1].km;
+  const cellGaps = res.filter(r => r.cellRisky).length;
+  const highRisk = res.filter(r => r.irap && riskScore(r.irap) >= 0.7).length;
+  const meta = { totalKm, points: res.length, cellGaps, highRisk };
+  const payload = { name: autoRouteName(), meta, data: { res, scanResults: (typeof scanResults !== 'undefined' ? scanResults : []) } };
+  try {
+    const resp = await fetch('/routes/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    const out = await resp.json();
+    log('Saved "' + out.name + '"', 'ok');
+    refreshSavedList();
+  } catch (e) {
+    log('Save failed: ' + e.message, 'er');
+  }
+  btn.disabled = false;
+  btn.textContent = 'Save current route';
+}
+
+async function loadSavedRoute(id) {
+  log('Loading saved route...', '');
+  try {
+    const resp = await fetch('/routes/load', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) });
+    const entry = await resp.json();
+    if (entry.error) { log(entry.error, 'er'); return; }
+    res = (entry.data && entry.data.res) || [];
+    if (entry.data && entry.data.scanResults) scanResults = entry.data.scanResults;
+    rebuildViewFromRes();
+    $('saveRouteBtn').disabled = false;
+    $('saveRouteBtn').textContent = 'Save current route';
+    log('Loaded "' + entry.name + '" (' + res.length + ' points) - no API calls needed', 'ok');
+  } catch (e) {
+    log('Load failed: ' + e.message, 'er');
+  }
+}
+
+function rebuildViewFromRes() {
+  $('empty').style.display = 'none';
+  $('rw').style.display = '';
+  $('xw').style.display = '';
+  $('wxbar').style.display = 'none';
+  $('fs').style.display = 'none';
+  $('rf').value = 0;
+  $('rfv').textContent = '0%+';
+  $('grid').innerHTML = '';
+  res.forEach((pt, i) => {
+    const card = document.createElement('div');
+    card.className = 'card';
+    if (!pt.hasCoverage) {
+      card.innerHTML = '<div class="nc">No Street View coverage</div><div class="cb"><span class="ckm">km ' + pt.km.toFixed(2) + '</span><div class="cc">' + pt.lat.toFixed(6) + ', ' + pt.lon.toFixed(6) + '</div><div class="cc" id="curve' + i + '"></div><div class="cc" id="cell' + i + '"></div><div class="cc" id="addr' + i + '"></div></div>';
+    } else {
+      card.dataset.url = pt.imageUrl;
+      const abLabel = pt.irap ? 'Re-analyse' : 'Code iRAP attributes';
+      card.innerHTML = '<img src="' + pt.imageUrl + '" alt="km ' + pt.km.toFixed(2) + '" loading="lazy"/><div class="cb"><span class="ckm">km ' + pt.km.toFixed(2) + '</span><div class="cc">' + pt.lat.toFixed(6) + ', ' + pt.lon.toFixed(6) + '</div><div class="cc" id="curve' + i + '"></div><div class="cc" id="cell' + i + '"></div><div class="cc" id="addr' + i + '"></div><button class="ab' + (pt.irap ? ' done' : '') + '" data-idx="' + i + '">' + abLabel + '</button></div><div class="ip" id="ip' + i + '"></div>';
+    }
+    $('grid').appendChild(card);
+  });
+  document.querySelectorAll('.ab[data-idx]').forEach(btn => {
+    btn.addEventListener('click', function() {
+      const idx = parseInt(this.dataset.idx);
+      const url = this.closest('.card').dataset.url;
+      ac(this, url, idx);
+    });
+  });
+  res.forEach((r, i) => {
+    if (r.curveClass) {
+      const slot = $('curve' + i);
+      if (slot) {
+        const risky = r.curveClass === 'Sharp curve' || r.curveClass === 'Hairpin';
+        slot.innerHTML = 'Measured: ' + (isFinite(r.curveRadius) ? Math.round(r.curveRadius) + 'm radius' : '\u221e') + ' &middot; <span style="color:' + (risky ? 'var(--er)' : 'var(--mu)') + '">' + r.curveClass + '</span>';
+      }
+    }
+    if (r.cellClass != null && r.cellDist != null) {
+      const slot = $('cell' + i);
+      if (slot) slot.innerHTML = 'Signal: ' + r.cellDist.toFixed(1) + 'km to tower &middot; ' + r.cellClass;
+    }
+    if (r.street) {
+      const slot = $('addr' + i);
+      if (slot) slot.textContent = r.street + (r.postal ? ', ' + r.postal : '');
+    }
+    if (r.irap) {
+      const ipSlot = $('ip' + i);
+      if (ipSlot) rIRAP(ipSlot, r.irap);
+    }
+  });
+  const c = res.filter(r => r.hasCoverage).length;
+  $('cs').textContent = c + '/' + res.length + ' covered (' + Math.round(c / res.length * 100) + '%)';
+  $('rt').textContent = 'Route frames - ' + res.length + ' points (loaded from saved route)';
+  applyFilter();
+  sv('grid');
+}
+
+async function renameSavedRoute(id, oldName) {
+  const name = prompt('Rename route', oldName);
+  if (!name || name === oldName) return;
+  try {
+    await fetch('/routes/rename', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, name }) });
+    refreshSavedList();
+  } catch (e) {
+    log('Rename failed: ' + e.message, 'er');
+  }
+}
+
+async function deleteSavedRoute(id) {
+  if (!confirm('Delete this saved route? This can\'t be undone.')) return;
+  try {
+    await fetch('/routes/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) });
+    refreshSavedList();
+  } catch (e) {
+    log('Delete failed: ' + e.message, 'er');
+  }
 }
 
 function drawMap(gk) {
