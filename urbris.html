@@ -163,9 +163,23 @@ input[type=number]{width:70px;text-align:right}
     <div class="or" style="margin-top:8px"><label>Snap to road</label><input type="checkbox" id="snap" checked style="width:auto;cursor:pointer"/></div>
     <div class="or" style="margin-top:8px"><label>Auto-analyse iRAP</label><input type="checkbox" id="auto" style="width:auto;cursor:pointer"/></div>
     <div class="or" style="margin-top:8px"><label>Light pollution</label><input type="checkbox" id="lp" style="width:auto;cursor:pointer"/></div>
+    <div class="or" style="margin-top:8px"><label>Live traffic</label><input type="checkbox" id="traffic" style="width:auto;cursor:pointer"/></div>
     <div class="or" style="margin-top:8px"><label>Street addresses</label><input type="checkbox" id="addr" style="width:auto;cursor:pointer"/></div>
     <div class="or" style="margin-top:8px"><label>Departure time</label><input type="datetime-local" id="dep" style="width:150px"/></div>
     <div class="or" style="margin-top:8px"><label>Avg speed (km/h)</label><input type="number" id="spd" value="60" min="10" max="200" style="width:70px"/></div>
+  </div>
+  <div>
+    <div class="sl">Traffic Prediction</div>
+    <div class="hint">Predicts travel time for the departure time set above, using Google's historical + live traffic model - the farther out the departure time, the more it leans on historical patterns rather than live conditions. Gives one duration for the whole route, not a per-point breakdown.</div>
+    <div class="or" style="margin-top:8px"><label>Model</label>
+      <select id="trafficModel" style="width:150px">
+        <option value="best_guess">Best guess</option>
+        <option value="pessimistic">Pessimistic (bad-day)</option>
+        <option value="optimistic">Optimistic (good-day)</option>
+      </select>
+    </div>
+    <button class="btn" id="predictTrafficBtn" style="margin-top:8px" onclick="predictTraffic()" disabled>Run a route first</button>
+    <div id="trafficResult" class="hint" style="margin-top:6px"></div>
   </div>
   <div id="sw" style="display:none">
     <div class="sl">Route</div>
@@ -236,7 +250,7 @@ input[type=number]{width:70px;text-align:right}
 </div>
 <script>
 const $ = id => document.getElementById(id);
-let rp = [], sp = [], res = [], gmap = null, gm = [], gp = null, gs = [], lpLayer = null, wxData = [], denseCurve = null, densePts = null;
+let rp = [], sp = [], res = [], gmap = null, gm = [], gp = null, gs = [], lpLayer = null, trafficLayer = null, wxData = [], denseCurve = null, densePts = null;
 let drawMode = false, drawPts = [], drawPoly = null, drawMarkers = [];
 
 window.addEventListener('load', () => {
@@ -423,6 +437,8 @@ function initDrawMap() {
       ]
     });
     $('lp').addEventListener('change', toggleLightPollution);
+    $('traffic').addEventListener('change', toggleTraffic);
+    if ($('traffic').checked) toggleTraffic();
   }
   if (!drawPoly) {
     drawPoly = new google.maps.Polyline({ path: [], strokeColor: '#3a7d5c', strokeWeight: 4, map: gmap, clickable: false });
@@ -526,6 +542,8 @@ function initScanMap() {
       ]
     });
     $('lp').addEventListener('change', toggleLightPollution);
+    $('traffic').addEventListener('change', toggleTraffic);
+    if ($('traffic').checked) toggleTraffic();
   }
   google.maps.event.clearListeners(gmap, 'click');
   gmap.addListener('click', onScanClick);
@@ -1510,6 +1528,8 @@ $('run').addEventListener('click', async () => {
   $('run').textContent = 'Re-run';
   $('saveRouteBtn').disabled = false;
   $('saveRouteBtn').textContent = 'Save current route';
+  $('predictTrafficBtn').disabled = false;
+  $('predictTrafficBtn').textContent = 'Predict travel time';
 });
 
 function sv(v) {
@@ -1623,6 +1643,8 @@ async function loadSavedRoute(id) {
     rebuildViewFromRes();
     $('saveRouteBtn').disabled = false;
     $('saveRouteBtn').textContent = 'Save current route';
+    $('predictTrafficBtn').disabled = false;
+    $('predictTrafficBtn').textContent = 'Predict travel time';
     if (needsKey) log('Loaded "' + entry.name + '" - enter your Google Maps key to view the Street View images', 'wn');
     else log('Loaded "' + entry.name + '" (' + res.length + ' points) - no API calls needed', 'ok');
   } catch (e) {
@@ -1687,6 +1709,54 @@ function rebuildViewFromRes() {
   sv('grid');
 }
 
+async function predictTraffic() {
+  if (!res.length) { log('Run or load a route first', 'er'); return; }
+  const gk = $('gkey').value.trim();
+  if (!gk) { log('Enter your Google Maps key to predict traffic', 'er'); return; }
+  const btn = $('predictTrafficBtn');
+  const out = $('trafficResult');
+  btn.disabled = true;
+  btn.textContent = 'Predicting...';
+  out.textContent = '';
+  try {
+    const depVal = $('dep').value;
+    const depDate = depVal ? new Date(depVal) : new Date();
+    // Directions API wants a unix timestamp in seconds, and only accepts departure
+    // times in the present or future - if the picked time has already passed, use now.
+    const depUnix = Math.max(Math.floor(depDate.getTime() / 1000), Math.floor(Date.now() / 1000));
+    const origin = res[0], dest = res[res.length - 1];
+    const resp = await fetch('/traffic', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        gkey: gk,
+        originLat: origin.lat, originLon: origin.lon,
+        destLat: dest.lat, destLon: dest.lon,
+        departureTime: depUnix,
+        trafficModel: $('trafficModel').value
+      })
+    });
+    const data = await resp.json();
+    if (data.error) throw new Error(typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail || data.error));
+    const leg = data.routes && data.routes[0] && data.routes[0].legs && data.routes[0].legs[0];
+    if (!leg) throw new Error('No route returned - check the departure time and API key');
+    if (!leg.duration_in_traffic) throw new Error('Google did not return a traffic-based estimate for this departure time');
+    const trafficMin = Math.round(leg.duration_in_traffic.value / 60);
+    const staticMin = Math.round(leg.duration.value / 60);
+    const deltaMin = trafficMin - staticMin;
+    let msg = 'Predicted: ' + trafficMin + ' min with traffic (' + staticMin + ' min with no traffic)';
+    if (deltaMin > 0) msg += ' - about ' + deltaMin + ' min slower than free-flow';
+    else msg += ' - close to free-flow conditions';
+    out.textContent = msg;
+    log(msg, 'ok');
+  } catch (e) {
+    out.textContent = 'Prediction failed: ' + e.message;
+    log('Traffic prediction failed: ' + e.message, 'er');
+  }
+  btn.disabled = false;
+  btn.textContent = 'Predict travel time';
+}
+
 async function renameSavedRoute(id, oldName) {
   const name = prompt('Rename route', oldName);
   if (!name || name === oldName) return;
@@ -1740,6 +1810,17 @@ function toggleLightPollution() {
   }
 }
 
+function toggleTraffic() {
+  if (!gmap) return;
+  const on = $('traffic').checked;
+  if (on) {
+    if (!trafficLayer) trafficLayer = new google.maps.TrafficLayer();
+    trafficLayer.setMap(gmap);
+  } else if (trafficLayer) {
+    trafficLayer.setMap(null);
+  }
+}
+
 function iMap() {
   const mid = res[Math.floor(res.length/2)];
   if (!gmap) {
@@ -1755,6 +1836,8 @@ function iMap() {
     });
     $('lp').addEventListener('change', toggleLightPollution);
     if ($('lp').checked) toggleLightPollution();
+    $('traffic').addEventListener('change', toggleTraffic);
+    if ($('traffic').checked) toggleTraffic();
   }
   gm.forEach(m => m.setMap(null)); gm = [];
   if (gp) { gp.setMap(null); gp = null; }

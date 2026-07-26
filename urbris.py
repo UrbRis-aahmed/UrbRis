@@ -211,6 +211,31 @@ class H(BaseHTTPRequestHandler):
                 save_routes_db(db)
             self._json({"ok": True})
             return
+        if self.path == "/traffic":
+            gkey = data.get("gkey", "")
+            if not gkey:
+                self._json({"error": "No Google Maps API key"}, code=400)
+                return
+            params = urllib.parse.urlencode({
+                "origin": str(data["originLat"]) + "," + str(data["originLon"]),
+                "destination": str(data["destLat"]) + "," + str(data["destLon"]),
+                "departure_time": data["departureTime"],  # unix timestamp (seconds), or "now"
+                "traffic_model": data.get("trafficModel", "best_guess"),
+                "mode": "driving",
+                "key": gkey
+            })
+            req = urllib.request.Request("https://maps.googleapis.com/maps/api/directions/json?" + params)
+            try:
+                with urllib.request.urlopen(req) as r:
+                    result = json.loads(r.read())
+                if result.get("status") != "OK":
+                    self._json({"error": "Google Directions API error", "detail": result.get("error_message", result.get("status"))}, code=400)
+                    return
+                self._json(result)
+            except urllib.error.HTTPError as e:
+                err_body = e.read()
+                self._json({"error": "Google Directions API error", "detail": err_body.decode("utf-8", "ignore")}, code=e.code)
+            return
         if self.path == "/roadsinarea":
             bbox = data.get("bbox", "")  # "south,west,north,east"
             query = (
