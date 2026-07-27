@@ -2217,9 +2217,51 @@ function renderBriefingTab() {
     + '</div>';
 }
 
+function compassDir(heading) {
+  const dirs = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
+  return dirs[Math.round(((heading % 360) / 22.5)) % 16];
+}
+
+// A single whole-route map for the printable briefing - light/print-friendly (not the
+// app's dark screen theme, which wastes ink and reads poorly on paper), auto-fit to the
+// whole route since length varies a lot route to route. Numbered waypoints are capped
+// and evenly sampled, both for readability and to keep the URL within length limits on
+// longer routes - this is meant as an offline paper backup, not a replacement for the
+// interactive map.
+function fullRouteMapUrl(gk, points) {
+  const maxMarkers = 15;
+  const markerStep = Math.max(1, Math.ceil(points.length / maxMarkers));
+  const waypoints = points.filter((p, i) => i % markerStep === 0 || i === points.length - 1);
+  const maxPathPts = 100;
+  const pathStep = Math.max(1, Math.ceil(points.length / maxPathPts));
+  const pathPts = points.filter((p, i) => i % pathStep === 0 || i === points.length - 1);
+  const path = 'path=color:0x3a7d5c|weight:4|' + pathPts.map(p => p.lat + ',' + p.lon).join('|');
+  const markers = waypoints.map((p, i) => 'markers=color:0xd45a2a|label:' + (i + 1) + '|' + p.lat + ',' + p.lon).join('&');
+  const style = ['style=feature:poi|visibility:off', 'style=feature:transit|visibility:off'].join('&');
+  const url = 'https://maps.googleapis.com/maps/api/staticmap?size=640x640&scale=2&maptype=roadmap&' + style + '&' + path + '&' + markers + '&key=' + encodeURIComponent(gk);
+  return { url, waypoints };
+}
+
+function buildCueRows(waypoints) {
+  return waypoints.map((p, i) => {
+    const risky = p.curveClass === 'Sharp curve' || p.curveClass === 'Hairpin';
+    const curveNote = risky ? ' &middot; <b style="color:#c94b4b">' + p.curveClass + '</b>' : '';
+    return '<tr><td><b>' + (i + 1) + '</b></td><td>' + p.km.toFixed(1) + ' km</td><td>' + compassDir(p.heading) + '</td><td>' + (p.street || '-') + curveNote + '</td></tr>';
+  }).join('');
+}
+
 function generateBriefing() {
   if (!res.length) { log('Load a route first', 'wn'); return; }
   const d = buildBriefingData();
+  const gk = $('gkey').value.trim();
+  const routeMap = gk ? fullRouteMapUrl(gk, res) : null;
+  const cueRows = routeMap ? buildCueRows(routeMap.waypoints) : '';
+
+  const svCovered = res.filter(r => r.hasCoverage && r.imageSource !== 'drone').length;
+  const fieldFilled = res.filter(r => r.imageSource === 'drone').length;
+  const stillGap = res.filter(r => !r.hasCoverage).length;
+  const validated = res.filter(r => r.validationImage).length;
+  const cellGapCount = res.filter(r => r.cellRisky).length;
 
   const html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Urbris Ride Briefing</title><style>'
     + 'body{font-family:-apple-system,Arial,sans-serif;color:#111;max-width:760px;margin:32px auto;padding:0 20px;line-height:1.5}'
@@ -2235,10 +2277,17 @@ function generateBriefing() {
     + '.stat b{display:block;font-size:18px}'
     + '.stat span{font-size:11px;color:#666}'
     + '.warn{background:#fff4e5;border:1px solid #f0c98a;border-radius:6px;padding:10px 14px;font-size:13px;margin-top:14px}'
+    + '.disclaimer{background:#f2f4f6;border:1px solid #d8dee3;border-radius:6px;padding:10px 14px;font-size:12px;color:#444;margin-top:14px;line-height:1.5}'
+    + '.checklist{list-style:none;margin-top:10px;padding:0}'
+    + '.checklist li{padding:6px 4px;border-bottom:1px solid #eee;font-size:13px;display:flex;align-items:center;gap:10px}'
+    + '.checklist input{width:16px;height:16px;flex:0 0 auto}'
     + '.pbtn{margin-top:24px;background:#3a7d5c;color:#fff;border:none;border-radius:6px;padding:10px 18px;font-size:14px;cursor:pointer}'
-    + '@media print{.pbtn{display:none}}'
+    + '.brand{font-size:11px;letter-spacing:.12em;color:#3a7d5c;font-weight:700;text-transform:uppercase}'
+    + '@media print{.pbtn{display:none} h2{page-break-before:always} h2:first-of-type{page-break-before:auto}}'
     + '</style></head><body>'
-    + '<h1>Urbris Ride Briefing</h1>'
+    + '<div class="brand">Urbris &middot; Route-Based Risk Riding</div>'
+    + '<h1>Ride Briefing</h1>'
+    + '<div class="disclaimer"><b>Before you rely on this:</b> this briefing combines AI-assisted analysis of Street View imagery, historical traffic patterns, and weather forecasts, cross-checked with field-captured photo/video only where specifically noted above. It is meant to support your own pre-ride judgment, not replace it. Imagery may be outdated, conditions change, and unvalidated points have not been independently verified. Always confirm current conditions before and during your ride, ride within your own skill level, and treat your own on-road judgment as the final authority over anything in this document.</div>'
     + '<div class="sub">Generated ' + new Date().toLocaleString() + ' &middot; Departure ' + new Date(d.depMs).toLocaleString() + ' &middot; Avg speed ' + d.spd + ' km/h</div>'
     + '<div class="stats">'
     + '<div class="stat"><b>' + d.totalKm.toFixed(1) + '</b><span>km total</span></div>'
@@ -2247,6 +2296,23 @@ function generateBriefing() {
     + '<div class="stat"><b>' + d.highRisk.length + '</b><span>flagged hazards</span></div>'
     + '</div>'
     + '<div class="overview">' + d.overview + '</div>'
+    + (routeMap
+        ? '<h2>Route map - paper backup for no-signal stretches</h2>'
+          + '<img src="' + routeMap.url + '" alt="Route map" style="width:100%;max-width:640px;border-radius:6px;border:1px solid #ddd;display:block;margin:8px auto"/>'
+          + '<table><tr><th>#</th><th>From start</th><th>Heading</th><th>Location / notes</th></tr>' + cueRows + '</table>'
+        : '<div class="warn">Enter your Google Maps key before generating the briefing to include a printable route map.</div>')
+    + '<h2>Data coverage &amp; field validation</h2>'
+    + '<div class="stats">'
+    + '<div class="stat"><b>' + Math.round(svCovered / res.length * 100) + '%</b><span>Street View coverage</span></div>'
+    + '<div class="stat"><b>' + fieldFilled + '</b><span>gaps filled by field media</span></div>'
+    + '<div class="stat"><b>' + validated + '</b><span>points field-validated</span></div>'
+    + '<div class="stat"><b>' + stillGap + '</b><span>points with no imagery</span></div>'
+    + '<div class="stat"><b>' + cellGapCount + '</b><span>cell signal gaps</span></div>'
+    + '</div>'
+    + '<div class="overview" style="margin-top:10px">Of ' + res.length + ' surveyed points, ' + svCovered + ' had existing Street View coverage'
+    + (fieldFilled ? ', ' + fieldFilled + ' had no Street View and were filled in with drone/GoPro footage captured in the field' : '')
+    + (validated ? ', and ' + validated + ' point(s) with existing Street View were independently cross-checked against field-captured media' : '')
+    + (stillGap ? '. ' + stillGap + ' point(s) still have no imagery of any kind and have not been reviewed' : '.') + '</div>'
     + (d.qrUrl ? '<div style="display:flex;align-items:center;gap:16px;background:#f7f7f7;border-radius:8px;padding:14px 18px;margin-top:16px"><img src="' + d.qrUrl + '" style="width:120px;height:120px;border-radius:6px" alt="QR code for Google Maps directions"/><div style="font-size:13px;color:#444">Scan to navigate this route from wherever you are.<br><a href="' + d.mapsUrl + '" target="_blank">Open in Google Maps</a></div></div>' : '')
     + (d.hasWarn ? '<div class="warn">&#9888; Rain or high wind flagged along part of this route - see weather table below.</div>' : '')
     + '<h2>Weather along route</h2>'
@@ -2257,6 +2323,18 @@ function generateBriefing() {
     + '<table><tr><th>From start</th><th>Remaining</th><th>Location</th><th>Radius</th><th>Class</th></tr>' + (d.curveRows || '<tr><td colspan="5">No sharp curves or hairpins detected on this route</td></tr>') + '</table>'
     + '<h2>Cell coverage gaps (&gt;12km from nearest known tower)</h2>'
     + '<table><tr><th>From start</th><th>Remaining</th><th>Location</th><th>Nearest tower</th></tr>' + (d.cellRows || '<tr><td colspan="4">No coverage gaps flagged, or no tower data loaded</td></tr>') + '</table>'
+    + '<h2>Pre-ride checklist</h2>'
+    + '<ul class="checklist">'
+    + '<li><input type="checkbox"/> Weather re-checked within a few hours of actual departure (forecasts above may be stale by ride time)</li>'
+    + '<li><input type="checkbox"/> Traffic prediction re-run if departure time has changed since this briefing was generated</li>'
+    + (cellGapCount ? '<li><input type="checkbox"/> Backup communication device (satellite messenger, etc.) charged and packed - ' + cellGapCount + ' cell signal gap(s) flagged on this route</li>' : '<li><input type="checkbox"/> Phone charged and signal checked along the route</li>')
+    + '<li><input type="checkbox"/> This briefing printed or saved offline for the no-signal stretches noted above</li>'
+    + '<li><input type="checkbox"/> Someone told your planned route and expected return time</li>'
+    + '<li><input type="checkbox"/> Tires, brakes, lights, and fluids checked</li>'
+    + '<li><input type="checkbox"/> Protective gear: helmet, jacket, gloves, boots</li>'
+    + '<li><input type="checkbox"/> Fuel sufficient for full route length plus reserve</li>'
+    + '<li><input type="checkbox"/> First aid kit on board</li>'
+    + '</ul>'
     + '<button class="pbtn" onclick="window.print()">Print / Save as PDF</button>'
     + '</body></html>';
 
