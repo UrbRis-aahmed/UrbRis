@@ -1913,8 +1913,10 @@ function mapStyles(showLabels) {
     { featureType: 'poi', stylers: [{ visibility: 'off' }] }
   ];
   if (!showLabels) {
+    s.push({ featureType: 'administrative.country', elementType: 'labels', stylers: [{ visibility: 'off' }] });
     s.push({ featureType: 'administrative.province', elementType: 'labels', stylers: [{ visibility: 'off' }] });
     s.push({ featureType: 'administrative.locality', elementType: 'labels', stylers: [{ visibility: 'off' }] });
+    s.push({ featureType: 'water', elementType: 'labels', stylers: [{ visibility: 'off' }] });
   }
   return s;
 }
