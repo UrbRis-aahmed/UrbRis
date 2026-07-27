@@ -100,12 +100,17 @@ def fetch_overpass(query):
             )
             with urllib.request.urlopen(req, timeout=30) as r:
                 body = r.read()
-            stripped = body.lstrip()
-            if stripped.startswith(b"{") or stripped.startswith(b"["):
-                print(f"  Overpass query succeeded via {mirror}")
-                return body, None
-            last_err = f"{mirror} returned a non-JSON response"
-            print(f"  {last_err} - trying next mirror")
+            try:
+                json.loads(body)  # confirm it's actually complete, parseable JSON before
+                # forwarding it on - a truncated/cut-off response can still start with "{"
+                # but fail to parse, which used to slip through and break the browser with
+                # a confusing "Unexpected end of JSON input" error instead of a clear one here.
+            except json.JSONDecodeError as e:
+                last_err = f"{mirror} returned malformed/incomplete JSON: {e}"
+                print(f"  {last_err} - trying next mirror")
+                continue
+            print(f"  Overpass query succeeded via {mirror}")
+            return body, None
         except urllib.error.HTTPError as e:
             last_err = f"{mirror} returned HTTP {e.code}"
             print(f"  {last_err} - trying next mirror")
@@ -211,55 +216,6 @@ class H(BaseHTTPRequestHandler):
                 save_routes_db(db)
             self._json({"ok": True})
             return
-        if self.path == "/traffic":
-            gkey = data.get("gkey", "")
-            if not gkey:
-                self._json({"error": "No Google Maps API key"}, code=400)
-                return
-            params = urllib.parse.urlencode({
-                "origin": str(data["originLat"]) + "," + str(data["originLon"]),
-                "destination": str(data["destLat"]) + "," + str(data["destLon"]),
-                "departure_time": data["departureTime"],  # unix timestamp (seconds), or "now"
-                "traffic_model": data.get("trafficModel", "best_guess"),
-                "mode": "driving",
-                "key": gkey
-            })
-            req = urllib.request.Request("https://maps.googleapis.com/maps/api/directions/json?" + params)
-            try:
-                with urllib.request.urlopen(req) as r:
-                    result = json.loads(r.read())
-                if result.get("status") != "OK":
-                    self._json({"error": "Google Directions API error", "detail": result.get("error_message", result.get("status"))}, code=400)
-                    return
-                self._json(result)
-            except urllib.error.HTTPError as e:
-                err_body = e.read()
-                self._json({"error": "Google Directions API error", "detail": err_body.decode("utf-8", "ignore")}, code=e.code)
-            return
-        if self.path == "/trailsinarea":
-            bbox = data.get("bbox", "")  # "south,west,north,east"
-            query = (
-                '[out:json][timeout:25];'
-                '('
-                'way["highway"~"^(path|footway|track|bridleway)$"]["name"](' + bbox + ');'
-                'way["route"="hiking"](' + bbox + ');'
-                ');'
-                'out geom;'
-            )
-            body_result, err = fetch_overpass(query)
-            self.send_response(200)
-            self.send_header("Access-Control-Allow-Origin", "*")
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            if body_result is not None:
-                self.wfile.write(body_result)
-            else:
-                self.wfile.write(json.dumps({
-                    "error": "All Overpass mirrors were busy or unreachable (" + str(err) + "). "
-                             "This is a shared free service so it happens sometimes - wait a minute "
-                             "and try again, or try a smaller area."
-                }).encode())
-            return
         if self.path == "/roadsinarea":
             bbox = data.get("bbox", "")  # "south,west,north,east"
             query = (
@@ -323,6 +279,12 @@ class H(BaseHTTPRequestHandler):
                 url = ("https://roads.googleapis.com/v1/snapToRoads"
                        "?interpolate=" + interpolate + "&path="
                        + urllib.parse.quote(path) + "&key=" + gkey)
+                req = urllib.request.Request(url)
+            elif self.path == "/speedlimits":
+                gkey = data.get("gkey", "")
+                place_ids = data.get("placeIds", [])
+                params = "&".join("placeId=" + urllib.parse.quote(str(pid)) for pid in place_ids)
+                url = "https://roads.googleapis.com/v1/speedLimits?" + params + "&units=KPH&key=" + gkey
                 req = urllib.request.Request(url)
             else:
                 self.send_response(404)

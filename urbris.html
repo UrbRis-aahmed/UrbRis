@@ -2,10 +2,13 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
-<title>Urbris v2</title>
+<title>UrbRis v2</title>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{--bg:#0e1012;--sf:#181a1d;--sf2:#1f2124;--b:rgba(255,255,255,.08);--b2:rgba(255,255,255,.14);--tx:#e8e6e0;--mu:#888680;--ac:#d45a2a;--ac2:#e8703f;--ok:#97c459;--wn:#ef9f27;--er:#f09595;--r:8px}
@@ -101,16 +104,27 @@ input[type=number]{width:70px;text-align:right}
 .xb{width:100%;background:var(--sf2);border:.5px solid var(--b2);border-radius:var(--r);color:var(--tx);font-size:13px;padding:7px;cursor:pointer}
 .xb:hover{border-color:var(--ac);color:var(--ac2)}
 #gmap{width:100%;height:500px;border-radius:8px;border:.5px solid var(--b);overflow:hidden}
+#landing{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px;background:radial-gradient(circle at 50% 0%,rgba(212,90,42,.08),transparent 60%);font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif}
+#landing .logo{font-size:24px;font-weight:700;margin-bottom:32px;letter-spacing:-.01em}
+#landing h1{font-size:clamp(34px,6vw,58px);font-weight:800;letter-spacing:-.035em;margin:0 0 18px;line-height:1.05}
+#landing .tagline{font-size:17px;font-weight:400;color:var(--mu);max-width:460px;margin:0 auto 36px;line-height:1.6;letter-spacing:-.005em}
+#landing .launchbtn{background:var(--ac);color:#fff;border:none;border-radius:980px;padding:14px 34px;font-size:16px;font-weight:600;letter-spacing:-.01em;cursor:pointer;transition:.15s;font-family:inherit}
+#landing .launchbtn:hover{background:var(--ac2)}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/exif-js/2.3.0/exif.js"></script>
 <script src="/gopro-telemetry.bundle.js"></script>
 </head>
 <body>
-<header>
-  <div class="logo">urb<span>ris</span></div>
+<div id="landing">
+  <div class="logo">Urb<span>Ris</span></div>
+  <h1>Let's make roads safer.</h1>
+  <button class="launchbtn" onclick="enterApp()">Launch UrbRis</button>
+</div>
+<header style="display:none">
+  <div class="logo">Urb<span>Ris</span></div>
   <span class="badge">iRAP Street View</span>
 </header>
-<div class="layout" id="layout">
+<div class="layout" id="layout" style="display:none">
 <div class="sidebar">
   <button id="sbToggle" onclick="toggleSidebar()" title="Collapse sidebar">&#8249;</button>
   <div>
@@ -128,12 +142,7 @@ input[type=number]{width:70px;text-align:right}
   </div>
   <div>
     <div class="sl">Route</div>
-    <label class="fl">Start address</label>
-    <input type="text" id="startAddr" placeholder="123 Main St, City" />
-    <label class="fl" style="margin-top:8px">End address</label>
-    <input type="text" id="endAddr" placeholder="456 Oak Ave, City" />
-    <button class="btn" id="rb" style="margin-top:8px" onclick="getRoute()">Get route</button>
-    <button class="savebtn" id="drawToggle" style="margin-top:8px" onclick="startDraw()">Or draw route on map instead</button>
+    <div class="hint">Draw your route on the map to begin - trace it like a pencil, lift and draw again to continue.</div>
     <div id="fn" style="font-size:11px;color:var(--ok);margin-top:6px"></div>
     <button class="savebtn" id="sendPhone" style="margin-top:8px;display:none">Send to phone (Google Maps)</button>
     <div id="phonePanel" style="display:none;margin-top:8px;text-align:center;background:var(--sf2);border:.5px solid var(--b);border-radius:8px;padding:10px">
@@ -149,13 +158,6 @@ input[type=number]{width:70px;text-align:right}
     <button class="btn" id="scanBtn" style="margin-top:8px" onclick="startScan()">Scan area for gaps</button>
   </div>
   <div>
-    <div class="sl">Hiking Trails (beta)</div>
-    <div class="hint">Named trails and footpaths from OpenStreetMap - starting with Hamilton, ON, to test against a known area before expanding elsewhere.</div>
-    <div class="or" style="margin-top:8px"><label>Area (sq km)</label><input type="number" id="trailArea" value="15" min="1" max="60" step="1" style="width:60px"/></div>
-    <button class="btn" id="trailBtn" style="margin-top:8px" onclick="findTrails()">Find trails near Hamilton</button>
-    <div id="trailStatus" class="hint" style="margin-top:6px"></div>
-  </div>
-  <div>
     <div class="sl">Field Media</div>
     <div class="hint">Drop photos or video from a drone/GoPro flight - matched to the nearest point by GPS automatically. Fills points marked "No Street View coverage", and attaches as a separate validation image on points that already have coverage, so you can compare what was actually seen against the Street View baseline.</div>
     <div class="dz" style="margin-top:8px">
@@ -166,31 +168,9 @@ input[type=number]{width:70px;text-align:right}
   </div>
   <div>
     <div class="sl">Options</div>
-    <div class="or"><label>Interval (m)</label><input type="number" id="iv" value="100" min="50" max="500" step="50"/></div>
-    <div class="or" style="margin-top:8px"><label>Snap to road</label><input type="checkbox" id="snap" checked style="width:auto;cursor:pointer"/></div>
-    <div class="or" style="margin-top:8px"><label>Auto-analyse iRAP</label><input type="checkbox" id="auto" style="width:auto;cursor:pointer"/></div>
-    <div class="or" style="margin-top:8px"><label>Light pollution</label><input type="checkbox" id="lp" style="width:auto;cursor:pointer"/></div>
-    <div class="or" style="margin-top:8px"><label>Live traffic</label><input type="checkbox" id="traffic" style="width:auto;cursor:pointer"/></div>
+    <div class="or"><label>Light pollution</label><input type="checkbox" id="lp" checked style="width:auto;cursor:pointer"/></div>
+    <div class="or" style="margin-top:8px"><label>Live traffic</label><input type="checkbox" id="traffic" checked style="width:auto;cursor:pointer"/></div>
     <div style="margin-top:4px"><a href="#" onclick="refreshTraffic(); return false;" style="font-size:11px;color:var(--ac2)">Force-refresh traffic tiles</a></div>
-    <div class="or" style="margin-top:8px"><label>Place labels</label><input type="checkbox" id="placeLabels" style="width:auto;cursor:pointer"/></div>
-    <div class="or" style="margin-top:8px"><label>Street addresses</label><input type="checkbox" id="addr" style="width:auto;cursor:pointer"/></div>
-    <div class="or" style="margin-top:8px"><label>Departure time</label><input type="datetime-local" id="dep" style="width:150px"/></div>
-    <div class="or" style="margin-top:8px"><label>Avg speed (km/h)</label><input type="number" id="spd" value="60" min="10" max="200" style="width:70px"/></div>
-  </div>
-  <div>
-    <div class="sl">Traffic Prediction</div>
-    <div class="hint">Predicts travel time for the departure time set above, using Google's historical + live traffic model - the farther out the departure time, the more it leans on historical patterns rather than live conditions. "Compare nearby departure times" checks the 2 hours before and after too, to help pick when to leave rather than just confirming one time.</div>
-    <div class="or" style="margin-top:8px"><label>Model</label>
-      <select id="trafficModel" style="width:150px">
-        <option value="best_guess">Best guess</option>
-        <option value="pessimistic">Pessimistic (bad-day)</option>
-        <option value="optimistic">Optimistic (good-day)</option>
-      </select>
-    </div>
-    <button class="btn" id="predictTrafficBtn" style="margin-top:8px" onclick="predictTraffic()" disabled>Run a route first</button>
-    <div id="trafficResult" class="hint" style="margin-top:6px"></div>
-    <button class="btn" id="compareTrafficBtn" style="margin-top:8px" onclick="compareTrafficTimes()" disabled>Compare nearby departure times</button>
-    <div id="trafficCompareResult" class="hint" style="margin-top:6px"></div>
   </div>
   <div id="sw" style="display:none">
     <div class="sl">Route</div>
@@ -200,7 +180,8 @@ input[type=number]{width:70px;text-align:right}
       <div class="st"><div class="sv" id="si">-</div><div class="sl2">images</div></div>
     </div>
   </div>
-  <button class="btn" id="run" disabled>Enter addresses to begin</button>
+  <button class="btn" id="run" disabled>Draw a route first</button>
+  <button class="btn" id="riskBtn" style="margin-top:8px;display:none" onclick="pullRisk()" disabled>Pull Risk</button>
   <div id="pw" style="display:none">
     <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--mu);margin-bottom:4px"><span id="pl">Extracting</span><span id="pp">0%</span></div>
     <div class="pb"><div class="pf" id="pf"></div></div>
@@ -214,8 +195,8 @@ input[type=number]{width:70px;text-align:right}
 <div class="main">
   <div class="empty" id="empty">
     <div style="font-size:36px;opacity:.2">&#128247;</div>
-    <div style="font-size:14px;font-weight:500;color:var(--tx)">Enter a start and end address to begin</div>
-    <div style="font-size:12px;max-width:240px;margin-top:4px">Enter your API keys, get a route, and Urbris will pull Street View frames and code iRAP attributes along the way.</div>
+    <div style="font-size:14px;font-weight:500;color:var(--tx)">Enter your Google Maps key to begin</div>
+    <div style="font-size:12px;max-width:240px;margin-top:4px">Then draw your route on the map, and Urbris will pull Street View frames and code iRAP attributes along the way.</div>
   </div>
   <div id="rw" style="display:none">
     <div class="rh">
@@ -242,7 +223,7 @@ input[type=number]{width:70px;text-align:right}
       <div id="drawBar" style="display:none;margin-bottom:10px;gap:8px;align-items:center">
         <button class="vb" id="finishDraw" onclick="finishDraw()">Finish drawing</button>
         <button class="vb" id="clearDraw" onclick="clearDraw()">Clear</button>
-        <span id="drawCount" style="font-size:12px;color:var(--mu)">0 points placed - click the map to trace your route</span>
+        <span id="drawCount" style="font-size:12px;color:var(--mu)">0 km traced - draw on the map to trace your route</span>
       </div>
       <div style="font-size:11px;color:var(--mu);margin-bottom:10px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
         <div style="display:flex;align-items:center;gap:6px">
@@ -261,12 +242,10 @@ input[type=number]{width:70px;text-align:right}
 </div>
 <script>
 const $ = id => document.getElementById(id);
-let rp = [], sp = [], res = [], gmap = null, gm = [], gp = null, gs = [], lpLayer = null, trafficLayer = null, trafficPrediction = null, wxData = [], denseCurve = null, densePts = null;
+let rp = [], sp = [], res = [], gmap = null, gm = [], gp = null, gs = [], lpLayer = null, trafficLayer = null, wxData = [], denseCurve = null, densePts = null;
 let drawMode = false, drawPts = [], drawPoly = null, drawMarkers = [];
 
 window.addEventListener('load', () => {
-  const now = new Date(Date.now() - new Date().getTimezoneOffset() * 60000);
-  $('dep').value = now.toISOString().slice(0, 16);
   if (localStorage.getItem('urbris_sbCollapsed') === '1') {
     $('layout').classList.add('collapsed');
     $('sbToggle').innerHTML = '&#8250;';
@@ -274,6 +253,19 @@ window.addEventListener('load', () => {
   }
   refreshSavedList();
 });
+
+// Draw mode is the only way in now - the moment a Google Maps key is entered,
+// jump straight to an ambient, zoomed-out, draw-ready map instead of waiting
+// for any further input.
+$('gkey').addEventListener('change', () => {
+  if ($('gkey').value.trim() && !gmap) startDraw();
+});
+
+function enterApp() {
+  $('landing').style.display = 'none';
+  document.querySelector('header').style.display = '';
+  $('layout').style.display = '';
+}
 
 function toggleSidebar() {
   const collapsed = $('layout').classList.toggle('collapsed');
@@ -322,54 +314,6 @@ function ensureMaps(gk, cb) {
   s.src = 'https://maps.googleapis.com/maps/api/js?key=' + encodeURIComponent(gk) + '&callback=_gmapsReady';
   s.onerror = () => log('Failed to load Google Maps JS API', 'er');
   document.head.appendChild(s);
-}
-
-function getRoute() {
-  const gk = $('gkey').value.trim();
-  const start = $('startAddr').value.trim();
-  const end = $('endAddr').value.trim();
-  if (!gk) { log('Enter Google API key', 'er'); return; }
-  if (!start || !end) { log('Enter start and end addresses', 'er'); return; }
-  $('rb').disabled = true;
-  $('rb').textContent = 'Loading route...';
-  $('sendPhone').style.display = 'none';
-  $('phonePanel').style.display = 'none';
-  scanMode = false;
-  if (scanRect) { scanRect.setMap(null); scanRect = null; }
-  scanPolys.forEach(p => p.setMap(null));
-  scanPolys = [];
-  const oldScanPanel = $('scanResults');
-  if (oldScanPanel) oldScanPanel.remove();
-  ensureMaps(gk, () => {
-    const ds = new google.maps.DirectionsService();
-    ds.route({
-      origin: start,
-      destination: end,
-      travelMode: google.maps.TravelMode.DRIVING
-    }, (result, status) => {
-      $('rb').disabled = false;
-      $('rb').textContent = 'Get route';
-      if (status !== 'OK') { log('Directions failed: ' + status, 'er'); return; }
-      const route = result.routes[0];
-      const pts = [];
-      route.legs.forEach(leg => {
-        leg.steps.forEach(step => {
-          step.path.forEach(p => pts.push({ lat: p.lat(), lon: p.lng() }));
-        });
-      });
-      if (!pts.length) { log('No route points found', 'er'); return; }
-      rp = pts;
-      const from = route.legs[0].start_address.split(',')[0];
-      const to = route.legs[route.legs.length - 1].end_address.split(',')[0];
-      $('fn').textContent = '+ ' + from + ' \u2192 ' + to;
-      $('sendPhone').style.display = '';
-      ust();
-      $('run').disabled = false;
-      $('run').textContent = 'Extract Street View frames';
-      const dist = route.legs.reduce((a, l) => a + (l.distance ? l.distance.value : 0), 0);
-      log('Route loaded: ' + (dist / 1000).toFixed(1) + ' km, ' + pts.length + ' points', 'ok');
-    });
-  });
 }
 
 function buildMapsUrl() {
@@ -430,18 +374,17 @@ function startDraw() {
   $('bm').className = 'vb on';
   $('bbt').className = 'vb';
   $('drawBar').style.display = 'flex';
-  $('drawCount').textContent = '0 points placed - click the map to trace your route';
-  log('Draw mode - click along the road to trace your route, then click Finish drawing', '');
+  $('drawCount').textContent = '0 km traced - draw on the map to trace your route';
+  log('Draw mode - draw on the map like a pencil to trace your route, then click Finish drawing', '');
   ensureMaps(gk, initDrawMap);
 }
 
 function initDrawMap() {
   if (!gmap) {
     gmap = new google.maps.Map($('gmap'), {
-      center: { lat: 43.65, lng: -79.38 }, zoom: 8,
-      styles: mapStyles($('placeLabels').checked)
+      center: { lat: 43.65, lng: -79.38 }, zoom: 6,
+      styles: mapStyles(false)
     });
-    $('placeLabels').addEventListener('change', toggleLabels);
     $('lp').addEventListener('change', toggleLightPollution);
     $('traffic').addEventListener('change', toggleTraffic);
     if ($('traffic').checked) toggleTraffic();
@@ -453,28 +396,60 @@ function initDrawMap() {
     drawPoly.setPath([]);
   }
   google.maps.event.clearListeners(gmap, 'click');
-  gmap.addListener('click', onDrawClick);
+  google.maps.event.clearListeners(gmap, 'mousedown');
+  google.maps.event.clearListeners(gmap, 'mousemove');
+  google.maps.event.clearListeners(gmap, 'mouseup');
+  gmap.addListener('mousedown', onDrawStart);
+  gmap.addListener('mousemove', onDrawMove);
+  gmap.addListener('mouseup', onDrawEnd);
 }
 
-function onDrawClick(e) {
+let isDrawingStroke = false, lastDrawPt = null;
+
+// Google Maps' mousedown/mousemove/mouseup events fire uniformly for touch, stylus,
+// and mouse input, so this one set of handlers gives freehand drawing on a touchscreen
+// without needing separate touch-event handling - drag your finger/pen across the map
+// like a pencil, lift, and draw again to continue the route in another stroke.
+function onDrawStart(e) {
   if (!drawMode) return;
-  const pt = { lat: e.latLng.lat(), lon: e.latLng.lng() };
+  isDrawingStroke = true;
+  gmap.setOptions({ draggable: false }); // stop the map from panning while tracing
+  addDrawPoint(e.latLng);
+}
+
+function onDrawMove(e) {
+  if (!drawMode || !isDrawingStroke) return;
+  addDrawPoint(e.latLng);
+}
+
+function onDrawEnd() {
+  if (!drawMode) return;
+  isDrawingStroke = false;
+  if (gmap) gmap.setOptions({ draggable: true });
+  lastDrawPt = null;
+}
+
+// Failsafe: if a finger/mouse lifts off outside the map element, Google's own
+// mouseup listener never fires, which would leave the map stuck un-draggable.
+document.addEventListener('mouseup', onDrawEnd);
+document.addEventListener('touchend', onDrawEnd);
+
+function addDrawPoint(latLng) {
+  const pt = { lat: latLng.lat(), lon: latLng.lng() };
+  if (lastDrawPt && hav(lastDrawPt, pt) < 8) return; // throttle to ~1 point per 8m of movement
+  lastDrawPt = pt;
   drawPts.push(pt);
-  drawPoly.getPath().push(e.latLng);
-  const m = new google.maps.Marker({
-    position: e.latLng, map: gmap,
-    icon: { path: google.maps.SymbolPath.CIRCLE, scale: 4, fillColor: '#4f9d76', fillOpacity: 1, strokeWeight: 0 }
-  });
-  drawMarkers.push(m);
-  $('drawCount').textContent = drawPts.length + ' point' + (drawPts.length === 1 ? '' : 's') + ' placed';
+  drawPoly.getPath().push(latLng);
+  $('drawCount').textContent = (td(drawPts) / 1000).toFixed(2) + ' km traced - lift and draw again to continue, or tap Finish drawing';
 }
 
 function clearDraw() {
   drawPts = [];
   drawMarkers.forEach(m => m.setMap(null));
   drawMarkers = [];
+  lastDrawPt = null;
   if (drawPoly) drawPoly.setPath([]);
-  $('drawCount').textContent = '0 points placed - click the map to trace your route';
+  $('drawCount').textContent = '0 km traced - draw on the map to trace your route';
 }
 
 async function routeThroughPoints(points, gk) {
@@ -539,9 +514,8 @@ function initScanMap() {
   if (!gmap) {
     gmap = new google.maps.Map($('gmap'), {
       center: { lat: 43.65, lng: -79.38 }, zoom: 8,
-      styles: mapStyles($('placeLabels').checked)
+      styles: mapStyles(false)
     });
-    $('placeLabels').addEventListener('change', toggleLabels);
     $('lp').addEventListener('change', toggleLightPollution);
     $('traffic').addEventListener('change', toggleTraffic);
     if ($('traffic').checked) toggleTraffic();
@@ -555,82 +529,6 @@ function bboxFromCenter(lat, lon, sqKm) {
   const latOff = halfSideKm / 111.32;
   const lonOff = halfSideKm / (111.32 * Math.cos(lat * Math.PI / 180));
   return { south: lat - latOff, north: lat + latOff, west: lon - lonOff, east: lon + lonOff };
-}
-
-let trailPolys = [];
-
-async function findTrails() {
-  const gk = $('gkey').value.trim();
-  if (!gk) { log('Enter your Google Maps key first', 'er'); return; }
-  const center = { lat: 43.2557, lon: -79.8711 }; // Hamilton, ON - starting point before expanding to other cities
-  const sqKm = +$('trailArea').value || 15;
-  const bbox = bboxFromCenter(center.lat, center.lon, sqKm);
-  const btn = $('trailBtn');
-  btn.disabled = true;
-  btn.textContent = 'Searching...';
-  $('trailStatus').textContent = 'Fetching trail data from OpenStreetMap...';
-
-  $('empty').style.display = 'none';
-  $('rw').style.display = '';
-  $('vg').style.display = 'none';
-  $('vbr').style.display = 'none';
-  $('vm').style.display = '';
-  $('bg').className = 'vb';
-  $('bm').className = 'vb on';
-  $('bbt').className = 'vb';
-  $('drawBar').style.display = 'none';
-  $('rt').textContent = 'Hiking trails - Hamilton, ON';
-
-  ensureMaps(gk, async () => {
-    initScanMap();
-    google.maps.event.clearListeners(gmap, 'click'); // fixed-area lookup for now, not click-to-scan
-    trailPolys.forEach(p => p.setMap(null));
-    trailPolys = [];
-    if (scanRect) { scanRect.setMap(null); scanRect = null; }
-    scanRect = new google.maps.Rectangle({
-      bounds: { north: bbox.north, south: bbox.south, east: bbox.east, west: bbox.west },
-      strokeColor: '#d45a2a', strokeWeight: 2, fillOpacity: 0.04, fillColor: '#d45a2a', map: gmap, clickable: false
-    });
-    gmap.fitBounds(scanRect.getBounds());
-
-    try {
-      const bboxStr = bbox.south.toFixed(6) + ',' + bbox.west.toFixed(6) + ',' + bbox.north.toFixed(6) + ',' + bbox.east.toFixed(6);
-      const resp = await fetch('/trailsinarea', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bbox: bboxStr })
-      });
-      const data = await resp.json();
-      if (data.error) {
-        $('trailStatus').textContent = data.error;
-        btn.disabled = false; btn.textContent = 'Find trails near Hamilton';
-        return;
-      }
-      const ways = (data.elements || []).filter(el => el.type === 'way' && el.geometry && el.geometry.length > 1);
-      if (!ways.length) {
-        $('trailStatus').textContent = 'No named trails found via OpenStreetMap in this area - try a larger area, or the data may just be thin here.';
-        btn.disabled = false; btn.textContent = 'Find trails near Hamilton';
-        return;
-      }
-      const names = new Set();
-      ways.forEach(way => {
-        const path = way.geometry.map(p => ({ lat: p.lat, lng: p.lon }));
-        const name = (way.tags && way.tags.name) || 'Unnamed trail';
-        names.add(name);
-        const poly = new google.maps.Polyline({ path, strokeColor: '#d45a2a', strokeWeight: 3, strokeOpacity: 0.9, map: gmap });
-        poly.addListener('mouseover', () => log(name, ''));
-        trailPolys.push(poly);
-      });
-      const nameList = Array.from(names);
-      $('trailStatus').textContent = ways.length + ' trail segment(s) across ' + names.size + ' named trail(s): ' + nameList.slice(0, 6).join(', ') + (nameList.length > 6 ? ', ...' : '');
-      log('Trails loaded near Hamilton, ON', 'ok');
-    } catch (e) {
-      $('trailStatus').textContent = 'Trail search failed: ' + e.message;
-      log('Trail search failed: ' + e.message, 'er');
-    }
-    btn.disabled = false;
-    btn.textContent = 'Find trails near Hamilton';
-  });
 }
 
 async function onScanClick(e) {
@@ -749,7 +647,7 @@ function renderScanResults() {
 }
 
 async function finishDraw() {
-  if (drawPts.length < 2) { log('Click at least 2 points to draw a route', 'er'); return; }
+  if (drawPts.length < 2) { log('Draw on the map to trace a route first', 'er'); return; }
   const gk = $('gkey').value.trim();
   $('finishDraw').disabled = true;
   $('finishDraw').textContent = 'Processing...';
@@ -772,11 +670,11 @@ async function finishDraw() {
     $('drawBar').style.display = 'none';
     $('fn').textContent = '+ Drawn route (' + drawPts.length + ' clicks \u2192 ' + dense.length + ' road points)';
     $('sendPhone').style.display = '';
-    $('rt').textContent = 'Route confirmed - click "Extract Street View frames" in the sidebar to continue';
+    $('rt').textContent = 'Route confirmed - click "Pull Images" in the sidebar to continue';
     ust();
     $('run').disabled = false;
-    $('run').textContent = 'Extract Street View frames';
-    log('Route ready: ' + (td(rp) / 1000).toFixed(1) + ' km from drawn path - click Extract Street View frames to continue', 'ok');
+    $('run').textContent = 'Pull Images';
+    log('Route ready: ' + (td(rp) / 1000).toFixed(1) + ' km from drawn path - click Pull Images to continue', 'ok');
   } catch (e) {
     log('Failed to process drawn route: ' + e.message, 'er');
   } finally {
@@ -786,7 +684,7 @@ async function finishDraw() {
 }
 
 function ust() {
-  const iv = +$('iv').value || 100;
+  const iv = 100;
   sp = samp(rp, iv);
   $('sd').textContent = (td(rp) / 1000).toFixed(1);
   $('sp').textContent = sp.length;
@@ -794,8 +692,6 @@ function ust() {
   $('sw').style.display = '';
   log('Sampled ' + sp.length + ' points @ ' + iv + 'm', 'wn');
 }
-
-$('iv').addEventListener('change', () => { if (rp.length) ust(); });
 
 function log(m, t) {
   const el = document.createElement('div');
@@ -838,7 +734,7 @@ async function snapRd(pts, gk) {
         d.snappedPoints.forEach((s, j) => {
           const idx = (s.originalIndex != null) ? s.originalIndex : j;
           const o = b[idx] || b[0];
-          out.push({ lat: s.location.latitude, lon: s.location.longitude, distKm: o.distKm, heading: o.heading });
+          out.push({ lat: s.location.latitude, lon: s.location.longitude, distKm: o.distKm, heading: o.heading, placeId: s.placeId || null });
         });
       } else {
         log('Snap returned no points, using raw', 'wn');
@@ -853,6 +749,35 @@ async function snapRd(pts, gk) {
     out[i].heading = Math.round(brng(out[i], out[i+1]));
   }
   return out;
+}
+
+// Looks up posted speed limits for the already-snapped points via their place IDs,
+// so ETA (and weather timing) reflects the actual road instead of one flat guess.
+// Falls back to 60 km/h per point where Google has no speed data for that road.
+async function fetchSpeedLimits(pts, gk) {
+  const speeds = new Array(pts.length).fill(60);
+  const withPlaceId = pts.map((p, i) => ({ i, placeId: p.placeId })).filter(p => p.placeId);
+  if (!withPlaceId.length) return speeds;
+  const B = 100;
+  for (let i = 0; i < withPlaceId.length; i += B) {
+    const batch = withPlaceId.slice(i, i + B);
+    try {
+      const resp = await fetch('/speedlimits', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ placeIds: batch.map(b => b.placeId), gkey: gk })
+      });
+      const d = await resp.json();
+      const byPlaceId = {};
+      (d.speedLimits || []).forEach(s => { byPlaceId[s.placeId] = s.speedLimit; });
+      batch.forEach(b => {
+        if (byPlaceId[b.placeId] != null) speeds[b.i] = byPlaceId[b.placeId];
+      });
+    } catch (e) {
+      log('Speed limit lookup failed for a batch, using 60 km/h fallback: ' + e.message, 'wn');
+    }
+  }
+  return speeds;
 }
 
 const PROMPT = 'You are an iRAP road safety assessor. Analyse this Street View image. This is a single archived photo that may be months or years old, not a live view - describe only the permanent road infrastructure. Ignore and never mention anything transient that happens to be in the frame: vehicles, pedestrians, cyclists, weather, lighting, or time of day. Return ONLY valid JSON, no markdown, no explanation. Use exactly this structure: {"number_of_lanes":"1/2/3/4+","road_surface":"paved/unpaved/mixed","carriageway_type":"single/dual/one-way","lane_width":"narrow/standard/wide","median_type":"none/painted/raised/barrier","curvature":"straight/slight/moderate/sharp","grade":"flat/undulating/significant","road_condition":"good/fair/poor/very poor","delineation":"good/fair/poor/none","centreline_marking":"yes/no/partial","edge_marking":"yes/no/partial","shoulder_type":"none/unpaved/paved","shoulder_width":"none/narrow/moderate/wide","roadside_object":"none/pole/tree/wall/barrier/cliff/other","roadside_distance":"0-1m/1-5m/5-10m/>10m","safety_barrier":"none/wire rope/guardrail/concrete/damaged","street_lighting":"yes/no/partial","area_type":"rural/semi-rural/suburban/urban","speed_environment":"<60/60-80/80-100/>100","confidence":"high/medium/low","notes":"max 12 words on dominant road-infrastructure risk - never mention vehicles, pedestrians, or weather"}';
@@ -1358,24 +1283,21 @@ async function fetchAndRenderWeather() {
   const sample = [];
   for (let i = 0; i < n; i++) sample.push(withCoords[Math.round(i * (withCoords.length - 1) / Math.max(n - 1, 1))]);
 
-  const spd = parseFloat($('spd').value) || 60;
-  const depVal = $('dep').value;
-  const depMs = depVal ? new Date(depVal).getTime() : Date.now();
-  const maxKm = sample[sample.length - 1].km;
-  const maxEtaMs = depMs + (maxKm / spd) * 3600000;
+  const depMs = Date.now();
+  const maxEtaMs = depMs + (sample[sample.length - 1].etaSec || 0) * 1000;
   const diffDays = Math.max(0, Math.ceil((maxEtaMs - Date.now()) / 86400000));
   const forecastDays = Math.max(2, Math.min(16, diffDays + 2));
   if (diffDays > 14) {
-    log('Departure is too far out for hourly forecast data (max ~16 days ahead) - showing the closest available.', 'wn');
+    log('Route is too long for hourly forecast data (max ~16 days ahead) - showing the closest available.', 'wn');
   }
 
   try {
-    log('Fetching weather along route (departure ' + new Date(depMs).toLocaleString() + ', ' + spd + ' km/h avg)...', '');
+    log('Fetching weather along route (based on actual road speed limits)...', '');
     const data = await fetchWeather(sample, forecastDays);
     let warn = false;
     wxData = sample.map((pt, i) => {
       const d = data[i];
-      const etaMs = depMs + (pt.km / spd) * 3600000;
+      const etaMs = depMs + (pt.etaSec || 0) * 1000;
       const idx = findHourlyIdx(d.hourly.time, etaMs);
       const [emoji, label] = wmoDesc(d.hourly.weather_code[idx], d.hourly.is_day[idx]);
       const temp = Math.round(d.hourly.temperature_2m[idx]);
@@ -1513,19 +1435,28 @@ $('run').addEventListener('click', async () => {
   $('fs').style.display = 'none';
 
   let pts = [...sp];
-  if ($('snap').checked) {
-    $('pl').textContent = 'Snapping to road...';
-    log('Snapping ' + pts.length + ' points to road...', '');
-    pts = await snapRd(pts, gk);
-    log('Snapped to ' + pts.length + ' points', 'ok');
-  }
+  $('pl').textContent = 'Snapping to road...';
+  log('Snapping ' + pts.length + ' points to road...', '');
+  pts = await snapRd(pts, gk);
+  log('Snapped to ' + pts.length + ' points', 'ok');
 
-  const iv = +$('iv').value || 100;
+  $('pl').textContent = 'Checking speed limits...';
+  const speeds = await fetchSpeedLimits(pts, gk);
+  let cumEtaSec = 0;
+  pts[0].etaSec = 0;
+  for (let i = 1; i < pts.length; i++) {
+    const segKm = pts[i].distKm - pts[i - 1].distKm;
+    const spKmh = speeds[i - 1] || 60;
+    cumEtaSec += (segKm / spKmh) * 3600;
+    pts[i].etaSec = cumEtaSec;
+  }
+  log('Speed limits checked - ETA now based on actual road speed', 'ok');
+
+  const iv = 100;
   denseCurve = buildDenseCurvature(rp);
   densePts = rp;
 
   const tot = pts.length;
-  const aa = $('auto').checked && $('akey').value.trim();
   $('rt').textContent = 'Route frames - ' + tot + ' points';
   $('pl').textContent = 'Extracting';
 
@@ -1538,12 +1469,12 @@ $('run').addEventListener('click', async () => {
 
     if (!ok) {
       card.innerHTML = '<div class="nc">No Street View coverage</div><div class="cb"><span class="ckm">km ' + pt.distKm.toFixed(2) + '</span><div class="cc">' + pt.lat.toFixed(6) + ', ' + pt.lon.toFixed(6) + '</div><div class="cc" id="curve' + i + '"></div><div class="cc" id="cell' + i + '"></div><div class="cc" id="addr' + i + '"></div></div>';
-      res.push({ km: pt.distKm, lat: pt.lat, lon: pt.lon, heading: pt.heading, imageUrl: '', hasCoverage: false });
+      res.push({ km: pt.distKm, lat: pt.lat, lon: pt.lon, heading: pt.heading, imageUrl: '', hasCoverage: false, etaSec: pt.etaSec || 0 });
     } else {
       const url = svurl(gk, pt.lat, pt.lon, pt.heading);
       card.dataset.url = url;
       card.innerHTML = '<img src="' + url + '" alt="km ' + pt.distKm.toFixed(2) + '" loading="lazy"/><div class="cb"><span class="ckm">km ' + pt.distKm.toFixed(2) + '</span><div class="cc">' + pt.lat.toFixed(6) + ', ' + pt.lon.toFixed(6) + '</div><div class="cc" id="curve' + i + '"></div><div class="cc" id="cell' + i + '"></div><div class="cc" id="addr' + i + '"></div><button class="ab" data-idx="' + i + '">Code iRAP attributes</button></div><div class="ip" id="ip' + i + '"></div><div id="vld' + i + '"></div>';
-      res.push({ km: pt.distKm, lat: pt.lat, lon: pt.lon, heading: pt.heading, imageUrl: url, hasCoverage: true });
+      res.push({ km: pt.distKm, lat: pt.lat, lon: pt.lon, heading: pt.heading, imageUrl: url, hasCoverage: true, etaSec: pt.etaSec || 0 });
     }
     $('grid').appendChild(card);
     $('pf').style.width = Math.round((i+1)/tot*100) + '%';
@@ -1562,7 +1493,7 @@ $('run').addEventListener('click', async () => {
 
   // Curvature annotation - pure GPS geometry, independent of AI analysis,
   // so it (and weather, cell coverage, the map) show up immediately rather
-  // than waiting behind a potentially multi-minute auto-analyse pass.
+  // than waiting behind the separate Pull Risk pass.
   res.forEach(r => {
     const t = tightestInWindow(denseCurve, r.km * 1000, Math.max(iv, 30));
     r.curveRadius = t.radius;
@@ -1583,34 +1514,47 @@ $('run').addEventListener('click', async () => {
   drawMap(gk);
   fetchAndRenderWeather();
   fetchCellCoverage();
-  if ($('addr').checked) fetchAddresses();
-
-  if (aa) {
-    $('pl').textContent = 'Analysing';
-    $('pf').style.width = '0%';
-    $('pp').textContent = '0%';
-    const coveredIdxs = res.map((r, i) => r.hasCoverage ? i : -1).filter(i => i >= 0);
-    for (let j = 0; j < coveredIdxs.length; j++) {
-      const i = coveredIdxs[j];
-      const btn = $('grid').querySelector('[data-res-idx="' + i + '"] .ab');
-      await ac(btn, res[i].imageUrl, i);
-      await new Promise(r => setTimeout(r, 400));
-      $('pf').style.width = Math.round((j+1)/coveredIdxs.length*100) + '%';
-      $('pp').textContent = Math.round((j+1)/coveredIdxs.length*100) + '%';
-    }
-    log('Auto-analysis complete', 'ok');
-  }
+  fetchAddresses();
 
   $('pw').style.display = 'none';
   $('run').disabled = false;
-  $('run').textContent = 'Re-run';
+  $('run').textContent = 'Re-run images';
   $('saveRouteBtn').disabled = false;
   $('saveRouteBtn').textContent = 'Save current route';
-  $('predictTrafficBtn').disabled = false;
-  $('predictTrafficBtn').textContent = 'Predict travel time';
-  $('compareTrafficBtn').disabled = false;
-  $('compareTrafficBtn').textContent = 'Compare nearby departure times';
+  $('riskBtn').style.display = '';
+  $('riskBtn').disabled = false;
+  $('riskBtn').textContent = 'Pull Risk';
 });
+
+async function pullRisk() {
+  const ak = $('akey').value.trim();
+  if (!ak) { log('Enter your Anthropic API key first', 'er'); return; }
+  if (!res.length) { log('Pull images first', 'er'); return; }
+  const coveredIdxs = res.map((r, i) => r.hasCoverage ? i : -1).filter(i => i >= 0);
+  if (!coveredIdxs.length) { log('No covered points to analyse - fill some gaps with field media first', 'wn'); return; }
+
+  const btn = $('riskBtn');
+  btn.disabled = true;
+  btn.textContent = 'Analysing...';
+  $('pw').style.display = '';
+  $('pl').textContent = 'Analysing';
+  $('pf').style.width = '0%';
+  $('pp').textContent = '0%';
+
+  for (let j = 0; j < coveredIdxs.length; j++) {
+    const i = coveredIdxs[j];
+    const cardBtn = $('grid').querySelector('[data-res-idx="' + i + '"] .ab');
+    if (cardBtn) await ac(cardBtn, res[i].imageUrl, i);
+    await new Promise(r => setTimeout(r, 400));
+    $('pf').style.width = Math.round((j+1)/coveredIdxs.length*100) + '%';
+    $('pp').textContent = Math.round((j+1)/coveredIdxs.length*100) + '%';
+  }
+  log('Risk analysis complete - ' + coveredIdxs.length + ' point(s) coded', 'ok');
+
+  $('pw').style.display = 'none';
+  btn.disabled = false;
+  btn.textContent = 'Re-run risk analysis';
+}
 
 function sv(v) {
   $('vg').style.display = v === 'grid' ? '' : 'none';
@@ -1723,10 +1667,9 @@ async function loadSavedRoute(id) {
     rebuildViewFromRes();
     $('saveRouteBtn').disabled = false;
     $('saveRouteBtn').textContent = 'Save current route';
-    $('predictTrafficBtn').disabled = false;
-    $('predictTrafficBtn').textContent = 'Predict travel time';
-    $('compareTrafficBtn').disabled = false;
-    $('compareTrafficBtn').textContent = 'Compare nearby departure times';
+    $('riskBtn').style.display = '';
+    $('riskBtn').disabled = false;
+    $('riskBtn').textContent = 'Pull Risk';
     if (needsKey) log('Loaded "' + entry.name + '" - enter your Google Maps key to view the Street View images', 'wn');
     else log('Loaded "' + entry.name + '" (' + res.length + ' points) - no API calls needed', 'ok');
   } catch (e) {
@@ -1790,126 +1733,6 @@ function rebuildViewFromRes() {
   $('rt').textContent = 'Route frames - ' + res.length + ' points (loaded from saved route)';
   applyFilter();
   sv('grid');
-}
-
-// Calls the /traffic endpoint for one specific departure time. Shared by the
-// single-time predictor and the multi-time comparison below.
-async function fetchTrafficForTime(gk, origin, dest, depUnix, model) {
-  const resp = await fetch('/traffic', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      gkey: gk,
-      originLat: origin.lat, originLon: origin.lon,
-      destLat: dest.lat, destLon: dest.lon,
-      departureTime: depUnix,
-      trafficModel: model
-    })
-  });
-  const data = await resp.json();
-  if (data.error) throw new Error(typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail || data.error));
-  const leg = data.routes && data.routes[0] && data.routes[0].legs && data.routes[0].legs[0];
-  if (!leg) throw new Error('No route returned - check the departure time and API key');
-  if (!leg.duration_in_traffic) throw new Error('Google did not return a traffic-based estimate for this departure time');
-  const trafficMin = Math.round(leg.duration_in_traffic.value / 60);
-  const staticMin = Math.round(leg.duration.value / 60);
-  return { trafficMin, staticMin, deltaMin: trafficMin - staticMin };
-}
-
-async function predictTraffic() {
-  if (!res.length) { log('Run or load a route first', 'er'); return; }
-  const gk = $('gkey').value.trim();
-  if (!gk) { log('Enter your Google Maps key to predict traffic', 'er'); return; }
-  const btn = $('predictTrafficBtn');
-  const out = $('trafficResult');
-  btn.disabled = true;
-  btn.textContent = 'Predicting...';
-  out.textContent = '';
-  try {
-    const depVal = $('dep').value;
-    const depDate = depVal ? new Date(depVal) : new Date();
-    // Directions API wants a unix timestamp in seconds, and only accepts departure
-    // times in the present or future - if the picked time has already passed, use now.
-    const depUnix = Math.max(Math.floor(depDate.getTime() / 1000), Math.floor(Date.now() / 1000));
-    const origin = res[0], dest = res[res.length - 1];
-    const model = $('trafficModel').value;
-    const { trafficMin, staticMin, deltaMin } = await fetchTrafficForTime(gk, origin, dest, depUnix, model);
-    trafficPrediction = { trafficMin, staticMin, deltaMin, model, depMs: depDate.getTime() };
-    let msg = 'Predicted: ' + trafficMin + ' min with traffic (' + staticMin + ' min with no traffic)';
-    if (deltaMin > 0) msg += ' - about ' + deltaMin + ' min slower than free-flow';
-    else msg += ' - close to free-flow conditions';
-    out.textContent = msg;
-    log(msg, 'ok');
-  } catch (e) {
-    out.textContent = 'Prediction failed: ' + e.message;
-    log('Traffic prediction failed: ' + e.message, 'er');
-  }
-  btn.disabled = false;
-  btn.textContent = 'Predict travel time';
-}
-
-async function compareTrafficTimes() {
-  if (!res.length) { log('Run or load a route first', 'er'); return; }
-  const gk = $('gkey').value.trim();
-  if (!gk) { log('Enter your Google Maps key to predict traffic', 'er'); return; }
-  const depVal = $('dep').value;
-  const anchor = depVal ? new Date(depVal) : new Date();
-  const btn = $('compareTrafficBtn');
-  const out = $('trafficCompareResult');
-  btn.disabled = true;
-  btn.textContent = 'Comparing...';
-  out.innerHTML = 'Checking nearby departure times...';
-  const origin = res[0], dest = res[res.length - 1];
-  const model = $('trafficModel').value;
-  const nowMs = Date.now();
-  const anchorPassed = anchor.getTime() < nowMs;
-  const offsetsHrs = [-2, -1, 0, 1, 2];
-  const candidates = offsetsHrs
-    .map(h => new Date(anchor.getTime() + h * 3600 * 1000))
-    .filter(d => d.getTime() >= nowMs); // don't bother predicting a departure time that's already passed
-
-  if (!candidates.length) {
-    out.textContent = "The set departure time and the hours around it have all passed - set a time in the future first.";
-    btn.disabled = false;
-    btn.textContent = 'Compare nearby departure times';
-    return;
-  }
-
-  const results = [];
-  for (const c of candidates) {
-    try {
-      const r = await fetchTrafficForTime(gk, origin, dest, Math.floor(c.getTime() / 1000), model);
-      results.push({ time: c, ...r });
-    } catch (e) {
-      log('Skipped ' + c.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ': ' + e.message, 'wn');
-    }
-  }
-
-  if (!results.length) {
-    out.textContent = 'Could not get a prediction for any nearby departure time - check the API key.';
-    btn.disabled = false;
-    btn.textContent = 'Compare nearby departure times';
-    return;
-  }
-
-  const fastest = results.reduce((best, r) => (r.trafficMin < best.trafficMin ? r : best), results[0]);
-  const anchorMs = anchor.getTime();
-  const rows = results.slice().sort((a, b) => a.time - b.time).map(r => {
-    const isAnchor = Math.abs(r.time.getTime() - anchorMs) < 60 * 1000;
-    const isFastest = r === fastest;
-    const timeLabel = r.time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    return '<div style="display:flex;justify-content:space-between;padding:3px 0' + (isAnchor ? ';font-weight:600' : '') + '">'
-      + '<span>' + timeLabel + (isAnchor ? ' (set time)' : '') + '</span>'
-      + '<span>' + r.trafficMin + ' min' + (isFastest ? ' \u2713 fastest' : '') + '</span>'
-      + '</div>';
-  }).join('');
-  out.innerHTML = (anchorPassed ? '<div style="margin-bottom:6px">Your set departure time has already passed, so it\'s excluded below - showing upcoming times instead.</div>' : '') + rows;
-  const summary = fastest.time.getTime() === anchorMs
-    ? 'Your set departure time is already the fastest of the times checked.'
-    : 'Leaving at ' + fastest.time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' instead predicts ' + (results.find(r => Math.abs(r.time.getTime() - anchorMs) < 60000) ? (results.find(r => Math.abs(r.time.getTime() - anchorMs) < 60000).trafficMin - fastest.trafficMin) + ' min faster than your set time.' : 'the shortest travel time among the times checked.');
-  log(summary, 'ok');
-  btn.disabled = false;
-  btn.textContent = 'Compare nearby departure times';
 }
 
 async function renameSavedRoute(id, oldName) {
@@ -2018,27 +1841,15 @@ function mapStyles(showLabels) {
   return s;
 }
 
-function toggleLabels() {
-  if (!gmap) return;
-  gmap.setOptions({ styles: mapStyles($('placeLabels').checked) });
-  // Changing custom map styles forces Google to redraw every base tile from scratch.
-  // Only re-attach traffic if it somehow isn't already on this map - calling setMap()
-  // unconditionally (even when already attached) can itself force an unnecessary
-  // detach/reattach of the traffic overlay, which was likely making the flicker worse
-  // rather than preventing it.
-  if ($('traffic').checked && trafficLayer && trafficLayer.getMap() !== gmap) {
-    trafficLayer.setMap(gmap);
-  }
-}
+
 
 function iMap() {
   const mid = res[Math.floor(res.length/2)];
   if (!gmap) {
     gmap = new google.maps.Map($('gmap'), {
       center: { lat: mid.lat, lng: mid.lon }, zoom: 13,
-      styles: mapStyles($('placeLabels').checked)
+      styles: mapStyles(false)
     });
-    $('placeLabels').addEventListener('change', toggleLabels);
     $('lp').addEventListener('change', toggleLightPollution);
     if ($('lp').checked) toggleLightPollution();
     $('traffic').addEventListener('change', toggleTraffic);
@@ -2190,10 +2001,9 @@ $('xb').addEventListener('click', () => {
 });
 
 function buildBriefingData() {
-  const spd = parseFloat($('spd').value) || 60;
-  const depVal = $('dep').value;
-  const depMs = depVal ? new Date(depVal).getTime() : Date.now();
+  const depMs = Date.now();
   const totalKm = res[res.length - 1].km;
+  const totalEtaSec = res[res.length - 1].etaSec || 0;
   const analysed = res.filter(r => r.irap);
   const highRisk = analysed
     .map(r => ({ r, sc: riskScore(r.irap) }))
@@ -2201,7 +2011,7 @@ function buildBriefingData() {
     .sort((a, b) => b.sc - a.sc);
   const avgRisk = analysed.length ? analysed.reduce((s, r) => s + riskScore(r.irap), 0) / analysed.length : null;
 
-  const durHrs = totalKm / spd;
+  const durHrs = totalEtaSec / 3600;
   const durH = Math.floor(durHrs), durM = Math.round((durHrs - durH) * 60);
   const durLabel = (durH > 0 ? durH + 'h ' : '') + durM + 'm';
 
@@ -2210,7 +2020,7 @@ function buildBriefingData() {
   const dominant = Object.entries(labelCounts).sort((a, b) => b[1] - a[1])[0];
   const flaggedWx = wxData.filter(w => w.risky);
 
-  let overview = 'This is a ' + totalKm.toFixed(1) + ' km ride departing at ' + new Date(depMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ', averaging ' + spd + ' km/h for an estimated ' + durLabel + ' on the road. ';
+  let overview = 'This is a ' + totalKm.toFixed(1) + ' km ride, an estimated ' + durLabel + ' on the road based on posted speed limits along the route. ';
 
   if (wxData.length) {
     if (flaggedWx.length) {
@@ -2220,18 +2030,6 @@ function buildBriefingData() {
     }
   } else {
     overview += 'No weather data has been loaded for this route yet. ';
-  }
-
-  if (trafficPrediction) {
-    const tp = trafficPrediction;
-    const stale = Math.abs(tp.depMs - depMs) > 5 * 60 * 1000; // predicted for a different departure time than currently set
-    const modelLabel = tp.model === 'pessimistic' ? 'bad-day' : tp.model === 'optimistic' ? 'good-day' : 'best-guess';
-    if (tp.deltaMin > 5) {
-      overview += "Google's " + modelLabel + ' traffic model predicts about ' + tp.deltaMin + ' minutes slower than free-flow (' + tp.trafficMin + ' vs ' + tp.staticMin + ' min) for a departure at ' + new Date(tp.depMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + '. ';
-    } else {
-      overview += "Google's " + modelLabel + ' traffic model predicts close to free-flow conditions (' + tp.trafficMin + ' min) for a departure at ' + new Date(tp.depMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + '. ';
-    }
-    if (stale) overview += "(That prediction was for a different departure time than what's set now - re-run it if the time changed.) ";
   }
 
   if (analysed.length) {
@@ -2294,14 +2092,14 @@ function buildBriefingData() {
   const mapsUrl = buildMapsUrl();
   const qrUrl = mapsUrl ? 'https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=' + encodeURIComponent(mapsUrl) : null;
 
-  return { depMs, spd, totalKm, analysed, highRisk, avgRisk, overview, wxRows, hazardRows, curveRows, cellRows, hasWarn: wxData.some(w => w.risky), mapsUrl, qrUrl };
+  return { depMs, durLabel, totalKm, analysed, highRisk, avgRisk, overview, wxRows, hazardRows, curveRows, cellRows, hasWarn: wxData.some(w => w.risky), mapsUrl, qrUrl };
 }
 
 function renderBriefingTab() {
   if (!res.length) { $('vbr').innerHTML = '<div class="empty" style="height:auto;padding:60px 0">Load a route first</div>'; return; }
   const d = buildBriefingData();
   $('vbr').innerHTML = '<div class="brf">'
-    + '<div class="sub">Generated ' + new Date().toLocaleString() + ' &middot; Departure ' + new Date(d.depMs).toLocaleString() + ' &middot; Avg speed ' + d.spd + ' km/h</div>'
+    + '<div class="sub">Generated ' + new Date().toLocaleString() + ' &middot; Estimated ' + d.durLabel + ' on the road</div>'
     + '<div class="stats">'
     + '<div class="stat"><b>' + d.totalKm.toFixed(1) + '</b><span>km total</span></div>'
     + '<div class="stat"><b>' + d.analysed.length + '/' + res.length + '</b><span>points coded</span></div>'
@@ -2393,7 +2191,7 @@ function generateBriefing() {
     + '<div class="brand">Urbris &middot; Route-Based Risk Riding</div>'
     + '<h1>Ride Briefing</h1>'
     + '<div class="disclaimer"><b>Before you rely on this:</b> this briefing combines AI-assisted analysis of Street View imagery, historical traffic patterns, and weather forecasts, cross-checked with field-captured photo/video only where specifically noted above. It is meant to support your own pre-ride judgment, not replace it. Imagery may be outdated, conditions change, and unvalidated points have not been independently verified. Always confirm current conditions before and during your ride, ride within your own skill level, and treat your own on-road judgment as the final authority over anything in this document.</div>'
-    + '<div class="sub">Generated ' + new Date().toLocaleString() + ' &middot; Departure ' + new Date(d.depMs).toLocaleString() + ' &middot; Avg speed ' + d.spd + ' km/h</div>'
+    + '<div class="sub">Generated ' + new Date().toLocaleString() + ' &middot; Estimated ' + d.durLabel + ' on the road</div>'
     + '<div class="stats">'
     + '<div class="stat"><b>' + d.totalKm.toFixed(1) + '</b><span>km total</span></div>'
     + '<div class="stat"><b>' + d.analysed.length + '/' + res.length + '</b><span>points coded</span></div>'
