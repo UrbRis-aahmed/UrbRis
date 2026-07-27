@@ -236,6 +236,30 @@ class H(BaseHTTPRequestHandler):
                 err_body = e.read()
                 self._json({"error": "Google Directions API error", "detail": err_body.decode("utf-8", "ignore")}, code=e.code)
             return
+        if self.path == "/trailsinarea":
+            bbox = data.get("bbox", "")  # "south,west,north,east"
+            query = (
+                '[out:json][timeout:25];'
+                '('
+                'way["highway"~"^(path|footway|track|bridleway)$"]["name"](' + bbox + ');'
+                'way["route"="hiking"](' + bbox + ');'
+                ');'
+                'out geom;'
+            )
+            body_result, err = fetch_overpass(query)
+            self.send_response(200)
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            if body_result is not None:
+                self.wfile.write(body_result)
+            else:
+                self.wfile.write(json.dumps({
+                    "error": "All Overpass mirrors were busy or unreachable (" + str(err) + "). "
+                             "This is a shared free service so it happens sometimes - wait a minute "
+                             "and try again, or try a smaller area."
+                }).encode())
+            return
         if self.path == "/roadsinarea":
             bbox = data.get("bbox", "")  # "south,west,north,east"
             query = (

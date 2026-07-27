@@ -149,6 +149,13 @@ input[type=number]{width:70px;text-align:right}
     <button class="btn" id="scanBtn" style="margin-top:8px" onclick="startScan()">Scan area for gaps</button>
   </div>
   <div>
+    <div class="sl">Hiking Trails (beta)</div>
+    <div class="hint">Named trails and footpaths from OpenStreetMap - starting with Hamilton, ON, to test against a known area before expanding elsewhere.</div>
+    <div class="or" style="margin-top:8px"><label>Area (sq km)</label><input type="number" id="trailArea" value="15" min="1" max="60" step="1" style="width:60px"/></div>
+    <button class="btn" id="trailBtn" style="margin-top:8px" onclick="findTrails()">Find trails near Hamilton</button>
+    <div id="trailStatus" class="hint" style="margin-top:6px"></div>
+  </div>
+  <div>
     <div class="sl">Field Media</div>
     <div class="hint">Drop photos or video from a drone/GoPro flight - matched to the nearest point by GPS automatically. Fills points marked "No Street View coverage", and attaches as a separate validation image on points that already have coverage, so you can compare what was actually seen against the Street View baseline.</div>
     <div class="dz" style="margin-top:8px">
@@ -164,6 +171,7 @@ input[type=number]{width:70px;text-align:right}
     <div class="or" style="margin-top:8px"><label>Auto-analyse iRAP</label><input type="checkbox" id="auto" style="width:auto;cursor:pointer"/></div>
     <div class="or" style="margin-top:8px"><label>Light pollution</label><input type="checkbox" id="lp" style="width:auto;cursor:pointer"/></div>
     <div class="or" style="margin-top:8px"><label>Live traffic</label><input type="checkbox" id="traffic" style="width:auto;cursor:pointer"/></div>
+    <div style="margin-top:4px"><a href="#" onclick="refreshTraffic(); return false;" style="font-size:11px;color:var(--ac2)">Force-refresh traffic tiles</a></div>
     <div class="or" style="margin-top:8px"><label>Place labels</label><input type="checkbox" id="placeLabels" style="width:auto;cursor:pointer"/></div>
     <div class="or" style="margin-top:8px"><label>Street addresses</label><input type="checkbox" id="addr" style="width:auto;cursor:pointer"/></div>
     <div class="or" style="margin-top:8px"><label>Departure time</label><input type="datetime-local" id="dep" style="width:150px"/></div>
@@ -547,6 +555,82 @@ function bboxFromCenter(lat, lon, sqKm) {
   const latOff = halfSideKm / 111.32;
   const lonOff = halfSideKm / (111.32 * Math.cos(lat * Math.PI / 180));
   return { south: lat - latOff, north: lat + latOff, west: lon - lonOff, east: lon + lonOff };
+}
+
+let trailPolys = [];
+
+async function findTrails() {
+  const gk = $('gkey').value.trim();
+  if (!gk) { log('Enter your Google Maps key first', 'er'); return; }
+  const center = { lat: 43.2557, lon: -79.8711 }; // Hamilton, ON - starting point before expanding to other cities
+  const sqKm = +$('trailArea').value || 15;
+  const bbox = bboxFromCenter(center.lat, center.lon, sqKm);
+  const btn = $('trailBtn');
+  btn.disabled = true;
+  btn.textContent = 'Searching...';
+  $('trailStatus').textContent = 'Fetching trail data from OpenStreetMap...';
+
+  $('empty').style.display = 'none';
+  $('rw').style.display = '';
+  $('vg').style.display = 'none';
+  $('vbr').style.display = 'none';
+  $('vm').style.display = '';
+  $('bg').className = 'vb';
+  $('bm').className = 'vb on';
+  $('bbt').className = 'vb';
+  $('drawBar').style.display = 'none';
+  $('rt').textContent = 'Hiking trails - Hamilton, ON';
+
+  ensureMaps(gk, async () => {
+    initScanMap();
+    google.maps.event.clearListeners(gmap, 'click'); // fixed-area lookup for now, not click-to-scan
+    trailPolys.forEach(p => p.setMap(null));
+    trailPolys = [];
+    if (scanRect) { scanRect.setMap(null); scanRect = null; }
+    scanRect = new google.maps.Rectangle({
+      bounds: { north: bbox.north, south: bbox.south, east: bbox.east, west: bbox.west },
+      strokeColor: '#d45a2a', strokeWeight: 2, fillOpacity: 0.04, fillColor: '#d45a2a', map: gmap, clickable: false
+    });
+    gmap.fitBounds(scanRect.getBounds());
+
+    try {
+      const bboxStr = bbox.south.toFixed(6) + ',' + bbox.west.toFixed(6) + ',' + bbox.north.toFixed(6) + ',' + bbox.east.toFixed(6);
+      const resp = await fetch('/trailsinarea', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bbox: bboxStr })
+      });
+      const data = await resp.json();
+      if (data.error) {
+        $('trailStatus').textContent = data.error;
+        btn.disabled = false; btn.textContent = 'Find trails near Hamilton';
+        return;
+      }
+      const ways = (data.elements || []).filter(el => el.type === 'way' && el.geometry && el.geometry.length > 1);
+      if (!ways.length) {
+        $('trailStatus').textContent = 'No named trails found via OpenStreetMap in this area - try a larger area, or the data may just be thin here.';
+        btn.disabled = false; btn.textContent = 'Find trails near Hamilton';
+        return;
+      }
+      const names = new Set();
+      ways.forEach(way => {
+        const path = way.geometry.map(p => ({ lat: p.lat, lng: p.lon }));
+        const name = (way.tags && way.tags.name) || 'Unnamed trail';
+        names.add(name);
+        const poly = new google.maps.Polyline({ path, strokeColor: '#d45a2a', strokeWeight: 3, strokeOpacity: 0.9, map: gmap });
+        poly.addListener('mouseover', () => log(name, ''));
+        trailPolys.push(poly);
+      });
+      const nameList = Array.from(names);
+      $('trailStatus').textContent = ways.length + ' trail segment(s) across ' + names.size + ' named trail(s): ' + nameList.slice(0, 6).join(', ') + (nameList.length > 6 ? ', ...' : '');
+      log('Trails loaded near Hamilton, ON', 'ok');
+    } catch (e) {
+      $('trailStatus').textContent = 'Trail search failed: ' + e.message;
+      log('Trail search failed: ' + e.message, 'er');
+    }
+    btn.disabled = false;
+    btn.textContent = 'Find trails near Hamilton';
+  });
 }
 
 async function onScanClick(e) {
@@ -1879,6 +1963,19 @@ function toggleLightPollution() {
     if (!lpLayer) lpLayer = lightPollutionLayer();
     gmap.overlayMapTypes.push(lpLayer);
   }
+}
+
+// Fully detaches and reattaches the traffic layer, forcing Google to issue completely
+// fresh tile requests for the current view rather than relying on whatever's cached.
+// This can't fix a genuine gap in Google's own live data - only whether the reload
+// itself resolves a stuck/partial tile fetch.
+function refreshTraffic() {
+  if (!gmap || !trafficLayer) { log('Turn on Live traffic first', 'wn'); return; }
+  trafficLayer.setMap(null);
+  setTimeout(() => {
+    if ($('traffic').checked) trafficLayer.setMap(gmap);
+  }, 50);
+  log('Traffic tiles force-refreshed', 'ok');
 }
 
 function toggleTraffic() {
