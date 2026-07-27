@@ -1924,6 +1924,14 @@ function mapStyles(showLabels) {
 function toggleLabels() {
   if (!gmap) return;
   gmap.setOptions({ styles: mapStyles($('placeLabels').checked) });
+  // Changing custom map styles forces Google to redraw every base tile from scratch.
+  // Only re-attach traffic if it somehow isn't already on this map - calling setMap()
+  // unconditionally (even when already attached) can itself force an unnecessary
+  // detach/reattach of the traffic overlay, which was likely making the flicker worse
+  // rather than preventing it.
+  if ($('traffic').checked && trafficLayer && trafficLayer.getMap() !== gmap) {
+    trafficLayer.setMap(gmap);
+  }
 }
 
 function iMap() {
@@ -2236,7 +2244,7 @@ function fullRouteMapUrl(gk, points) {
   const pathStep = Math.max(1, Math.ceil(points.length / maxPathPts));
   const pathPts = points.filter((p, i) => i % pathStep === 0 || i === points.length - 1);
   const path = 'path=color:0x3a7d5c|weight:4|' + pathPts.map(p => p.lat + ',' + p.lon).join('|');
-  const markers = waypoints.map((p, i) => 'markers=color:0xd45a2a|label:' + (i + 1) + '|' + p.lat + ',' + p.lon).join('&');
+  const markers = waypoints.map((p, i) => 'markers=color:0xd45a2a|label:' + String.fromCharCode(65 + i) + '|' + p.lat + ',' + p.lon).join('&');
   const style = ['style=feature:poi|visibility:off', 'style=feature:transit|visibility:off'].join('&');
   const url = 'https://maps.googleapis.com/maps/api/staticmap?size=640x640&scale=2&maptype=roadmap&' + style + '&' + path + '&' + markers + '&key=' + encodeURIComponent(gk);
   return { url, waypoints };
@@ -2246,7 +2254,7 @@ function buildCueRows(waypoints) {
   return waypoints.map((p, i) => {
     const risky = p.curveClass === 'Sharp curve' || p.curveClass === 'Hairpin';
     const curveNote = risky ? ' &middot; <b style="color:#c94b4b">' + p.curveClass + '</b>' : '';
-    return '<tr><td><b>' + (i + 1) + '</b></td><td>' + p.km.toFixed(1) + ' km</td><td>' + compassDir(p.heading) + '</td><td>' + (p.street || '-') + curveNote + '</td></tr>';
+    return '<tr><td><b>' + String.fromCharCode(65 + i) + '</b></td><td>' + p.km.toFixed(1) + ' km</td><td>' + compassDir(p.heading) + '</td><td>' + (p.street || '-') + curveNote + '</td></tr>';
   }).join('');
 }
 
