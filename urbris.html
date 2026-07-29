@@ -137,8 +137,8 @@ input[type=number]{width:70px;text-align:right}
   </div>
   <div>
     <div class="sl">Saved Routes</div>
-    <div id="savedList" style="display:flex;flex-direction:column;gap:6px;max-height:220px;overflow-y:auto"></div>
-    <button class="savebtn" id="saveRouteBtn" style="margin-top:8px" onclick="saveCurrentRoute()" disabled>Run a route to enable saving</button>
+    <div class="hint">Saves automatically once images are pulled, and updates in place as you go.</div>
+    <div id="savedList" style="display:flex;flex-direction:column;gap:6px;max-height:220px;overflow-y:auto;margin-top:8px"></div>
   </div>
   <div>
     <div class="sl">Route</div>
@@ -220,9 +220,11 @@ input[type=number]{width:70px;text-align:right}
     </div>
     <div id="vg"><div class="grid" id="grid"></div></div>
     <div id="vm" style="display:none">
-      <div id="drawBar" style="display:none;margin-bottom:10px;gap:8px;align-items:center">
+      <div id="drawBar" style="display:none;margin-bottom:10px;gap:8px;align-items:center;flex-wrap:wrap">
+        <button class="vb" id="drawToolBtn" onclick="toggleDrawTool()">Pan/zoom mode - tap to draw</button>
         <button class="vb" id="finishDraw" onclick="finishDraw()">Finish drawing</button>
-        <button class="vb" id="clearDraw" onclick="clearDraw()">Clear</button>
+        <button class="vb" id="undoStroke" onclick="undoLastStroke()">Undo last stroke</button>
+        <button class="vb" id="clearDraw" onclick="clearDraw()">Clear all</button>
         <span id="drawCount" style="font-size:12px;color:var(--mu)">0 km traced - draw on the map to trace your route</span>
       </div>
       <div style="font-size:11px;color:var(--mu);margin-bottom:10px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
@@ -246,7 +248,7 @@ let rp = [], sp = [], res = [], gmap = null, gm = [], gp = null, gs = [], lpLaye
 let drawMode = false, drawPts = [], drawPoly = null, drawMarkers = [];
 
 window.addEventListener('load', () => {
-  if (localStorage.getItem('urbris_sbCollapsed') === '1') {
+  if (localStorage.getItem('urbris_sbCollapsed') !== '0') {
     $('layout').classList.add('collapsed');
     $('sbToggle').innerHTML = '&#8250;';
     $('sbToggle').title = 'Expand sidebar';
@@ -265,6 +267,18 @@ function enterApp() {
   $('landing').style.display = 'none';
   document.querySelector('header').style.display = '';
   $('layout').style.display = '';
+  // Must be called directly from the click handler (not after an await) - browsers only
+  // allow requestFullscreen as a direct response to a user gesture. Wrapped in a catch
+  // since some contexts (already fullscreen, no permission, embedded in an iframe without
+  // allowfullscreen) will reject it - the app should keep working normally either way.
+  const el = document.documentElement;
+  const req = el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen;
+  if (req) {
+    try {
+      const result = req.call(el);
+      if (result && result.catch) result.catch(() => {});
+    } catch (e) {}
+  }
 }
 
 function toggleSidebar() {
@@ -356,6 +370,10 @@ function startDraw() {
   if (!gk) { log('Enter Google API key first', 'er'); return; }
   drawMode = true;
   drawPts = [];
+  drawToolActive = false;
+  currentSavedRouteId = null;
+  const dtb = $('drawToolBtn');
+  if (dtb) { dtb.textContent = 'Pan/zoom mode - tap to draw'; dtb.classList.remove('on'); }
   $('sendPhone').style.display = 'none';
   $('phonePanel').style.display = 'none';
   scanMode = false;
@@ -386,6 +404,7 @@ function initDrawMap() {
       styles: mapStyles(false)
     });
     $('lp').addEventListener('change', toggleLightPollution);
+    if ($('lp').checked) toggleLightPollution();
     $('traffic').addEventListener('change', toggleTraffic);
     if ($('traffic').checked) toggleTraffic();
   }
@@ -404,28 +423,44 @@ function initDrawMap() {
   gmap.addListener('mouseup', onDrawEnd);
 }
 
-let isDrawingStroke = false, lastDrawPt = null;
+let isDrawingStroke = false, lastDrawPt = null, drawStrokeStarts = [], drawToolActive = false;
+
+// A single-finger drag can't mean both "pan the map" and "draw a line" at once, so
+// touch input needs an explicit mode: drawToolActive decides which. Off (default) =
+// normal map navigation, touch pans/pinch zooms like any map. On = touch draws instead,
+// and the map stops panning so a drag never gets misread as trying to scroll around.
+function toggleDrawTool() {
+  drawToolActive = !drawToolActive;
+  if (gmap) gmap.setOptions({ draggable: !drawToolActive });
+  const btn = $('drawToolBtn');
+  if (drawToolActive) {
+    btn.textContent = 'Drawing mode - tap to pan/zoom';
+    btn.classList.add('on');
+  } else {
+    btn.textContent = 'Pan/zoom mode - tap to draw';
+    btn.classList.remove('on');
+  }
+}
 
 // Google Maps' mousedown/mousemove/mouseup events fire uniformly for touch, stylus,
 // and mouse input, so this one set of handlers gives freehand drawing on a touchscreen
 // without needing separate touch-event handling - drag your finger/pen across the map
 // like a pencil, lift, and draw again to continue the route in another stroke.
 function onDrawStart(e) {
-  if (!drawMode) return;
+  if (!drawMode || !drawToolActive) return;
   isDrawingStroke = true;
-  gmap.setOptions({ draggable: false }); // stop the map from panning while tracing
+  drawStrokeStarts.push(drawPts.length); // remember where this stroke begins, for undo
   addDrawPoint(e.latLng);
 }
 
 function onDrawMove(e) {
-  if (!drawMode || !isDrawingStroke) return;
+  if (!drawMode || !drawToolActive || !isDrawingStroke) return;
   addDrawPoint(e.latLng);
 }
 
 function onDrawEnd() {
   if (!drawMode) return;
   isDrawingStroke = false;
-  if (gmap) gmap.setOptions({ draggable: true });
   lastDrawPt = null;
 }
 
@@ -443,8 +478,22 @@ function addDrawPoint(latLng) {
   $('drawCount').textContent = (td(drawPts) / 1000).toFixed(2) + ' km traced - lift and draw again to continue, or tap Finish drawing';
 }
 
+// Removes only the most recently drawn stroke (one press-drag-release), not the whole
+// route - the fix for "I drew a bad bit, don't make me start over."
+function undoLastStroke() {
+  if (!drawStrokeStarts.length) { log('Nothing to undo', 'wn'); return; }
+  const cut = drawStrokeStarts.pop();
+  drawPts = drawPts.slice(0, cut);
+  lastDrawPt = drawPts.length ? drawPts[drawPts.length - 1] : null;
+  if (drawPoly) drawPoly.setPath(drawPts.map(p => ({ lat: p.lat, lng: p.lon })));
+  $('drawCount').textContent = drawPts.length
+    ? (td(drawPts) / 1000).toFixed(2) + ' km traced - lift and draw again to continue, or tap Finish drawing'
+    : '0 km traced - draw on the map to trace your route';
+}
+
 function clearDraw() {
   drawPts = [];
+  drawStrokeStarts = [];
   drawMarkers.forEach(m => m.setMap(null));
   drawMarkers = [];
   lastDrawPt = null;
@@ -517,6 +566,7 @@ function initScanMap() {
       styles: mapStyles(false)
     });
     $('lp').addEventListener('change', toggleLightPollution);
+    if ($('lp').checked) toggleLightPollution();
     $('traffic').addEventListener('change', toggleTraffic);
     if ($('traffic').checked) toggleTraffic();
   }
@@ -1519,11 +1569,10 @@ $('run').addEventListener('click', async () => {
   $('pw').style.display = 'none';
   $('run').disabled = false;
   $('run').textContent = 'Re-run images';
-  $('saveRouteBtn').disabled = false;
-  $('saveRouteBtn').textContent = 'Save current route';
   $('riskBtn').style.display = '';
   $('riskBtn').disabled = false;
   $('riskBtn').textContent = 'Pull Risk';
+  saveCurrentRoute();
 });
 
 async function pullRisk() {
@@ -1554,6 +1603,7 @@ async function pullRisk() {
   $('pw').style.display = 'none';
   btn.disabled = false;
   btn.textContent = 'Re-run risk analysis';
+  saveCurrentRoute();
 }
 
 function sv(v) {
@@ -1599,15 +1649,19 @@ async function refreshSavedList() {
   }
 }
 
-function autoRouteName() {
-  const now = new Date();
-  const dateStr = now.toLocaleDateString('en-CA') + ' ' + now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  if (!res.length) return 'Route (' + dateStr + ')';
-  const a = res[0], b = res[res.length - 1];
-  const label = a.street || (a.lat.toFixed(3) + ',' + a.lon.toFixed(3));
-  const endLabel = b.street || (b.lat.toFixed(3) + ',' + b.lon.toFixed(3));
-  const range = (endLabel && endLabel !== label) ? (label + ' \u2192 ' + endLabel) : label;
-  return range + ' (' + dateStr + ')';
+let currentSavedRouteId = null;
+
+async function nextRouteName() {
+  try {
+    const resp = await fetch('/routes/list', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    const data = await resp.json();
+    const nums = (data.routes || [])
+      .map(r => { const m = /^Route (\d+)$/.exec(r.name); return m ? parseInt(m[1]) : 0; })
+      .filter(n => n > 0);
+    return 'Route ' + (nums.length ? Math.max(...nums) + 1 : 1);
+  } catch (e) {
+    return 'Route ' + Date.now();
+  }
 }
 
 function redactKeyFromUrl(url) {
@@ -1620,11 +1674,12 @@ function reinjectKeyIntoUrl(url, gk) {
   return url.replace(/([?&]key=)REDACTED/, '$1' + encodeURIComponent(gk));
 }
 
+// Routes save themselves automatically - no button, no naming prompt. First save
+// after a route is drawn creates "Route N" (next free number); every save after
+// that (e.g. once risk analysis is pulled) updates that same entry in place rather
+// than creating a new one, since currentSavedRouteId is already set by then.
 async function saveCurrentRoute() {
-  if (!res.length) { log('Nothing to save yet - run a route first', 'er'); return; }
-  const btn = $('saveRouteBtn');
-  btn.disabled = true;
-  btn.textContent = 'Saving...';
+  if (!res.length) return;
   const totalKm = res[res.length - 1].km;
   const cellGaps = res.filter(r => r.cellRisky).length;
   const highRisk = res.filter(r => r.irap && riskScore(r.irap) >= 0.7).length;
@@ -1632,17 +1687,17 @@ async function saveCurrentRoute() {
   // Never persist the Google Maps key: it's embedded in Street View URLs, so strip it
   // before it goes to the server. Drone photo data: URLs have no key and pass through untouched.
   const safeRes = res.map(r => ({ ...r, imageUrl: redactKeyFromUrl(r.imageUrl) }));
-  const payload = { name: autoRouteName(), meta, data: { res: safeRes, scanResults: (typeof scanResults !== 'undefined' ? scanResults : []) } };
+  const name = currentSavedRouteId ? undefined : await nextRouteName();
+  const payload = { id: currentSavedRouteId || undefined, name, meta, data: { res: safeRes, scanResults: (typeof scanResults !== 'undefined' ? scanResults : []) } };
   try {
     const resp = await fetch('/routes/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
     const out = await resp.json();
-    log('Saved "' + out.name + '"', 'ok');
+    currentSavedRouteId = out.id;
+    log('Saved as "' + out.name + '"', 'ok');
     refreshSavedList();
   } catch (e) {
-    log('Save failed: ' + e.message, 'er');
+    log('Auto-save failed: ' + e.message, 'er');
   }
-  btn.disabled = false;
-  btn.textContent = 'Save current route';
 }
 
 async function loadSavedRoute(id) {
@@ -1665,8 +1720,7 @@ async function loadSavedRoute(id) {
       }
     });
     rebuildViewFromRes();
-    $('saveRouteBtn').disabled = false;
-    $('saveRouteBtn').textContent = 'Save current route';
+    currentSavedRouteId = id;
     $('riskBtn').style.display = '';
     $('riskBtn').disabled = false;
     $('riskBtn').textContent = 'Pull Risk';
@@ -1774,7 +1828,7 @@ function lightPollutionLayer() {
     },
     tileSize: new google.maps.Size(256, 256),
     maxZoom: 8, minZoom: 0,
-    name: 'Light Pollution', opacity: 0.65
+    name: 'Light Pollution', opacity: 0.8
   });
 }
 
@@ -1810,6 +1864,15 @@ function toggleTraffic() {
   } else if (trafficLayer) {
     trafficLayer.setMap(null);
   }
+  // Google's TrafficLayer has no opacity/dimming control at all - setMap() is the only
+  // method it exposes. A CSS filter on the whole map container is the only way to soften
+  // the traffic colors, which means it affects the entire map view while traffic is on,
+  // not just the traffic overlay - Google doesn't expose that granularity. Saturation-only
+  // (no brightness reduction) hits traffic hardest since its colors are the most saturated
+  // thing on the map, while leaving the light pollution layer's own visibility intact -
+  // an earlier version also reduced brightness, which was dark enough to make light
+  // pollution effectively invisible underneath it.
+  $('gmap').style.filter = on ? 'saturate(25%)' : '';
   // Route point markers sit in the overlay pane above the traffic tile layer (Google
   // always renders markers above map tiles, so they can't be pushed behind it) - fading
   // them out when traffic is on lets the congestion colors show through underneath instead
