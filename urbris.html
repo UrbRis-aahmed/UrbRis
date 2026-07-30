@@ -1872,7 +1872,7 @@ function toggleTraffic() {
   // thing on the map, while leaving the light pollution layer's own visibility intact -
   // an earlier version also reduced brightness, which was dark enough to make light
   // pollution effectively invisible underneath it.
-  $('gmap').style.filter = on ? 'saturate(25%)' : '';
+  $('gmap').style.filter = on ? 'saturate(55%)' : '';
   // Route point markers sit in the overlay pane above the traffic tile layer (Google
   // always renders markers above map tiles, so they can't be pushed behind it) - fading
   // them out when traffic is on lets the congestion colors show through underneath instead
@@ -2068,9 +2068,10 @@ function buildBriefingData() {
   const totalKm = res[res.length - 1].km;
   const totalEtaSec = res[res.length - 1].etaSec || 0;
   const analysed = res.filter(r => r.irap);
+  const riskThreshold = (+$('rf').value || 0) / 100; // same risk filter slider used on the card grid - lets an instructor tune what shows up here for a given rider's skill level
   const highRisk = analysed
     .map(r => ({ r, sc: riskScore(r.irap) }))
-    .filter(x => x.sc >= 0.3)
+    .filter(x => x.sc >= riskThreshold)
     .sort((a, b) => b.sc - a.sc);
   const avgRisk = analysed.length ? analysed.reduce((s, r) => s + riskScore(r.irap), 0) / analysed.length : null;
 
@@ -2098,10 +2099,10 @@ function buildBriefingData() {
   if (analysed.length) {
     if (highRisk.length) {
       const worst = highRisk[0];
-      overview += 'Road conditions average ' + Math.round(avgRisk * 100) + '% risk across the ' + analysed.length + ' coded sections, with the most significant hazard around km ' + worst.r.km.toFixed(1) + ' (' + (totalKm - worst.r.km).toFixed(1) + ' km from the end) at ' + Math.round(worst.sc * 100) + '% risk' + (worst.r.irap.notes ? ' (' + worst.r.irap.notes + ')' : '') + '.';
+      overview += 'Road conditions average ' + Math.round(avgRisk * 100) + '% risk across the ' + analysed.length + ' coded sections. Showing hazards at ' + Math.round(riskThreshold * 100) + '% risk or higher (' + highRisk.length + ' point' + (highRisk.length > 1 ? 's' : '') + ') - the most significant is around km ' + worst.r.km.toFixed(1) + ' (' + (totalKm - worst.r.km).toFixed(1) + ' km from the end) at ' + Math.round(worst.sc * 100) + '% risk' + (worst.r.irap.notes ? ' (' + worst.r.irap.notes + ')' : '') + '.';
       if (flaggedWx.length) overview += ' Treat that stretch with extra caution given the weather flagged nearby.';
     } else {
-      overview += 'Road conditions across the ' + analysed.length + ' coded sections average a low ' + Math.round(avgRisk * 100) + '% risk, with nothing flagged as a significant hazard.';
+      overview += 'Road conditions across the ' + analysed.length + ' coded sections average a low ' + Math.round(avgRisk * 100) + '% risk, with nothing at or above the ' + Math.round(riskThreshold * 100) + '% risk filter currently set.';
     }
   } else {
     overview += 'No sections have been iRAP-coded yet, so this briefing reflects weather only - run the analysis for road-hazard detail.';
@@ -2155,7 +2156,7 @@ function buildBriefingData() {
   const mapsUrl = buildMapsUrl();
   const qrUrl = mapsUrl ? 'https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=' + encodeURIComponent(mapsUrl) : null;
 
-  return { depMs, durLabel, totalKm, analysed, highRisk, avgRisk, overview, wxRows, hazardRows, curveRows, cellRows, hasWarn: wxData.some(w => w.risky), mapsUrl, qrUrl };
+  return { depMs, durLabel, totalKm, analysed, highRisk, avgRisk, riskThreshold, overview, wxRows, hazardRows, curveRows, cellRows, hasWarn: wxData.some(w => w.risky), mapsUrl, qrUrl };
 }
 
 function renderBriefingTab() {
@@ -2174,8 +2175,8 @@ function renderBriefingTab() {
     + (d.hasWarn ? '<div class="warn">&#9888; Rain or high wind flagged along part of this route - see weather table below.</div>' : '')
     + '<h2>Weather along route</h2>'
     + '<table><tr><th>Point</th><th>ETA</th><th>Conditions</th><th>Temp</th><th>Wind</th><th>Rain chance</th><th></th></tr>' + (d.wxRows || '<tr><td colspan="7">No weather data loaded</td></tr>') + '</table>'
-    + '<h2>Flagged hazard points (iRAP risk &ge; 30%)</h2>'
-    + '<table><tr><th>From start</th><th>Remaining</th><th>Location</th><th>Risk score</th><th>Notes</th></tr>' + (d.hazardRows || '<tr><td colspan="5">No high-risk points flagged</td></tr>') + '</table>'
+    + '<h2>Flagged hazard points (iRAP risk &ge; ' + Math.round(d.riskThreshold * 100) + '%)</h2>'
+    + '<table><tr><th>From start</th><th>Remaining</th><th>Location</th><th>Risk score</th><th>Notes</th></tr>' + (d.hazardRows || '<tr><td colspan="5">No points at or above the current risk filter</td></tr>') + '</table>'
     + '<h2>Tightest measured curves (from GPS geometry, all points)</h2>'
     + '<table><tr><th>From start</th><th>Remaining</th><th>Location</th><th>Radius</th><th>Class</th></tr>' + (d.curveRows || '<tr><td colspan="5">No sharp curves or hairpins detected on this route</td></tr>') + '</table>'
     + '<h2>Cell coverage gaps (&gt;12km from nearest known tower)</h2>'
@@ -2283,8 +2284,8 @@ function generateBriefing() {
     + (d.hasWarn ? '<div class="warn">&#9888; Rain or high wind flagged along part of this route - see weather table below.</div>' : '')
     + '<h2>Weather along route</h2>'
     + '<table><tr><th>Point</th><th>ETA</th><th>Conditions</th><th>Temp</th><th>Wind</th><th>Rain chance</th><th></th></tr>' + (d.wxRows || '<tr><td colspan="7">No weather data loaded</td></tr>') + '</table>'
-    + '<h2>Flagged hazard points (iRAP risk &ge; 30%)</h2>'
-    + '<table><tr><th>From start</th><th>Remaining</th><th>Location</th><th>Risk score</th><th>Notes</th></tr>' + (d.hazardRows || '<tr><td colspan="5">No high-risk points flagged</td></tr>') + '</table>'
+    + '<h2>Flagged hazard points (iRAP risk &ge; ' + Math.round(d.riskThreshold * 100) + '%)</h2>'
+    + '<table><tr><th>From start</th><th>Remaining</th><th>Location</th><th>Risk score</th><th>Notes</th></tr>' + (d.hazardRows || '<tr><td colspan="5">No points at or above the current risk filter</td></tr>') + '</table>'
     + '<h2>Tightest measured curves (from GPS geometry, all points)</h2>'
     + '<table><tr><th>From start</th><th>Remaining</th><th>Location</th><th>Radius</th><th>Class</th></tr>' + (d.curveRows || '<tr><td colspan="5">No sharp curves or hairpins detected on this route</td></tr>') + '</table>'
     + '<h2>Cell coverage gaps (&gt;12km from nearest known tower)</h2>'
