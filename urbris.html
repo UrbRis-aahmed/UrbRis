@@ -191,6 +191,7 @@ input[type=number]{width:70px;text-align:right}
     <button class="xb" id="xb">Export CSV with iRAP</button>
     <button class="xb" id="bb" style="margin-top:8px">Print ride briefing</button>
     <button class="xb" id="snapshotBtn" style="margin-top:8px" onclick="generateSnapshot()">Share route snapshot</button>
+    <button class="xb" id="bookPageBtn" style="margin-top:8px" onclick="generateBookPage()">Create book page</button>
   </div>
 </div>
 <div class="main">
@@ -1894,7 +1895,8 @@ function mapStyles(showLabels) {
     { elementType: 'labels.text.fill', stylers: [{ color: '#8a8a9a' }] },
     { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#2d2d44' }] },
     { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0d1b2a' }] },
-    { featureType: 'poi', stylers: [{ visibility: 'off' }] }
+    { featureType: 'poi', stylers: [{ visibility: 'off' }] },
+    { featureType: 'administrative.land_parcel', stylers: [{ visibility: 'off' }] }
   ];
   if (!showLabels) {
     s.push({ featureType: 'administrative.country', elementType: 'labels', stylers: [{ visibility: 'off' }] });
@@ -2352,6 +2354,8 @@ function generateSnapshot() {
 
   const verdict = snapshotVerdict(avgRisk, tightest);
   const riskLabel = avgRisk != null ? Math.round(avgRisk * 100) + '%' : '-';
+  const mapsUrl = buildMapsUrl();
+  const qrUrl = mapsUrl ? 'https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=' + encodeURIComponent(mapsUrl) : null;
 
   const html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>UrbRis Route Snapshot</title><style>'
     + "body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background:#0d0d18;color:#fff;margin:0;padding:24px;display:flex;justify-content:center}"
@@ -2368,6 +2372,10 @@ function generateSnapshot() {
     + '.curve{font-size:12.5px;color:#c7c7d8;background:#1e1e36;border-radius:10px;padding:10px 14px;margin-bottom:16px}'
     + '.cta{font-size:12px;color:#9a9ab0;text-align:center;border-top:1px solid #2a2a44;padding-top:14px}'
     + '.cta b{color:#e8813f}'
+    + '.ride{display:flex;align-items:center;gap:12px;background:#1e1e36;border-radius:12px;padding:12px 14px;margin-bottom:16px}'
+    + '.ride img{width:64px;height:64px;border-radius:6px;background:#fff;padding:3px;flex:0 0 auto}'
+    + '.ride div{font-size:12px;color:#c7c7d8}'
+    + '.ride a{color:#e8813f;font-weight:600;text-decoration:none}'
     + '.pbtn{display:block;width:100%;margin-top:16px;background:#e8813f;color:#151527;border:none;border-radius:980px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit}'
     + '@media print{.pbtn{display:none}}'
     + '</style></head><body>'
@@ -2382,9 +2390,77 @@ function generateSnapshot() {
     + '<div class="stat"><b>' + totalKm.toFixed(1) + '</b><span>Total km</span></div>'
     + '</div>'
     + (tightest ? '<div class="curve">Tightest curve: <b>' + Math.round(tightest.radius) + 'm radius</b> (' + tightest.cls + ') near km ' + tightest.km.toFixed(1) + '</div>' : '')
+    + (qrUrl ? '<div class="ride"><img src="' + qrUrl + '" alt="QR code to this ride"/><div>Scan to ride this route right now - navigation starts from wherever you are.<br><a href="' + mapsUrl + '" target="_blank" rel="noopener">Open in Google Maps</a></div></div>' : '')
     + '<div class="cta">Get the full route data at <b>UrbRis</b> - "Let\'s make roads safer."</div>'
     + '<button class="pbtn" onclick="window.print()">Save / Print</button>'
     + '</div></div>'
+    + '</body></html>';
+
+  const w = window.open('', '_blank');
+  w.document.write(html);
+  w.document.close();
+}
+
+// A single printable book page - light background (dark full-page interiors cost
+// noticeably more on print-on-demand services), with a human-written description
+// rather than an auto-generated one, since the actual value of a road-review book
+// is your own voice describing the ride, not a data summary dressed up as prose.
+function generateBookPage() {
+  if (!res.length) { log('Load a route first', 'wn'); return; }
+  const description = prompt('Describe this route in your own words (surface, character, what makes it worth riding):', '');
+  if (description === null) return; // cancelled
+
+  const totalKm = res[res.length - 1].km;
+  const analysed = res.filter(r => r.irap);
+  const avgRisk = analysed.length ? analysed.reduce((s, r) => s + riskScore(r.irap), 0) / analysed.length : null;
+  const tightCurves = extractDistinctCurves(denseCurve, densePts, 10, 40);
+  const tightest = tightCurves.length ? tightCurves.slice().sort((a, b) => a.radius - b.radius)[0] : null;
+
+  let heroPt = tightest ? nearestCoveredImage(tightest.km) : null;
+  if (!heroPt) heroPt = nearestCoveredImage(totalKm / 2);
+  if (!heroPt) { log('No Street View images available yet for this page', 'er'); return; }
+
+  const mapsUrl = buildMapsUrl();
+  const qrUrl = mapsUrl ? 'https://api.qrserver.com/v1/create-qr-code/?size=130x130&data=' + encodeURIComponent(mapsUrl) : null;
+  const riskLabel = avgRisk != null ? Math.round(avgRisk * 100) + '%' : '-';
+
+  const html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>UrbRis Book Page</title><style>'
+    + "body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background:#fff;color:#1a1a2e;margin:0;padding:0;display:flex;justify-content:center}"
+    + '.page{width:100%;max-width:640px;padding:48px 44px;box-sizing:border-box}'
+    + '.brand{font-size:11px;font-weight:700;letter-spacing:.12em;color:#d45a2a;text-transform:uppercase}'
+    + 'h1{font-size:26px;font-weight:800;letter-spacing:-.02em;margin:6px 0 20px}'
+    + '.hero{width:100%;aspect-ratio:16/10;object-fit:cover;border-radius:6px;display:block;margin-bottom:20px}'
+    + '.desc{font-size:14.5px;line-height:1.7;color:#2a2a3a;margin-bottom:24px;white-space:pre-wrap}'
+    + '.stats{display:flex;gap:14px;margin-bottom:20px}'
+    + '.stat{flex:1;background:#f5f5f8;border-radius:8px;padding:12px 14px;text-align:center}'
+    + '.stat b{display:block;font-size:19px}'
+    + '.stat span{font-size:10px;color:#777;text-transform:uppercase;letter-spacing:.05em}'
+    + '.curve{font-size:12.5px;color:#444;background:#f5f5f8;border-radius:8px;padding:10px 14px;margin-bottom:20px}'
+    + '.footer{display:flex;align-items:center;justify-content:space-between;border-top:1px solid #e5e5ea;padding-top:16px;margin-top:8px}'
+    + '.footer .tag{font-size:12px;color:#777}'
+    + '.footer .tag b{color:#d45a2a}'
+    + '.footer .ride{display:flex;align-items:center;gap:10px}'
+    + '.footer .ride img{width:56px;height:56px;border-radius:4px}'
+    + '.footer .ride span{font-size:10.5px;color:#777;max-width:110px}'
+    + '.pbtn{display:block;margin:24px auto 0;background:#d45a2a;color:#fff;border:none;border-radius:980px;padding:11px 28px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}'
+    + '@media print{.pbtn{display:none} body{padding:0}}'
+    + '</style></head><body>'
+    + '<div class="page">'
+    + '<div class="brand">UrbRis</div>'
+    + '<h1>' + totalKm.toFixed(1) + ' km Route</h1>'
+    + '<img class="hero" src="' + heroPt.imageUrl + '" alt="Route photo"/>'
+    + (description ? '<div class="desc">' + description.replace(/</g, '&lt;') + '</div>' : '')
+    + '<div class="stats">'
+    + '<div class="stat"><b>' + riskLabel + '</b><span>Risk score</span></div>'
+    + '<div class="stat"><b>' + totalKm.toFixed(1) + '</b><span>Total km</span></div>'
+    + '</div>'
+    + (tightest ? '<div class="curve">Tightest curve: <b>' + Math.round(tightest.radius) + 'm radius</b> (' + tightest.cls + ') near km ' + tightest.km.toFixed(1) + '</div>' : '')
+    + '<div class="footer">'
+    + '<div class="tag">"Let\'s make roads safer."<br><b>UrbRis</b></div>'
+    + (qrUrl ? '<div class="ride"><img src="' + qrUrl + '" alt="QR code to this ride"/><span>Scan to ride this route</span></div>' : '')
+    + '</div>'
+    + '<button class="pbtn" onclick="window.print()">Save / Print</button>'
+    + '</div>'
     + '</body></html>';
 
   const w = window.open('', '_blank');
