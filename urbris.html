@@ -403,7 +403,8 @@ function initDrawMap() {
   if (!gmap) {
     gmap = new google.maps.Map($('gmap'), {
       center: { lat: 43.65, lng: -79.38 }, zoom: 6,
-      styles: mapStyles(false)
+      styles: mapStyles(false),
+      renderingType: google.maps.RenderingType.RASTER
     });
     $('lp').addEventListener('change', toggleLightPollution);
     if ($('lp').checked) toggleLightPollution();
@@ -565,7 +566,8 @@ function initScanMap() {
   if (!gmap) {
     gmap = new google.maps.Map($('gmap'), {
       center: { lat: 43.65, lng: -79.38 }, zoom: 8,
-      styles: mapStyles(false)
+      styles: mapStyles(false),
+      renderingType: google.maps.RenderingType.RASTER
     });
     $('lp').addEventListener('change', toggleLightPollution);
     if ($('lp').checked) toggleLightPollution();
@@ -1928,7 +1930,8 @@ function iMap() {
   if (!gmap) {
     gmap = new google.maps.Map($('gmap'), {
       center: { lat: mid.lat, lng: mid.lon }, zoom: 13,
-      styles: mapStyles(false)
+      styles: mapStyles(false),
+      renderingType: google.maps.RenderingType.RASTER
     });
     $('lp').addEventListener('change', toggleLightPollution);
     if ($('lp').checked) toggleLightPollution();
