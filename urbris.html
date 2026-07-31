@@ -1834,14 +1834,28 @@ function lightPollutionLayer() {
   });
 }
 
+const LP_MAX_ZOOM = 7; // above this, tile seams become obtrusive and the wide-view aesthetic isn't the point anyway
+
 function toggleLightPollution() {
   if (!gmap) return;
-  const on = $('lp').checked;
-  gmap.overlayMapTypes.clear();
-  if (on) {
-    if (!lpLayer) lpLayer = lightPollutionLayer();
-    gmap.overlayMapTypes.push(lpLayer);
+  updateLightPollutionVisibility();
+  if (!gmap._lpZoomListenerAdded) {
+    gmap.addListener('zoom_changed', updateLightPollutionVisibility);
+    gmap._lpZoomListenerAdded = true;
   }
+}
+
+function updateLightPollutionVisibility() {
+  if (!gmap) return;
+  const wantOn = $('lp').checked && gmap.getZoom() <= LP_MAX_ZOOM;
+  if (!lpLayer) lpLayer = lightPollutionLayer();
+  const idx = gmap.overlayMapTypes.getArray().indexOf(lpLayer);
+  const isOn = idx !== -1;
+  if (wantOn === isOn) return; // already in the right state, nothing to do
+  // .clear() reliably evicts already-rendered tiles; removeAt() on its own was
+  // observed leaving stale light-pollution tiles visible after switching off.
+  gmap.overlayMapTypes.clear();
+  if (wantOn) gmap.overlayMapTypes.push(lpLayer);
 }
 
 // Fully detaches and reattaches the traffic layer, forcing Google to issue completely
