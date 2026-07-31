@@ -444,6 +444,11 @@ function toggleDrawTool() {
       gestureHandling: drawToolActive ? 'none' : 'greedy'
     });
   }
+  // Separate from anything Google Maps controls: the browser's own native touch
+  // handling (scroll, pull-to-refresh, etc.) can still claim a touch sequence and cut
+  // a stroke short, even with Maps' own gesture handling fully disabled. touch-action
+  // tells the browser itself to back off entirely while actively drawing.
+  $('gmap').style.touchAction = drawToolActive ? 'none' : 'auto';
   const btn = $('drawToolBtn');
   if (drawToolActive) {
     btn.textContent = 'Drawing mode - tap to pan/zoom';
@@ -460,6 +465,7 @@ function toggleDrawTool() {
 // like a pencil, lift, and draw again to continue the route in another stroke.
 function onDrawStart(e) {
   if (!drawMode || !drawToolActive) return;
+  if (e.domEvent) e.domEvent.preventDefault();
   isDrawingStroke = true;
   drawStrokeStarts.push(drawPts.length); // remember where this stroke begins, for undo
   addDrawPoint(e.latLng);
@@ -467,6 +473,7 @@ function onDrawStart(e) {
 
 function onDrawMove(e) {
   if (!drawMode || !drawToolActive || !isDrawingStroke) return;
+  if (e.domEvent) e.domEvent.preventDefault();
   addDrawPoint(e.latLng);
 }
 
