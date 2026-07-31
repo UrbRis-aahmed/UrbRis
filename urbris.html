@@ -434,7 +434,16 @@ let isDrawingStroke = false, lastDrawPt = null, drawStrokeStarts = [], drawToolA
 // and the map stops panning so a drag never gets misread as trying to scroll around.
 function toggleDrawTool() {
   drawToolActive = !drawToolActive;
-  if (gmap) gmap.setOptions({ draggable: !drawToolActive });
+  if (gmap) {
+    // draggable:false alone isn't enough on touch - Google's own gesture recognizer
+    // can still intercept part of a touch sequence (interpreting it as a possible pan/
+    // zoom gesture) and cut a stroke short mid-draw. gestureHandling:'none' hands touch
+    // interpretation over to our own mousedown/move/up handlers completely.
+    gmap.setOptions({
+      draggable: !drawToolActive,
+      gestureHandling: drawToolActive ? 'none' : 'greedy'
+    });
+  }
   const btn = $('drawToolBtn');
   if (drawToolActive) {
     btn.textContent = 'Drawing mode - tap to pan/zoom';
@@ -1912,7 +1921,8 @@ function mapStyles(showLabels) {
     { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#2d2d44' }] },
     { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0d1b2a' }] },
     { featureType: 'poi', stylers: [{ visibility: 'off' }] },
-    { featureType: 'administrative.land_parcel', stylers: [{ visibility: 'off' }] }
+    { featureType: 'administrative.land_parcel', stylers: [{ visibility: 'off' }] },
+    { featureType: 'administrative', elementType: 'geometry', stylers: [{ visibility: 'off' }] }
   ];
   if (!showLabels) {
     s.push({ featureType: 'administrative.country', elementType: 'labels', stylers: [{ visibility: 'off' }] });
