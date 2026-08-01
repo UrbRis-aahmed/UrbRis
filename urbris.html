@@ -1559,6 +1559,7 @@ $('run').addEventListener('click', async () => {
   $('run').disabled = true;
   $('run').textContent = 'Running...';
   $('grid').innerHTML = '';
+  const prevRes = res; // preserved so any field-media fills survive a re-run, not wiped by it
   res = [];
   $('empty').style.display = 'none';
   $('rw').style.display = '';
@@ -1626,6 +1627,44 @@ $('run').addEventListener('click', async () => {
       ac(this, url, idx);
     });
   });
+
+  // Restore field media from before this run - re-extraction rebuilds res from scratch,
+  // which would otherwise silently discard any drone/GoPro gap-fills or field
+  // validations attached earlier, since it has no way to know they existed.
+  let restoredFills = 0, restoredValidations = 0;
+  if (prevRes && prevRes.length) {
+    const RESTORE_RADIUS_M = 30;
+    prevRes.forEach(old => {
+      if (!old.imageSource && !old.validationImage) return;
+      let best = null, bestDist = Infinity;
+      res.forEach((r, i) => {
+        const d = hav(old, r);
+        if (d < bestDist) { bestDist = d; best = i; }
+      });
+      if (best == null || bestDist > RESTORE_RADIUS_M) return;
+      if (old.imageSource) {
+        attachDronePhotoToPoint(best, old.imageUrl);
+        if (old.irap) {
+          res[best].irap = old.irap;
+          const ipSlot = $('ip' + best);
+          if (ipSlot) rIRAP(ipSlot, old.irap);
+          const cardBtn = $('grid').querySelector('[data-res-idx="' + best + '"] .ab');
+          if (cardBtn) { cardBtn.textContent = 'Re-analyse'; cardBtn.classList.add('done'); }
+        }
+        restoredFills++;
+      }
+      if (old.validationImage) {
+        res[best].validationImage = old.validationImage;
+        res[best].validationSource = old.validationSource;
+        if (old.validationIrap) res[best].validationIrap = old.validationIrap;
+        renderValidationBlock(best);
+        restoredValidations++;
+      }
+    });
+    if (restoredFills || restoredValidations) {
+      log('Restored ' + restoredFills + ' field-filled point(s) and ' + restoredValidations + ' validation(s) from before this run', 'ok');
+    }
+  }
 
   // Curvature annotation - pure GPS geometry, independent of AI analysis,
   // so it (and weather, cell coverage, the map) show up immediately rather
