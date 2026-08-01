@@ -787,6 +787,12 @@ async function finishDraw() {
     // isn't lost if "New route" gets clicked before Pull Images ever runs. Pull Images
     // later overwrites res with real data and updates this same saved entry in place.
     res = sp.map(pt => ({ km: pt.distKm, lat: pt.lat, lon: pt.lon, heading: pt.heading, imageUrl: '', hasCoverage: false, etaSec: 0 }));
+    // Build the actual card elements too, not just the res array - otherwise anything
+    // that looks up a card by data-res-idx (field media uploads, for one) silently
+    // finds nothing to attach to until Pull Images has run and built them.
+    $('xw').style.display = '';
+    rebuildViewFromRes();
+    sv('map'); // rebuildViewFromRes switches to Cards by default - keep the map view active here instead, showing the route just drawn
     saveCurrentRoute();
     log('Route ready: ' + (td(rp) / 1000).toFixed(1) + ' km from drawn path - click Pull Images to continue', 'ok');
   } catch (e) {
@@ -1119,18 +1125,20 @@ async function getGoProTelemetryPoints(file) {
     throw new Error('GoPro telemetry parser did not load - check /gopro-telemetry.bundle.js is deployed alongside urbris.py');
   }
   const extracted = await window.gpmfExtract(file, { browserMode: true });
-  // 'GPS' (not 'GPS5') lets the library pick whichever GPS stream the camera actually
-  // recorded - older GoPros (Hero 10 and earlier) use GPS5, but Hero 11/12/13 switched
-  // to an extended GPS9 format. Hardcoding GPS5 finds nothing at all on newer cameras,
-  // even when the footage genuinely has GPS data (as confirmed via other tools).
-  const telemetry = await window.goproTelemetry(extracted, { stream: 'GPS', groupTimes: 1000 });
+  // Don't filter by a specific stream preset here - pull everything back and search
+  // for whatever GPS stream is actually present. Filtering by name turned out to be
+  // unreliable across camera generations (GPS5 vs GPS9); if this still comes back
+  // empty, the error below reports exactly what WAS found - real data to work from
+  // instead of another guess at a stream name.
+  const telemetry = await window.goproTelemetry(extracted, { groupTimes: 1000 });
   const points = [];
+  const foundStreamsByDevice = [];
   for (const devKey in telemetry) {
     const streams = telemetry[devKey] && telemetry[devKey].streams;
     if (!streams) continue;
-    // Find whichever GPS stream is actually present (GPS5, GPS9, or any future variant)
-    // rather than assuming one specific key.
-    const gpsKey = Object.keys(streams).find(k => k.startsWith('GPS'));
+    const streamKeys = Object.keys(streams);
+    foundStreamsByDevice.push(devKey + ': ' + (streamKeys.length ? streamKeys.join(', ') : '(no streams)'));
+    const gpsKey = streamKeys.find(k => /GPS/i.test(k));
     const gps = gpsKey ? streams[gpsKey] : null;
     if (!gps || !gps.samples) continue;
     for (const s of gps.samples) {
@@ -1138,6 +1146,10 @@ async function getGoProTelemetryPoints(file) {
       // Lat/lon are always the first two values in both GPS5 and GPS9's format.
       points.push({ timeSec: (s.cts || 0) / 1000, lat: s.value[0], lon: s.value[1] });
     }
+  }
+  if (!points.length) {
+    const detail = foundStreamsByDevice.length ? foundStreamsByDevice.join(' | ') : 'no devices or streams found at all in the parsed data';
+    throw new Error('No GPS stream found. Streams actually present: ' + detail);
   }
   return points;
 }
