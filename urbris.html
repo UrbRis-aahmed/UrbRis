@@ -142,7 +142,8 @@ input[type=number]{width:70px;text-align:right}
   </div>
   <div>
     <div class="sl">Route</div>
-    <div class="hint">Draw your route on the map to begin - trace it like a pencil, lift and draw again to continue.</div>
+    <button class="savebtn" id="newRouteBtn" onclick="startDraw()">New route</button>
+    <div class="hint" style="margin-top:8px">Draw your route on the map to begin - trace it like a pencil, lift and draw again to continue.</div>
     <div id="fn" style="font-size:11px;color:var(--ok);margin-top:6px"></div>
     <button class="savebtn" id="sendPhone" style="margin-top:8px;display:none">Send to phone (Google Maps)</button>
     <div id="phonePanel" style="display:none;margin-top:8px;text-align:center;background:var(--sf2);border:.5px solid var(--b);border-radius:8px;padding:10px">
@@ -373,7 +374,21 @@ function startDraw() {
   drawMode = true;
   drawPts = [];
   drawToolActive = false;
+  drawStrokeStarts = [];
+  lastDrawPt = null;
   currentSavedRouteId = null;
+  // Clear the previous route's results too, not just the drawing state - otherwise
+  // old grid cards, map markers, and export buttons linger from the last route while
+  // a fresh one is being drawn on top.
+  res = []; rp = []; sp = [];
+  $('grid').innerHTML = '';
+  gm.forEach(m => m.setMap(null)); gm = [];
+  if (gp) { gp.setMap(null); gp = null; }
+  $('xw').style.display = 'none';
+  $('sw').style.display = 'none';
+  $('run').disabled = true;
+  $('run').textContent = 'Draw a route first';
+  $('riskBtn').style.display = 'none';
   const dtb = $('drawToolBtn');
   if (dtb) { dtb.textContent = 'Pan/zoom mode - tap to draw'; dtb.classList.remove('on'); }
   $('sendPhone').style.display = 'none';
@@ -744,6 +759,11 @@ async function finishDraw() {
     ust();
     $('run').disabled = false;
     $('run').textContent = 'Pull Images';
+    // Save a draft immediately - just the geometry, no images/risk yet - so a route
+    // isn't lost if "New route" gets clicked before Pull Images ever runs. Pull Images
+    // later overwrites res with real data and updates this same saved entry in place.
+    res = sp.map(pt => ({ km: pt.distKm, lat: pt.lat, lon: pt.lon, heading: pt.heading, imageUrl: '', hasCoverage: false, etaSec: 0 }));
+    saveCurrentRoute();
     log('Route ready: ' + (td(rp) / 1000).toFixed(1) + ' km from drawn path - click Pull Images to continue', 'ok');
   } catch (e) {
     log('Failed to process drawn route: ' + e.message, 'er');
