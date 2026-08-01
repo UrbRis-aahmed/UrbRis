@@ -450,20 +450,16 @@ let isDrawingStroke = false, lastDrawPt = null, drawStrokeStarts = [], drawToolA
 function toggleDrawTool() {
   drawToolActive = !drawToolActive;
   if (gmap) {
-    // draggable:false alone isn't enough on touch - Google's own gesture recognizer
-    // can still intercept part of a touch sequence (interpreting it as a possible pan/
-    // zoom gesture) and cut a stroke short mid-draw. gestureHandling:'none' hands touch
-    // interpretation over to our own mousedown/move/up handlers completely.
-    gmap.setOptions({
-      draggable: !drawToolActive,
-      gestureHandling: drawToolActive ? 'none' : 'greedy'
-    });
+    // draggable:false blocks single-finger drag-to-pan without touching pinch-zoom,
+    // which Google handles as a separate interaction. gestureHandling:'none' (a
+    // previous attempt) blocked pinch-zoom too, which was never the intent - reverted.
+    gmap.setOptions({ draggable: !drawToolActive });
   }
-  // Separate from anything Google Maps controls: the browser's own native touch
-  // handling (scroll, pull-to-refresh, etc.) can still claim a touch sequence and cut
-  // a stroke short, even with Maps' own gesture handling fully disabled. touch-action
-  // tells the browser itself to back off entirely while actively drawing.
-  $('gmap').style.touchAction = drawToolActive ? 'none' : 'auto';
+  // touch-action:'none' (a previous attempt) blocked pinch-zoom along with the
+  // single-finger pan/scroll it was meant to stop. 'pinch-zoom' keeps the pinch
+  // gesture working natively while still telling the browser not to treat a
+  // single-finger drag as a pan/scroll during drawing.
+  $('gmap').style.touchAction = drawToolActive ? 'pinch-zoom' : 'auto';
   const btn = $('drawToolBtn');
   if (drawToolActive) {
     btn.textContent = 'Drawing mode - tap to pan/zoom';
@@ -533,6 +529,34 @@ function clearDraw() {
   lastDrawPt = null;
   if (drawPoly) drawPoly.setPath([]);
   $('drawCount').textContent = '0 km traced - draw on the map to trace your route';
+}
+
+// Snaps a freehand-drawn path to the actual road network using Roads API's
+// snapToRoads with interpolate=true, which fills in real road geometry between your
+// points. This is deliberately NOT the Directions Service: Directions computes a
+// good driving *route* between waypoints and can reroute through a completely
+// different nearby road if it judges that a better path - exactly what was showing
+// up as "snapping to adjacent roads." snapToRoads only ever snaps to the nearest
+// road at each point, with no rerouting logic involved.
+async function snapDrawnRoute(points, gk) {
+  const B = 100; // Roads API's own per-request point limit
+  const chunks = [];
+  for (let i = 0; i < points.length; i += B) chunks.push(points.slice(i, i + B));
+  let out = [];
+  for (const chunk of chunks) {
+    const path = chunk.map(p => p.lat + ',' + p.lon).join('|');
+    const resp = await fetch('/snap', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path, gkey: gk, interpolate: true })
+    });
+    const d = await resp.json();
+    if (!d.snappedPoints || !d.snappedPoints.length) {
+      throw new Error('Roads API returned no snapped points for this stretch - try redrawing with the map zoomed in a bit more');
+    }
+    d.snappedPoints.forEach(s => out.push({ lat: s.location.latitude, lon: s.location.longitude }));
+  }
+  return out;
 }
 
 async function routeThroughPoints(points, gk) {
@@ -738,7 +762,7 @@ async function finishDraw() {
   $('finishDraw').textContent = 'Processing...';
   log('Snapping drawn route to roads (' + drawPts.length + ' clicks)...', '');
   try {
-    const dense = await routeThroughPoints(drawPts, gk);
+    const dense = await snapDrawnRoute(drawPts, gk);
     if (!dense.length) throw new Error('No points returned from road snapping');
     rp = dense;
     drawMode = false;
@@ -1095,13 +1119,23 @@ async function getGoProTelemetryPoints(file) {
     throw new Error('GoPro telemetry parser did not load - check /gopro-telemetry.bundle.js is deployed alongside urbris.py');
   }
   const extracted = await window.gpmfExtract(file, { browserMode: true });
-  const telemetry = await window.goproTelemetry(extracted, { stream: 'GPS5', groupTimes: 1000 });
+  // 'GPS' (not 'GPS5') lets the library pick whichever GPS stream the camera actually
+  // recorded - older GoPros (Hero 10 and earlier) use GPS5, but Hero 11/12/13 switched
+  // to an extended GPS9 format. Hardcoding GPS5 finds nothing at all on newer cameras,
+  // even when the footage genuinely has GPS data (as confirmed via other tools).
+  const telemetry = await window.goproTelemetry(extracted, { stream: 'GPS', groupTimes: 1000 });
   const points = [];
   for (const devKey in telemetry) {
-    const gps = telemetry[devKey] && telemetry[devKey].streams && telemetry[devKey].streams.GPS5;
+    const streams = telemetry[devKey] && telemetry[devKey].streams;
+    if (!streams) continue;
+    // Find whichever GPS stream is actually present (GPS5, GPS9, or any future variant)
+    // rather than assuming one specific key.
+    const gpsKey = Object.keys(streams).find(k => k.startsWith('GPS'));
+    const gps = gpsKey ? streams[gpsKey] : null;
     if (!gps || !gps.samples) continue;
     for (const s of gps.samples) {
       if (!s.value) continue;
+      // Lat/lon are always the first two values in both GPS5 and GPS9's format.
       points.push({ timeSec: (s.cts || 0) / 1000, lat: s.value[0], lon: s.value[1] });
     }
   }
