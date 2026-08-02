@@ -144,6 +144,9 @@ input[type=number]{width:70px;text-align:right}
     <div class="sl">Route</div>
     <button class="savebtn" id="newRouteBtn" onclick="startDraw()">New route</button>
     <div class="hint" style="margin-top:8px">Draw your route on the map to begin - trace it like a pencil, lift and draw again to continue.</div>
+    <div class="hint" style="margin-top:8px">Or import a route straight from a GoPro/DJI video's GPS track - no need to draw it by hand.</div>
+    <input type="file" id="videoImportInput" accept="video/mp4,video/quicktime,.srt" multiple style="margin-top:6px"/>
+    <div id="videoImportStatus" class="hint" style="margin-top:6px"></div>
     <div id="fn" style="font-size:11px;color:var(--ok);margin-top:6px"></div>
     <button class="savebtn" id="sendPhone" style="margin-top:8px;display:none">Send to phone (Google Maps)</button>
     <div id="phonePanel" style="display:none;margin-top:8px;text-align:center;background:var(--sf2);border:.5px solid var(--b);border-radius:8px;padding:10px">
@@ -802,6 +805,96 @@ async function finishDraw() {
     $('finishDraw').textContent = 'Finish drawing';
   }
 }
+
+// Builds a route directly from a video's own GPS track instead of hand-drawing it -
+// reuses the same telemetry parsers built for Field Media (GPMF for GoPro, .SRT for
+// DJI) and the same true road-snapping used for freehand strokes, so the result is
+// exactly as accurate as a manually-traced route, just without the tracing.
+async function importRouteFromVideo(file, srtFile) {
+  const gk = $('gkey').value.trim();
+  if (!gk) { log('Enter Google API key first', 'er'); return; }
+  $('videoImportStatus').textContent = 'Reading telemetry from ' + file.name + '...';
+  let telemetry;
+  try {
+    telemetry = srtFile ? parseDjiSrt(await srtFile.text()) : await getGoProTelemetryPoints(file);
+  } catch (e) {
+    $('videoImportStatus').textContent = '';
+    log('Could not read telemetry from ' + file.name + ': ' + e.message, 'er');
+    return;
+  }
+  if (!telemetry.length) {
+    $('videoImportStatus').textContent = '';
+    log('No GPS telemetry found in ' + file.name, 'er');
+    return;
+  }
+
+  // Thin dense telemetry to roughly one point per ~20m, matching the throttle used for
+  // hand-drawn strokes - a long ride can carry thousands of GPS samples, most of them
+  // redundant for defining the route's actual shape.
+  const thinned = [];
+  let last = null;
+  for (const t of telemetry) {
+    if (!last || hav(last, t) >= 20) { thinned.push({ lat: t.lat, lon: t.lon }); last = t; }
+  }
+  if (thinned.length < 2) {
+    $('videoImportStatus').textContent = '';
+    log('Not enough distinct GPS points in ' + file.name + ' to build a route', 'er');
+    return;
+  }
+
+  ensureMaps(gk, async () => {
+    initDrawMap(); // ensures gmap/drawPoly exist even if nothing's been drawn yet this session
+    $('videoImportStatus').textContent = 'Snapping imported route to roads (' + thinned.length + ' points)...';
+    log('Snapping route from ' + file.name + ' to roads (' + thinned.length + ' points)...', '');
+    try {
+      const dense = await snapDrawnRoute(thinned, gk);
+      if (!dense.length) throw new Error('No points returned from road snapping');
+      rp = dense;
+      drawMode = false;
+      currentSavedRouteId = null;
+      google.maps.event.clearListeners(gmap, 'click');
+      drawMarkers.forEach(m => m.setMap(null));
+      drawMarkers = [];
+      if (drawPoly) {
+        drawPoly.setPath(dense.map(p => ({ lat: p.lat, lng: p.lon })));
+        drawPoly.setOptions({ strokeColor: '#4f9d76', strokeWeight: 4 });
+        const bounds = new google.maps.LatLngBounds();
+        dense.forEach(p => bounds.extend({ lat: p.lat, lng: p.lon }));
+        gmap.fitBounds(bounds);
+      }
+      $('drawBar').style.display = 'none';
+      $('empty').style.display = 'none';
+      $('rw').style.display = '';
+      $('fn').textContent = '+ Imported from ' + file.name + ' (' + dense.length + ' road points)';
+      $('sendPhone').style.display = '';
+      $('rt').textContent = 'Route confirmed - click "Pull Images" in the sidebar to continue';
+      ust();
+      $('run').disabled = false;
+      $('run').textContent = 'Pull Images';
+      res = sp.map(pt => ({ km: pt.distKm, lat: pt.lat, lon: pt.lon, heading: pt.heading, imageUrl: '', hasCoverage: false, etaSec: 0 }));
+      $('xw').style.display = '';
+      rebuildViewFromRes();
+      sv('map');
+      saveCurrentRoute();
+      $('videoImportStatus').textContent = 'Imported ' + (td(rp) / 1000).toFixed(1) + ' km from ' + file.name;
+      log('Route imported from video GPS: ' + (td(rp) / 1000).toFixed(1) + ' km - click Pull Images to continue', 'ok');
+    } catch (e) {
+      $('videoImportStatus').textContent = '';
+      log('Failed to import route from ' + file.name + ': ' + e.message, 'er');
+    }
+  });
+}
+
+$('videoImportInput').addEventListener('change', e => {
+  const files = Array.from(e.target.files || []);
+  if (!files.length) return;
+  const video = files.find(f => /\.(mp4|mov)$/i.test(f.name));
+  if (!video) { log('Select a video file (.mp4/.mov) to import a route from', 'er'); e.target.value = ''; return; }
+  const stem = video.name.replace(/\.[^.]+$/, '');
+  const srt = files.find(f => /\.srt$/i.test(f.name) && f.name.replace(/\.[^.]+$/, '') === stem);
+  importRouteFromVideo(video, srt);
+  e.target.value = '';
+});
 
 function ust() {
   const iv = 100;
