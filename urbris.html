@@ -829,8 +829,8 @@ async function importRouteFromVideo(file, srtFile) {
   }
 
   // Thin dense telemetry to roughly one point per ~20m, matching the throttle used for
-  // hand-drawn strokes - a long ride can carry thousands of GPS samples, most of them
-  // redundant for defining the route's actual shape.
+  // hand-drawn strokes, purely for defining the route's shape - the full telemetry
+  // (with timestamps) is kept separately below for matching frames to points.
   const thinned = [];
   let last = null;
   for (const t of telemetry) {
@@ -867,18 +867,57 @@ async function importRouteFromVideo(file, srtFile) {
       $('rw').style.display = '';
       $('fn').textContent = '+ Imported from ' + file.name + ' (' + dense.length + ' road points)';
       $('sendPhone').style.display = '';
-      $('rt').textContent = 'Route confirmed - click "Pull Images" in the sidebar to continue';
       ust();
+
+      // Pull an actual frame from the footage for every route point, matched to the
+      // closest telemetry timestamp - the video covers the whole route by definition,
+      // so there's no reason to leave points blank waiting on a separate Street View
+      // pull. Street View (Pull Images) is still there afterward if you want a second,
+      // independent source to compare against.
+      $('pw').style.display = '';
+      $('pl').textContent = 'Pulling frames from video';
+      $('rt').textContent = 'Extracting frames from ' + file.name + '...';
+      res = [];
+      let frameFails = 0;
+      for (let i = 0; i < sp.length; i++) {
+        const pt = sp[i];
+        let best = null, bestDist = Infinity;
+        for (const t of telemetry) {
+          const d = hav(t, pt);
+          if (d < bestDist) { bestDist = d; best = t; }
+        }
+        let entry = { km: pt.distKm, lat: pt.lat, lon: pt.lon, heading: pt.heading, imageUrl: '', hasCoverage: false, etaSec: 0 };
+        if (best) {
+          try {
+            const frameUrl = await extractVideoFrame(file, best.timeSec);
+            entry = { ...entry, imageUrl: frameUrl, hasCoverage: true, imageSource: srtFile ? 'dji-video' : 'gopro-video' };
+          } catch (e) {
+            frameFails++;
+          }
+        }
+        res.push(entry);
+        $('pf').style.width = Math.round((i + 1) / sp.length * 100) + '%';
+        $('pp').textContent = Math.round((i + 1) / sp.length * 100) + '%';
+      }
+      $('pw').style.display = 'none';
+
       $('run').disabled = false;
-      $('run').textContent = 'Pull Images';
-      res = sp.map(pt => ({ km: pt.distKm, lat: pt.lat, lon: pt.lon, heading: pt.heading, imageUrl: '', hasCoverage: false, etaSec: 0 }));
+      $('run').textContent = 'Pull Images (Street View, optional)';
+      $('riskBtn').style.display = '';
+      $('riskBtn').disabled = false;
+      $('riskBtn').textContent = 'Pull Risk';
       $('xw').style.display = '';
       rebuildViewFromRes();
       sv('map');
       saveCurrentRoute();
-      $('videoImportStatus').textContent = 'Imported ' + (td(rp) / 1000).toFixed(1) + ' km from ' + file.name;
-      log('Route imported from video GPS: ' + (td(rp) / 1000).toFixed(1) + ' km - click Pull Images to continue', 'ok');
+      const covered = res.filter(r => r.hasCoverage).length;
+      $('cs').textContent = covered + '/' + res.length + ' covered (' + Math.round(covered / res.length * 100) + '%)';
+      $('videoImportStatus').textContent = 'Imported ' + (td(rp) / 1000).toFixed(1) + ' km, ' + covered + '/' + res.length + ' frames pulled from ' + file.name;
+      let msg = 'Route imported from ' + file.name + ': ' + covered + '/' + res.length + ' points got a frame from the footage';
+      if (frameFails) msg += ' (' + frameFails + ' failed to extract)';
+      log(msg, 'ok');
     } catch (e) {
+      $('pw').style.display = 'none';
       $('videoImportStatus').textContent = '';
       log('Failed to import route from ' + file.name + ': ' + e.message, 'er');
     }
