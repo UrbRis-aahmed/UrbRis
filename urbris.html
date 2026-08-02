@@ -141,6 +141,12 @@ input[type=number]{width:70px;text-align:right}
     <div id="savedList" style="display:flex;flex-direction:column;gap:6px;max-height:220px;overflow-y:auto;margin-top:8px"></div>
   </div>
   <div>
+    <div class="sl">Paint by Ride</div>
+    <div class="hint">Every saved route, colored by how it was verified - <b style="color:#4a90e2">blue</b> where you personally captured it on camera, <b style="color:#3a7d5c">green</b> where it's Street View only. Nothing painted means nowhere verified yet.</div>
+    <button class="savebtn" id="paintBtn" style="margin-top:8px" onclick="showPaintByRide()">Show painted map</button>
+    <div id="paintStatus" class="hint" style="margin-top:6px"></div>
+  </div>
+  <div>
     <div class="sl">Route</div>
     <button class="savebtn" id="newRouteBtn" onclick="startDraw()">New route</button>
     <div class="hint" style="margin-top:8px">Draw your route on the map to begin - trace it like a pencil, lift and draw again to continue.</div>
@@ -1875,6 +1881,89 @@ function sv(v) {
 }
 
 // ---- Saved routes (server-side storage, so extraction/analysis never has to re-run) ----
+
+let paintPolys = [];
+
+// Pulls every saved route and draws it on one map, colored by how each stretch was
+// actually verified - blue where a real camera (GoPro/DJI/drone) captured it, green
+// where it's Street View only. Unpainted means nowhere verified at all. Deliberately
+// keyed off imageSource (a real capture), not just hasCoverage - Street View existing
+// already isn't an achievement, since that data was there before you showed up.
+async function showPaintByRide() {
+  const gk = $('gkey').value.trim();
+  if (!gk) { log('Enter your Google Maps key first', 'er'); return; }
+  const btn = $('paintBtn');
+  btn.disabled = true;
+  btn.textContent = 'Loading routes...';
+  $('paintStatus').textContent = 'Fetching saved routes...';
+
+  $('empty').style.display = 'none';
+  $('rw').style.display = '';
+  $('vg').style.display = 'none';
+  $('vbr').style.display = 'none';
+  $('vm').style.display = '';
+  $('bg').className = 'vb';
+  $('bm').className = 'vb on';
+  $('bbt').className = 'vb';
+  $('drawBar').style.display = 'none';
+  $('rt').textContent = 'Paint by Ride - field-verified coverage';
+
+  ensureMaps(gk, async () => {
+    initScanMap();
+    google.maps.event.clearListeners(gmap, 'click');
+    paintPolys.forEach(p => p.setMap(null));
+    paintPolys = [];
+
+    try {
+      const listResp = await fetch('/routes/list', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+      const listData = await listResp.json();
+      const routes = listData.routes || [];
+      if (!routes.length) {
+        $('paintStatus').textContent = 'No saved routes yet - run a route first.';
+        btn.disabled = false; btn.textContent = 'Show painted map';
+        return;
+      }
+
+      $('paintStatus').textContent = 'Loading ' + routes.length + ' route(s)...';
+      const bounds = new google.maps.LatLngBounds();
+      let verifiedKm = 0, streetViewKm = 0, totalKm = 0;
+
+      for (const r of routes) {
+        const resp = await fetch('/routes/load', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: r.id }) });
+        const entry = await resp.json();
+        const pts = entry.data && entry.data.res;
+        if (!pts || pts.length < 2) continue;
+
+        for (let i = 0; i < pts.length - 1; i++) {
+          const a = pts[i], b = pts[i + 1];
+          const segKm = hav(a, b) / 1000;
+          totalKm += segKm;
+          let color = null;
+          if (a.imageSource) { color = '#4a90e2'; verifiedKm += segKm; } // blue - captured on camera
+          else if (a.hasCoverage) { color = '#3a7d5c'; streetViewKm += segKm; } // green - Street View only
+          if (!color) continue; // no coverage at all - leave unpainted
+          const poly = new google.maps.Polyline({
+            path: [{ lat: a.lat, lng: a.lon }, { lat: b.lat, lng: b.lon }],
+            strokeColor: color, strokeWeight: 5, strokeOpacity: 0.9, map: gmap
+          });
+          paintPolys.push(poly);
+          bounds.extend({ lat: a.lat, lng: a.lon });
+          bounds.extend({ lat: b.lat, lng: b.lon });
+        }
+      }
+
+      if (paintPolys.length) gmap.fitBounds(bounds);
+      const pct = totalKm ? Math.round((verifiedKm / totalKm) * 100) : 0;
+      $('paintStatus').textContent = verifiedKm.toFixed(1) + ' km field-verified, ' + streetViewKm.toFixed(1) + ' km Street View only, across ' + routes.length + ' route(s) - ' + pct + '% personally captured.';
+      log('Paint by Ride: ' + pct + '% of covered distance is field-verified', 'ok');
+    } catch (e) {
+      $('paintStatus').textContent = 'Failed to load routes: ' + e.message;
+      log('Paint by Ride failed: ' + e.message, 'er');
+    }
+    btn.disabled = false;
+    btn.textContent = 'Show painted map';
+  });
+}
 
 async function refreshSavedList() {
   const list = $('savedList');
