@@ -110,6 +110,8 @@ input[type=number]{width:70px;text-align:right}
 #landing .tagline{font-size:17px;font-weight:400;color:var(--mu);max-width:460px;margin:0 auto 36px;line-height:1.6;letter-spacing:-.005em}
 #landing .launchbtn{background:var(--ac);color:#fff;border:none;border-radius:980px;padding:14px 34px;font-size:16px;font-weight:600;letter-spacing:-.01em;cursor:pointer;transition:.15s;font-family:inherit}
 #landing .launchbtn:hover{background:var(--ac2)}
+#landing .bookbtn{background:transparent;border:1.5px solid var(--ac);color:var(--ac2)}
+#landing .bookbtn:hover{background:rgba(212,90,42,.1)}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/exif-js/2.3.0/exif.js"></script>
 <script src="/gopro-telemetry.bundle.js"></script>
@@ -118,7 +120,11 @@ input[type=number]{width:70px;text-align:right}
 <div id="landing">
   <div class="logo">Urb<span>Ris</span></div>
   <h1>Let's make roads safer.</h1>
-  <button class="launchbtn" onclick="enterApp()">Launch UrbRis</button>
+  <div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center">
+    <button class="launchbtn" onclick="enterApp()">Launch UrbRis</button>
+    <button class="launchbtn bookbtn" onclick="window.open(BOOKING_URL, '_blank')">Book a ride with me</button>
+    <button class="launchbtn bookbtn" onclick="window.open(SUBSCRIBE_URL, '_blank')">Get a new route every week</button>
+  </div>
 </div>
 <header style="display:none">
   <div class="logo">Urb<span>Ris</span></div>
@@ -153,7 +159,18 @@ input[type=number]{width:70px;text-align:right}
     <div class="hint" style="margin-top:8px">Or import a route straight from a GoPro/DJI video's GPS track - no need to draw it by hand.</div>
     <input type="file" id="videoImportInput" accept="video/mp4,video/quicktime,.srt" multiple style="margin-top:6px"/>
     <div id="videoImportStatus" class="hint" style="margin-top:6px"></div>
+    <button class="savebtn" id="recordVideoBtn" style="margin-top:8px" onclick="openCameraRecorder()">Record with phone camera</button>
+    <div id="cameraRecorder" style="display:none;margin-top:8px">
+      <video id="cameraPreview" autoplay playsinline muted style="width:100%;border-radius:8px;background:#000;display:block"></video>
+      <div style="display:flex;gap:8px;margin-top:6px">
+        <button class="vb" id="startRecBtn" onclick="startRecording()">Start Recording</button>
+        <button class="vb" id="stopRecBtn" onclick="stopRecording()" disabled>Stop Recording</button>
+        <button class="vb" id="cancelRecBtn" onclick="closeCameraRecorder()">Cancel</button>
+      </div>
+      <div id="recStatus" class="hint" style="margin-top:6px"></div>
+    </div>
     <div id="fn" style="font-size:11px;color:var(--ok);margin-top:6px"></div>
+    <div style="margin-top:4px"><a href="#" onclick="saveCurrentRoute(); return false;" style="font-size:11px;color:var(--ac2)">Save current route now</a></div>
     <button class="savebtn" id="sendPhone" style="margin-top:8px;display:none">Send to phone (Google Maps)</button>
     <div id="phonePanel" style="display:none;margin-top:8px;text-align:center;background:var(--sf2);border:.5px solid var(--b);border-radius:8px;padding:10px">
       <img id="qrImg" style="width:150px;height:150px;border-radius:6px;background:#fff;padding:6px" alt="QR code for Google Maps directions"/>
@@ -255,6 +272,12 @@ input[type=number]{width:70px;text-align:right}
 </div>
 </div>
 <script>
+// Real Calendly link - update here if it ever changes.
+const BOOKING_URL = 'https://calendly.com/adah147/30min';
+// >>> REPLACE THIS once your Buttondown page is set up (buttondown.email, a couple
+// minutes to create) - it'll look like https://buttondown.email/YOUR-USERNAME
+const SUBSCRIBE_URL = 'https://buttondown.email/YOUR-USERNAME';
+
 const $ = id => document.getElementById(id);
 let rp = [], sp = [], res = [], gmap = null, gm = [], gp = null, gs = [], lpLayer = null, trafficLayer = null, wxData = [], denseCurve = null, densePts = null;
 let drawMode = false, drawPts = [], drawPoly = null, drawMarkers = [];
@@ -833,6 +856,16 @@ async function importRouteFromVideo(file, srtFile) {
     log('No GPS telemetry found in ' + file.name, 'er');
     return;
   }
+  await buildRouteFromVideoAndTelemetry(file, telemetry, srtFile ? 'dji-video' : 'gopro-video', file.name);
+}
+
+// Shared by both the file-upload import and live in-app recording, once each has
+// obtained a {timeSec, lat, lon} telemetry array by whatever means fits its source
+// (parsed from GPMF/SRT for an uploaded file, or captured live via the browser's own
+// geolocation API while recording).
+async function buildRouteFromVideoAndTelemetry(file, telemetry, sourceLabel, displayName) {
+  const gk = $('gkey').value.trim();
+  if (!gk) { log('Enter Google API key first', 'er'); return; }
 
   // Thin dense telemetry to roughly one point per ~20m, matching the throttle used for
   // hand-drawn strokes, purely for defining the route's shape - the full telemetry
@@ -844,14 +877,14 @@ async function importRouteFromVideo(file, srtFile) {
   }
   if (thinned.length < 2) {
     $('videoImportStatus').textContent = '';
-    log('Not enough distinct GPS points in ' + file.name + ' to build a route', 'er');
+    log('Not enough distinct GPS points in ' + displayName + ' to build a route', 'er');
     return;
   }
 
   ensureMaps(gk, async () => {
     initDrawMap(); // ensures gmap/drawPoly exist even if nothing's been drawn yet this session
     $('videoImportStatus').textContent = 'Snapping imported route to roads (' + thinned.length + ' points)...';
-    log('Snapping route from ' + file.name + ' to roads (' + thinned.length + ' points)...', '');
+    log('Snapping route from ' + displayName + ' to roads (' + thinned.length + ' points)...', '');
     try {
       const dense = await snapDrawnRoute(thinned, gk);
       if (!dense.length) throw new Error('No points returned from road snapping');
@@ -871,7 +904,7 @@ async function importRouteFromVideo(file, srtFile) {
       $('drawBar').style.display = 'none';
       $('empty').style.display = 'none';
       $('rw').style.display = '';
-      $('fn').textContent = '+ Imported from ' + file.name + ' (' + dense.length + ' road points)';
+      $('fn').textContent = '+ Imported from ' + displayName + ' (' + dense.length + ' road points)';
       $('sendPhone').style.display = '';
       ust();
 
@@ -882,9 +915,14 @@ async function importRouteFromVideo(file, srtFile) {
       // independent source to compare against.
       $('pw').style.display = '';
       $('pl').textContent = 'Pulling frames from video';
-      $('rt').textContent = 'Extracting frames from ' + file.name + '...';
+      $('rt').textContent = 'Extracting frames from ' + displayName + '...';
       res = [];
       let frameFails = 0;
+      // Use the video's own timestamps for ETA rather than estimating from speed
+      // limits - this is the actual recorded time it took to ride each stretch, more
+      // accurate than a guess.
+      const startTimeSec = telemetry[0].timeSec;
+      const accelSamples = telemetry.accelSamples || []; // only present for GoPro, not DJI SRT or live recording
       for (let i = 0; i < sp.length; i++) {
         const pt = sp[i];
         let best = null, bestDist = Infinity;
@@ -892,11 +930,21 @@ async function importRouteFromVideo(file, srtFile) {
           const d = hav(t, pt);
           if (d < bestDist) { bestDist = d; best = t; }
         }
-        let entry = { km: pt.distKm, lat: pt.lat, lon: pt.lon, heading: pt.heading, imageUrl: '', hasCoverage: false, etaSec: 0 };
+        let entry = { km: pt.distKm, lat: pt.lat, lon: pt.lon, heading: pt.heading, imageUrl: '', hasCoverage: false, etaSec: best ? Math.max(0, best.timeSec - startTimeSec) : 0 };
         if (best) {
+          if (best.altitude != null) entry.altitude = best.altitude;
+          if (best.speed3d != null) entry.speed3dKmh = best.speed3d * 3.6; // GPMF speed is in m/s
+          if (accelSamples.length) {
+            let bestAccel = null, bestAccelDiff = Infinity;
+            for (const a of accelSamples) {
+              const diff = Math.abs(a.timeSec - best.timeSec);
+              if (diff < bestAccelDiff) { bestAccelDiff = diff; bestAccel = a; }
+            }
+            if (bestAccel && bestAccelDiff < 1) entry.accelG = bestAccel.magnitude / 9.80665; // convert m/s^2 to G-force
+          }
           try {
             const frameUrl = await extractVideoFrame(file, best.timeSec);
-            entry = { ...entry, imageUrl: frameUrl, hasCoverage: true, imageSource: srtFile ? 'dji-video' : 'gopro-video' };
+            entry = { ...entry, imageUrl: frameUrl, hasCoverage: true, imageSource: sourceLabel };
           } catch (e) {
             frameFails++;
           }
@@ -918,16 +966,91 @@ async function importRouteFromVideo(file, srtFile) {
       saveCurrentRoute();
       const covered = res.filter(r => r.hasCoverage).length;
       $('cs').textContent = covered + '/' + res.length + ' covered (' + Math.round(covered / res.length * 100) + '%)';
-      $('videoImportStatus').textContent = 'Imported ' + (td(rp) / 1000).toFixed(1) + ' km, ' + covered + '/' + res.length + ' frames pulled from ' + file.name;
-      let msg = 'Route imported from ' + file.name + ': ' + covered + '/' + res.length + ' points got a frame from the footage';
+      $('videoImportStatus').textContent = 'Imported ' + (td(rp) / 1000).toFixed(1) + ' km, ' + covered + '/' + res.length + ' frames pulled from ' + displayName;
+      let msg = 'Route imported from ' + displayName + ': ' + covered + '/' + res.length + ' points got a frame from the footage';
       if (frameFails) msg += ' (' + frameFails + ' failed to extract)';
       log(msg, 'ok');
     } catch (e) {
       $('pw').style.display = 'none';
       $('videoImportStatus').textContent = '';
-      log('Failed to import route from ' + file.name + ': ' + e.message, 'er');
+      log('Failed to import route from ' + displayName + ': ' + e.message, 'er');
     }
   });
+}
+
+let cameraStream = null, mediaRecorder = null, recordedChunks = [], recordStartMs = 0, gpsWatchId = null, recordedTelemetry = [];
+
+// A video recorded live in the browser has no embedded GPS at all - unlike GoPro,
+// which writes location into the file itself via dedicated hardware, browser
+// recording APIs only capture raw video. So GPS is captured separately, in parallel,
+// using the phone's own location while MediaRecorder runs, then paired with the
+// recording afterward and fed into the exact same route-building pipeline used for
+// GoPro/DJI telemetry.
+async function openCameraRecorder() {
+  try {
+    cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+    $('cameraPreview').srcObject = cameraStream;
+    $('cameraRecorder').style.display = '';
+    $('recStatus').textContent = 'Camera ready - mount the phone facing forward, then tap Start Recording once you\'re moving.';
+  } catch (e) {
+    log('Could not access camera: ' + e.message, 'er');
+  }
+}
+
+function closeCameraRecorder() {
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+  if (gpsWatchId != null) { navigator.geolocation.clearWatch(gpsWatchId); gpsWatchId = null; }
+  if (cameraStream) { cameraStream.getTracks().forEach(t => t.stop()); cameraStream = null; }
+  $('cameraRecorder').style.display = 'none';
+  $('startRecBtn').disabled = false;
+  $('stopRecBtn').disabled = true;
+}
+
+function startRecording() {
+  if (!cameraStream) return;
+  if (!navigator.geolocation) { log('This device/browser has no location access - cannot build a route from a live recording', 'er'); return; }
+  recordedChunks = [];
+  recordedTelemetry = [];
+  recordStartMs = Date.now();
+  const mimeType = MediaRecorder.isTypeSupported('video/mp4') ? 'video/mp4' : 'video/webm';
+  mediaRecorder = new MediaRecorder(cameraStream, { mimeType });
+  mediaRecorder.ondataavailable = e => { if (e.data.size) recordedChunks.push(e.data); };
+  mediaRecorder.start();
+  gpsWatchId = navigator.geolocation.watchPosition(
+    pos => {
+      const entry = { timeSec: (Date.now() - recordStartMs) / 1000, lat: pos.coords.latitude, lon: pos.coords.longitude };
+      if (pos.coords.altitude != null) entry.altitude = pos.coords.altitude; // not every device/browser provides this
+      recordedTelemetry.push(entry);
+      $('recStatus').textContent = 'Recording - ' + recordedTelemetry.length + ' GPS point(s) captured so far.';
+    },
+    err => log('GPS error while recording: ' + err.message, 'wn'),
+    { enableHighAccuracy: true, maximumAge: 0 }
+  );
+  $('startRecBtn').disabled = true;
+  $('stopRecBtn').disabled = false;
+  $('recStatus').textContent = 'Recording...';
+}
+
+async function stopRecording() {
+  if (!mediaRecorder) return;
+  const mimeType = mediaRecorder.mimeType;
+  const stopped = new Promise(resolve => { mediaRecorder.onstop = resolve; });
+  mediaRecorder.stop();
+  if (gpsWatchId != null) { navigator.geolocation.clearWatch(gpsWatchId); gpsWatchId = null; }
+  await stopped;
+  if (cameraStream) { cameraStream.getTracks().forEach(t => t.stop()); cameraStream = null; }
+  $('cameraRecorder').style.display = 'none';
+
+  if (recordedTelemetry.length < 2) {
+    log('Not enough GPS points captured during recording to build a route - try recording for longer, outdoors, with location permission granted', 'er');
+    return;
+  }
+  const blob = new Blob(recordedChunks, { type: mimeType });
+  const ext = mimeType.includes('mp4') ? 'mp4' : 'webm';
+  const file = new File([blob], 'recorded-route.' + ext, { type: mimeType });
+  $('videoImportStatus').textContent = 'Building route from recording (' + recordedTelemetry.length + ' GPS point(s))...';
+  log('Recording finished - ' + recordedTelemetry.length + ' GPS point(s) captured, building route...', '');
+  await buildRouteFromVideoAndTelemetry(file, recordedTelemetry, 'phone-recording', 'live recording');
 }
 
 $('videoImportInput').addEventListener('change', e => {
@@ -1038,6 +1161,29 @@ async function fetchSpeedLimits(pts, gk) {
   return speeds;
 }
 
+// Elevation via Google's Elevation API - works for any route regardless of source
+// (drawn, imported from video, whatever), unlike 3D speed/accelerometer which only
+// exist where GoPro telemetry actually captured them.
+async function fetchElevations(pts, gk) {
+  const elevations = new Array(pts.length).fill(null);
+  const B = 100;
+  for (let i = 0; i < pts.length; i += B) {
+    const batch = pts.slice(i, i + B);
+    try {
+      const resp = await fetch('/elevation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ locations: batch.map(p => p.lat + ',' + p.lon), gkey: gk })
+      });
+      const d = await resp.json();
+      (d.results || []).forEach((r, j) => { elevations[i + j] = r.elevation; });
+    } catch (e) {
+      log('Elevation lookup failed for a batch: ' + e.message, 'wn');
+    }
+  }
+  return elevations;
+}
+
 const PROMPT = 'You are an iRAP road safety assessor. Analyse this Street View image. This is a single archived photo that may be months or years old, not a live view - describe only the permanent road infrastructure. Ignore and never mention anything transient that happens to be in the frame: vehicles, pedestrians, cyclists, weather, lighting, or time of day. Return ONLY valid JSON, no markdown, no explanation. Use exactly this structure: {"number_of_lanes":"1/2/3/4+","road_surface":"paved/unpaved/mixed","carriageway_type":"single/dual/one-way","lane_width":"narrow/standard/wide","median_type":"none/painted/raised/barrier","curvature":"straight/slight/moderate/sharp","grade":"flat/undulating/significant","road_condition":"good/fair/poor/very poor","delineation":"good/fair/poor/none","centreline_marking":"yes/no/partial","edge_marking":"yes/no/partial","shoulder_type":"none/unpaved/paved","shoulder_width":"none/narrow/moderate/wide","roadside_object":"none/pole/tree/wall/barrier/cliff/other","roadside_distance":"0-1m/1-5m/5-10m/>10m","safety_barrier":"none/wire rope/guardrail/concrete/damaged","street_lighting":"yes/no/partial","area_type":"rural/semi-rural/suburban/urban","speed_environment":"<60/60-80/80-100/>100","confidence":"high/medium/low","notes":"max 12 words on dominant road-infrastructure risk - never mention vehicles, pedestrians, or weather"}';
 
 const RF = {
@@ -1066,6 +1212,20 @@ function riskScore(irap) {
 function riskColor(score) {
   const hue = Math.round(120 - 120 * Math.max(0, Math.min(1, score)));
   return 'hsl(' + hue + ',72%,50%)';
+}
+
+// Shows whichever of altitude/3D speed/accelerometer intensity a point actually has -
+// altitude comes from Google Elevation (any route), the other two only exist where
+// GoPro telemetry captured them during a video import.
+function renderTelemetryLine(idx) {
+  const r = res[idx];
+  const slot = $('tel' + idx);
+  if (!r || !slot) return;
+  const parts = [];
+  if (r.altitude != null) parts.push(Math.round(r.altitude) + 'm elevation');
+  if (r.speed3dKmh != null) parts.push(Math.round(r.speed3dKmh) + ' km/h (3D)');
+  if (r.accelG != null) parts.push(r.accelG.toFixed(2) + 'G');
+  slot.textContent = parts.join(' \u00b7 ');
 }
 
 async function aiAn(url) {
@@ -1226,10 +1386,11 @@ function attachDronePhotoToPoint(idx, dataUrl) {
   const card = $('grid').querySelector('[data-res-idx="' + idx + '"]');
   if (!card) return;
   card.dataset.url = dataUrl;
-  card.innerHTML = '<img src="' + dataUrl + '" alt="km ' + pt.km.toFixed(2) + ' (drone)" loading="lazy"/><div class="cb"><span class="ckm">km ' + pt.km.toFixed(2) + ' &middot; drone photo</span><div class="cc">' + pt.lat.toFixed(6) + ', ' + pt.lon.toFixed(6) + '</div><div class="cc" id="curve' + idx + '"></div><div class="cc" id="cell' + idx + '"></div><div class="cc" id="addr' + idx + '"></div><button class="ab" data-idx="' + idx + '">Code iRAP attributes</button></div><div class="ip" id="ip' + idx + '"></div><div id="vld' + idx + '"></div>';
+  card.innerHTML = '<img src="' + dataUrl + '" alt="km ' + pt.km.toFixed(2) + ' (drone)" loading="lazy"/><div class="cb"><span class="ckm">km ' + pt.km.toFixed(2) + ' &middot; drone photo</span><div class="cc">' + pt.lat.toFixed(6) + ', ' + pt.lon.toFixed(6) + '</div><div class="cc" id="curve' + idx + '"></div><div class="cc" id="tel' + idx + '"></div><div class="cc" id="cell' + idx + '"></div><div class="cc" id="addr' + idx + '"></div><button class="ab" data-idx="' + idx + '">Code iRAP attributes</button></div><div class="ip" id="ip' + idx + '"></div><div id="vld' + idx + '"></div>';
   card.querySelector('.ab').addEventListener('click', function () {
     ac(this, dataUrl, idx);
   });
+  renderTelemetryLine(idx);
 }
 
 // ---- DJI video: parse the companion .SRT telemetry file ----
@@ -1270,6 +1431,7 @@ async function getGoProTelemetryPoints(file) {
   // instead of another guess at a stream name.
   const telemetry = await window.goproTelemetry(extracted, { groupTimes: 1000 });
   const points = [];
+  const accelSamples = [];
   const foundStreamsByDevice = [];
   for (const devKey in telemetry) {
     const streams = telemetry[devKey] && telemetry[devKey].streams;
@@ -1278,17 +1440,34 @@ async function getGoProTelemetryPoints(file) {
     foundStreamsByDevice.push(devKey + ': ' + (streamKeys.length ? streamKeys.join(', ') : '(no streams)'));
     const gpsKey = streamKeys.find(k => /GPS/i.test(k));
     const gps = gpsKey ? streams[gpsKey] : null;
-    if (!gps || !gps.samples) continue;
-    for (const s of gps.samples) {
-      if (!s.value) continue;
-      // Lat/lon are always the first two values in both GPS5 and GPS9's format.
-      points.push({ timeSec: (s.cts || 0) / 1000, lat: s.value[0], lon: s.value[1] });
+    if (gps && gps.samples) {
+      for (const s of gps.samples) {
+        if (!s.value) continue;
+        // GPS5 and GPS9 both share the same field order for the values we care about:
+        // [lat, lon, altitude, 2D speed, 3D speed, ...]. 3D speed accounts for elevation
+        // change, so it reads slightly higher than 2D speed on any hill - the more
+        // honest number for anything safety-related on rural roads.
+        points.push({ timeSec: (s.cts || 0) / 1000, lat: s.value[0], lon: s.value[1], altitude: s.value[2], speed3d: s.value[4] });
+      }
+    }
+    // Accelerometer - a separate, much higher-frequency stream (~200Hz vs GPS's ~10Hz),
+    // so it's kept as its own list matched to route points by nearest timestamp later,
+    // rather than folded into the GPS points directly.
+    const accelKey = streamKeys.find(k => k === 'ACCL');
+    const accel = accelKey ? streams[accelKey] : null;
+    if (accel && accel.samples) {
+      for (const s of accel.samples) {
+        if (!s.value || s.value.length < 3) continue;
+        const [x, y, z] = s.value;
+        accelSamples.push({ timeSec: (s.cts || 0) / 1000, magnitude: Math.sqrt(x * x + y * y + z * z) });
+      }
     }
   }
   if (!points.length) {
     const detail = foundStreamsByDevice.length ? foundStreamsByDevice.join(' | ') : 'no devices or streams found at all in the parsed data';
     throw new Error('No GPS stream found. Streams actually present: ' + detail);
   }
+  points.accelSamples = accelSamples; // smuggled onto the array so existing callers reading it as a plain point list are unaffected
   return points;
 }
 
@@ -1727,6 +1906,11 @@ $('run').addEventListener('click', async () => {
   }
   log('Speed limits checked - ETA now based on actual road speed', 'ok');
 
+  $('pl').textContent = 'Checking elevation...';
+  const elevations = await fetchElevations(pts, gk);
+  pts.forEach((p, i) => { p.altitude = elevations[i]; });
+  log('Elevation checked for ' + pts.length + ' point(s)', 'ok');
+
   const iv = 100;
   denseCurve = buildDenseCurvature(rp);
   densePts = rp;
@@ -1743,13 +1927,13 @@ $('run').addEventListener('click', async () => {
     card.dataset.resIdx = i;
 
     if (!ok) {
-      card.innerHTML = '<div class="nc">No Street View coverage</div><div class="cb"><span class="ckm">km ' + pt.distKm.toFixed(2) + '</span><div class="cc">' + pt.lat.toFixed(6) + ', ' + pt.lon.toFixed(6) + '</div><div class="cc" id="curve' + i + '"></div><div class="cc" id="cell' + i + '"></div><div class="cc" id="addr' + i + '"></div></div>';
-      res.push({ km: pt.distKm, lat: pt.lat, lon: pt.lon, heading: pt.heading, imageUrl: '', hasCoverage: false, etaSec: pt.etaSec || 0 });
+      card.innerHTML = '<div class="nc">No Street View coverage</div><div class="cb"><span class="ckm">km ' + pt.distKm.toFixed(2) + '</span><div class="cc">' + pt.lat.toFixed(6) + ', ' + pt.lon.toFixed(6) + '</div><div class="cc" id="curve' + i + '"></div><div class="cc" id="tel' + i + '"></div><div class="cc" id="cell' + i + '"></div><div class="cc" id="addr' + i + '"></div></div>';
+      res.push({ km: pt.distKm, lat: pt.lat, lon: pt.lon, heading: pt.heading, imageUrl: '', hasCoverage: false, etaSec: pt.etaSec || 0, altitude: pt.altitude });
     } else {
       const url = svurl(gk, pt.lat, pt.lon, pt.heading);
       card.dataset.url = url;
-      card.innerHTML = '<img src="' + url + '" alt="km ' + pt.distKm.toFixed(2) + '" loading="lazy"/><div class="cb"><span class="ckm">km ' + pt.distKm.toFixed(2) + '</span><div class="cc">' + pt.lat.toFixed(6) + ', ' + pt.lon.toFixed(6) + '</div><div class="cc" id="curve' + i + '"></div><div class="cc" id="cell' + i + '"></div><div class="cc" id="addr' + i + '"></div><button class="ab" data-idx="' + i + '">Code iRAP attributes</button></div><div class="ip" id="ip' + i + '"></div><div id="vld' + i + '"></div>';
-      res.push({ km: pt.distKm, lat: pt.lat, lon: pt.lon, heading: pt.heading, imageUrl: url, hasCoverage: true, etaSec: pt.etaSec || 0 });
+      card.innerHTML = '<img src="' + url + '" alt="km ' + pt.distKm.toFixed(2) + '" loading="lazy"/><div class="cb"><span class="ckm">km ' + pt.distKm.toFixed(2) + '</span><div class="cc">' + pt.lat.toFixed(6) + ', ' + pt.lon.toFixed(6) + '</div><div class="cc" id="curve' + i + '"></div><div class="cc" id="tel' + i + '"></div><div class="cc" id="cell' + i + '"></div><div class="cc" id="addr' + i + '"></div><button class="ab" data-idx="' + i + '">Code iRAP attributes</button></div><div class="ip" id="ip' + i + '"></div><div id="vld' + i + '"></div>';
+      res.push({ km: pt.distKm, lat: pt.lat, lon: pt.lon, heading: pt.heading, imageUrl: url, hasCoverage: true, etaSec: pt.etaSec || 0, altitude: pt.altitude });
     }
     $('grid').appendChild(card);
     $('pf').style.width = Math.round((i+1)/tot*100) + '%';
@@ -1789,6 +1973,11 @@ $('run').addEventListener('click', async () => {
           const cardBtn = $('grid').querySelector('[data-res-idx="' + best + '"] .ab');
           if (cardBtn) { cardBtn.textContent = 'Re-analyse'; cardBtn.classList.add('done'); }
         }
+        if (old.speed3dKmh != null) res[best].speed3dKmh = old.speed3dKmh;
+        if (old.accelG != null) res[best].accelG = old.accelG;
+        if (old.altitude != null) res[best].altitude = old.altitude; // video-derived altitude takes precedence over the fresh Elevation API lookup for this point
+        if (old.etaSec != null) res[best].etaSec = old.etaSec; // video's real elapsed time, more accurate than a speed-limit estimate
+        renderTelemetryLine(best);
         restoredFills++;
       }
       if (old.validationImage) {
@@ -1819,6 +2008,7 @@ $('run').addEventListener('click', async () => {
     const risky = r.curveClass === 'Sharp curve' || r.curveClass === 'Hairpin';
     slot.innerHTML = 'Measured: ' + (isFinite(r.curveRadius) ? Math.round(r.curveRadius) + 'm radius' : '\u221e') + ' &middot; <span style="color:' + (risky ? 'var(--er)' : 'var(--mu)') + '">' + r.curveClass + '</span>';
   });
+  res.forEach((r, i) => renderTelemetryLine(i));
 
   $('xw').style.display = '';
   const c = res.filter(r => r.hasCoverage).length;
@@ -2091,11 +2281,11 @@ function rebuildViewFromRes() {
     card.className = 'card';
     card.dataset.resIdx = i;
     if (!pt.hasCoverage) {
-      card.innerHTML = '<div class="nc">No Street View coverage</div><div class="cb"><span class="ckm">km ' + pt.km.toFixed(2) + '</span><div class="cc">' + pt.lat.toFixed(6) + ', ' + pt.lon.toFixed(6) + '</div><div class="cc" id="curve' + i + '"></div><div class="cc" id="cell' + i + '"></div><div class="cc" id="addr' + i + '"></div></div>';
+      card.innerHTML = '<div class="nc">No Street View coverage</div><div class="cb"><span class="ckm">km ' + pt.km.toFixed(2) + '</span><div class="cc">' + pt.lat.toFixed(6) + ', ' + pt.lon.toFixed(6) + '</div><div class="cc" id="curve' + i + '"></div><div class="cc" id="tel' + i + '"></div><div class="cc" id="cell' + i + '"></div><div class="cc" id="addr' + i + '"></div></div>';
     } else {
       card.dataset.url = pt.imageUrl;
       const abLabel = pt.irap ? 'Re-analyse' : 'Code iRAP attributes';
-      card.innerHTML = '<img src="' + pt.imageUrl + '" alt="km ' + pt.km.toFixed(2) + '" loading="lazy"/><div class="cb"><span class="ckm">km ' + pt.km.toFixed(2) + '</span><div class="cc">' + pt.lat.toFixed(6) + ', ' + pt.lon.toFixed(6) + '</div><div class="cc" id="curve' + i + '"></div><div class="cc" id="cell' + i + '"></div><div class="cc" id="addr' + i + '"></div><button class="ab' + (pt.irap ? ' done' : '') + '" data-idx="' + i + '">' + abLabel + '</button></div><div class="ip" id="ip' + i + '"></div><div id="vld' + i + '"></div>';
+      card.innerHTML = '<img src="' + pt.imageUrl + '" alt="km ' + pt.km.toFixed(2) + '" loading="lazy"/><div class="cb"><span class="ckm">km ' + pt.km.toFixed(2) + '</span><div class="cc">' + pt.lat.toFixed(6) + ', ' + pt.lon.toFixed(6) + '</div><div class="cc" id="curve' + i + '"></div><div class="cc" id="tel' + i + '"></div><div class="cc" id="cell' + i + '"></div><div class="cc" id="addr' + i + '"></div><button class="ab' + (pt.irap ? ' done' : '') + '" data-idx="' + i + '">' + abLabel + '</button></div><div class="ip" id="ip' + i + '"></div><div id="vld' + i + '"></div>';
     }
     $('grid').appendChild(card);
   });
@@ -2127,6 +2317,7 @@ function rebuildViewFromRes() {
       if (ipSlot) rIRAP(ipSlot, r.irap);
     }
     if (r.validationImage) renderValidationBlock(i);
+    renderTelemetryLine(i);
   });
   const c = res.filter(r => r.hasCoverage).length;
   $('cs').textContent = c + '/' + res.length + ' covered (' + Math.round(c / res.length * 100) + '%)';
@@ -2249,10 +2440,10 @@ function toggleTraffic() {
 // rather than zoom-conditional.
 function mapStyles(showLabels) {
   const s = [
-    { elementType: 'geometry', stylers: [{ color: '#1a1a2e' }] },
-    { elementType: 'labels.text.fill', stylers: [{ color: '#8a8a9a' }] },
-    { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#2d2d44' }] },
-    { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0d1b2a' }] },
+    { elementType: 'geometry', stylers: [{ color: '#0e1012' }] },
+    { elementType: 'labels.text.fill', stylers: [{ color: '#888680' }] },
+    { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#1f2124' }] },
+    { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#08090a' }] },
     { featureType: 'poi', stylers: [{ visibility: 'off' }] },
     { featureType: 'administrative.land_parcel', stylers: [{ visibility: 'off' }] },
     { featureType: 'administrative', elementType: 'geometry', stylers: [{ visibility: 'off' }] }
@@ -2387,9 +2578,13 @@ function iMap() {
       if (r.irap) { fill = riskColor(riskScore(r.irap)); stroke = fill; }
       else { fill = '#5a5f66'; stroke = '#3a3d42'; } // covered, not yet analysed
     }
+    // Camera-verified (GoPro/DJI/drone) points get a blue outline layered on top,
+    // matching Paint by Ride's blue-for-verified - keeps the risk-score fill visible
+    // where it exists, rather than replacing it and losing that information.
+    const verified = !!r.imageSource;
     const m = new google.maps.Marker({
       position: { lat: r.lat, lng: r.lon }, map: gmap,
-      icon: { path: google.maps.SymbolPath.CIRCLE, scale: 6, fillColor: fill, fillOpacity: ($('traffic').checked ? 0.55 : 1), strokeColor: stroke, strokeWeight: 1.5 }
+      icon: { path: google.maps.SymbolPath.CIRCLE, scale: 6, fillColor: fill, fillOpacity: ($('traffic').checked ? 0.55 : 1), strokeColor: verified ? '#4a90e2' : stroke, strokeWeight: verified ? 3 : 1.5 }
     });
     if (r.hasCoverage && r.imageUrl) {
       m.addListener('mouseover', () => {
