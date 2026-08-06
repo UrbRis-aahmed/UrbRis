@@ -147,6 +147,10 @@ input[type=number]{width:70px;text-align:right}
     <div id="savedList" style="display:flex;flex-direction:column;gap:6px;max-height:220px;overflow-y:auto;margin-top:8px"></div>
   </div>
   <div>
+    <div class="sl">Completion</div>
+    <div id="completionStats"><div class="hint">No routes drawn yet.</div></div>
+  </div>
+  <div>
     <div class="sl">Paint by Ride</div>
     <div class="hint">Every saved route, colored by how it was verified - <b style="color:#4a90e2">blue</b> where you personally captured it on camera, <b style="color:#3a7d5c">green</b> where it's Street View only. Nothing painted means nowhere verified yet.</div>
     <button class="savebtn" id="paintBtn" style="margin-top:8px" onclick="showPaintByRide()">Show painted map</button>
@@ -289,6 +293,7 @@ window.addEventListener('load', () => {
     $('sbToggle').title = 'Expand sidebar';
   }
   refreshSavedList();
+  refreshCompletionStats();
 });
 
 // Draw mode is the only way in now - the moment a Google Maps key is entered,
@@ -1596,6 +1601,7 @@ async function handleFieldMedia(files) {
   if (tooFar) msg += ' - ' + tooFar + " photo(s) didn't land within " + DRONE_MATCH_RADIUS_M + 'm of any point';
   $('droneStatus').textContent = msg;
   log(msg, (filled || validated) ? 'ok' : 'wn');
+  if (filled || validated) saveCurrentRoute();
 }
 
 $('dronePhotos').addEventListener('change', e => {
@@ -2231,8 +2237,46 @@ async function saveCurrentRoute() {
     currentSavedRouteId = out.id;
     log('Saved as "' + out.name + '"', 'ok');
     refreshSavedList();
+    refreshCompletionStats();
   } catch (e) {
     log('Auto-save failed: ' + e.message, 'er');
+  }
+}
+
+// Shared by the persistent sidebar tracker and Paint by Ride's own summary line -
+// sums total drawn km and camera-verified km across every saved route. Verified is
+// keyed off imageSource (a real capture), same as Paint by Ride's blue/green split,
+// not just hasCoverage - Street View existing already isn't an achievement.
+async function computeCoverageTotals() {
+  const listResp = await fetch('/routes/list', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+  const listData = await listResp.json();
+  const routes = listData.routes || [];
+  let totalKm = 0, verifiedKm = 0;
+  for (const r of routes) {
+    const resp = await fetch('/routes/load', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: r.id }) });
+    const entry = await resp.json();
+    const pts = entry.data && entry.data.res;
+    if (!pts || pts.length < 2) continue;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const segKm = hav(pts[i], pts[i + 1]) / 1000;
+      totalKm += segKm;
+      if (pts[i].imageSource) verifiedKm += segKm;
+    }
+  }
+  return { totalKm, verifiedKm, routeCount: routes.length };
+}
+
+async function refreshCompletionStats() {
+  const el = $('completionStats');
+  if (!el) return;
+  try {
+    const { totalKm, verifiedKm, routeCount } = await computeCoverageTotals();
+    if (!routeCount) { el.innerHTML = '<div class="hint">No routes drawn yet.</div>'; return; }
+    const pct = totalKm ? Math.round((verifiedKm / totalKm) * 100) : 0;
+    el.innerHTML = '<div style="font-size:11px;color:var(--mu);margin-bottom:4px">' + verifiedKm.toFixed(1) + ' / ' + totalKm.toFixed(1) + ' km validated (' + pct + '%)</div>'
+      + '<div style="background:var(--sf2);border-radius:20px;height:8px;overflow:hidden"><div style="background:#4a90e2;height:100%;width:' + pct + '%;transition:width .3s"></div></div>';
+  } catch (e) {
+    el.innerHTML = '<div class="hint">Couldn\'t load progress.</div>';
   }
 }
 
