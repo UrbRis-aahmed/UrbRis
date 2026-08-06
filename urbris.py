@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import json, urllib.request, urllib.error, urllib.parse, webbrowser, os, sys, csv, math, uuid, threading, base64
+import json, urllib.request, urllib.error, urllib.parse, webbrowser, os, sys, csv, math, uuid, base64
 from datetime import datetime, timezone
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
@@ -9,29 +9,40 @@ GRID_SIZE = 0.1  # degrees, roughly 11km - buckets towers for fast nearest-neigh
 TOWER_GRID = {}
 
 # ---- Saved-routes storage --------------------------------------------------
-# Deliberately isolated behind these three functions. Right now it's a JSON
-# file next to the script, which is fine for testing but does NOT survive a
-# Render free-tier restart/redeploy (ephemeral filesystem). If/when this
-# needs to actually persist, swap these three functions for calls to
-# Supabase (or another DB) - nothing else in this file needs to change.
-ROUTES_FILE = os.path.join(BASE, "saved_routes.json")
-_routes_lock = threading.Lock()
+# Supabase (Postgres via its REST API), not a local JSON file - Render's free-tier
+# filesystem is ephemeral and wipes on every restart/redeploy, which is a real risk
+# once actual users are saving routes. Needs SUPABASE_URL and SUPABASE_KEY set as
+# Render environment variables - never hardcoded, never sent to the client.
+#
+# Expected table (create once in the Supabase SQL editor):
+#   create table routes (
+#     id text primary key,
+#     name text,
+#     saved_at timestamptz default now(),
+#     updated_at timestamptz default now(),
+#     meta jsonb,
+#     data jsonb
+#   );
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "").rstrip("/")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
 
-def load_routes_db():
-    if not os.path.exists(ROUTES_FILE):
-        return {}
-    try:
-        with open(ROUTES_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except (json.JSONDecodeError, OSError):
-        return {}
+def supabase_configured():
+    return bool(SUPABASE_URL and SUPABASE_KEY)
 
-def save_routes_db(db):
-    with _routes_lock:
-        tmp = ROUTES_FILE + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(db, f)
-        os.replace(tmp, ROUTES_FILE)
+def supabase_request(method, path, body=None, extra_headers=None):
+    url = SUPABASE_URL + "/rest/v1/" + path
+    headers = {
+        "apikey": SUPABASE_KEY,
+        "Authorization": "Bearer " + SUPABASE_KEY,
+        "Content-Type": "application/json",
+    }
+    if extra_headers:
+        headers.update(extra_headers)
+    payload = json.dumps(body).encode() if body is not None else None
+    req = urllib.request.Request(url, data=payload, headers=headers, method=method)
+    with urllib.request.urlopen(req) as r:
+        raw = r.read()
+        return json.loads(raw) if raw else None
 
 def now_iso():
     return datetime.now(timezone.utc).isoformat()
@@ -166,55 +177,89 @@ class H(BaseHTTPRequestHandler):
             self.wfile.write(json.dumps({"distances": distances}).encode())
             return
         if self.path == "/routes/save":
-            db = load_routes_db()
-            rid = data.get("id") or uuid.uuid4().hex[:12]
-            existing = db.get(rid, {})
-            entry = {
-                "id": rid,
-                "name": data.get("name") or ("Route " + now_iso()),
-                "savedAt": existing.get("savedAt") or now_iso(),
-                "updatedAt": now_iso(),
-                "meta": data.get("meta", {}),
-                "data": data.get("data", {}),
-            }
-            db[rid] = entry
-            save_routes_db(db)
-            self._json({"id": rid, "name": entry["name"], "savedAt": entry["savedAt"]})
+            if not supabase_configured():
+                self._json({"error": "Supabase not configured - set SUPABASE_URL and SUPABASE_KEY on the server"}, code=500)
+                return
+            try:
+                rid = data.get("id") or uuid.uuid4().hex[:12]
+                is_update = bool(data.get("id"))
+                saved_at = now_iso()
+                if is_update:
+                    existing = supabase_request("GET", "routes?id=eq." + urllib.parse.quote(rid) + "&select=saved_at")
+                    if existing:
+                        saved_at = existing[0]["saved_at"]
+                row = {
+                    "id": rid,
+                    "name": data.get("name") or ("Route " + now_iso()),
+                    "saved_at": saved_at,
+                    "updated_at": now_iso(),
+                    "meta": data.get("meta", {}),
+                    "data": data.get("data", {}),
+                }
+                supabase_request("POST", "routes", body=row, extra_headers={"Prefer": "resolution=merge-duplicates"})
+                self._json({"id": rid, "name": row["name"], "savedAt": row["saved_at"]})
+            except urllib.error.HTTPError as e:
+                self._json({"error": "Supabase save failed: " + e.read().decode("utf-8", "ignore")}, code=e.code)
+            except Exception as e:
+                self._json({"error": "Save failed: " + str(e)}, code=500)
             return
         if self.path == "/routes/list":
-            db = load_routes_db()
-            items = [
-                {"id": v["id"], "name": v["name"], "savedAt": v.get("savedAt"), "meta": v.get("meta", {})}
-                for v in db.values()
-            ]
-            items.sort(key=lambda x: x.get("savedAt") or "", reverse=True)
-            self._json({"routes": items})
+            if not supabase_configured():
+                self._json({"error": "Supabase not configured - set SUPABASE_URL and SUPABASE_KEY on the server"}, code=500)
+                return
+            try:
+                # Only the light columns here, not the full route data - listing
+                # shouldn't pull every point/image for every saved route.
+                rows = supabase_request("GET", "routes?select=id,name,saved_at,meta&order=saved_at.desc")
+                items = [{"id": r["id"], "name": r["name"], "savedAt": r.get("saved_at"), "meta": r.get("meta") or {}} for r in (rows or [])]
+                self._json({"routes": items})
+            except urllib.error.HTTPError as e:
+                self._json({"error": "Supabase list failed: " + e.read().decode("utf-8", "ignore")}, code=e.code)
+            except Exception as e:
+                self._json({"error": "List failed: " + str(e)}, code=500)
             return
         if self.path == "/routes/load":
-            db = load_routes_db()
-            entry = db.get(data.get("id", ""))
-            if not entry:
-                self._json({"error": "Route not found - it may have been lost in a server restart"}, code=404)
+            if not supabase_configured():
+                self._json({"error": "Supabase not configured - set SUPABASE_URL and SUPABASE_KEY on the server"}, code=500)
                 return
-            self._json(entry)
+            rid = data.get("id", "")
+            try:
+                rows = supabase_request("GET", "routes?id=eq." + urllib.parse.quote(rid) + "&select=*")
+                if not rows:
+                    self._json({"error": "Route not found"}, code=404)
+                    return
+                r = rows[0]
+                self._json({"id": r["id"], "name": r["name"], "savedAt": r.get("saved_at"), "updatedAt": r.get("updated_at"), "meta": r.get("meta") or {}, "data": r.get("data") or {}})
+            except urllib.error.HTTPError as e:
+                self._json({"error": "Supabase load failed: " + e.read().decode("utf-8", "ignore")}, code=e.code)
+            except Exception as e:
+                self._json({"error": "Load failed: " + str(e)}, code=500)
             return
         if self.path == "/routes/rename":
-            db = load_routes_db()
+            if not supabase_configured():
+                self._json({"error": "Supabase not configured - set SUPABASE_URL and SUPABASE_KEY on the server"}, code=500)
+                return
             rid = data.get("id", "")
-            if rid in db:
-                db[rid]["name"] = data.get("name", db[rid]["name"])
-                save_routes_db(db)
+            try:
+                supabase_request("PATCH", "routes?id=eq." + urllib.parse.quote(rid), body={"name": data.get("name", "")})
                 self._json({"ok": True})
-            else:
-                self._json({"error": "Route not found"}, code=404)
+            except urllib.error.HTTPError as e:
+                self._json({"error": "Supabase rename failed: " + e.read().decode("utf-8", "ignore")}, code=e.code)
+            except Exception as e:
+                self._json({"error": "Rename failed: " + str(e)}, code=500)
             return
         if self.path == "/routes/delete":
-            db = load_routes_db()
+            if not supabase_configured():
+                self._json({"error": "Supabase not configured - set SUPABASE_URL and SUPABASE_KEY on the server"}, code=500)
+                return
             rid = data.get("id", "")
-            if rid in db:
-                del db[rid]
-                save_routes_db(db)
-            self._json({"ok": True})
+            try:
+                supabase_request("DELETE", "routes?id=eq." + urllib.parse.quote(rid))
+                self._json({"ok": True})
+            except urllib.error.HTTPError as e:
+                self._json({"error": "Supabase delete failed: " + e.read().decode("utf-8", "ignore")}, code=e.code)
+            except Exception as e:
+                self._json({"error": "Delete failed: " + str(e)}, code=500)
             return
         if self.path == "/roadsinarea":
             bbox = data.get("bbox", "")  # "south,west,north,east"
@@ -260,7 +305,7 @@ class H(BaseHTTPRequestHandler):
                         content_type = img_resp.headers.get("Content-Type", "image/jpeg").split(";")[0]
                     img_b64 = base64.b64encode(img_data).decode("utf-8")
                 payload = json.dumps({
-                    "model": "claude-opus-4-6", "max_tokens": 800,
+                    "model": "claude-opus-4-8", "max_tokens": 800,
                     "messages": [{"role": "user", "content": [
                         {"type": "image", "source": {"type": "base64", "media_type": content_type, "data": img_b64}},
                         {"type": "text", "text": data["prompt"]}
@@ -285,6 +330,12 @@ class H(BaseHTTPRequestHandler):
                 place_ids = data.get("placeIds", [])
                 params = "&".join("placeId=" + urllib.parse.quote(str(pid)) for pid in place_ids)
                 url = "https://roads.googleapis.com/v1/speedLimits?" + params + "&units=KPH&key=" + gkey
+                req = urllib.request.Request(url)
+            elif self.path == "/elevation":
+                gkey = data.get("gkey", "")
+                locations = data.get("locations", [])
+                locs_str = "|".join(locations)
+                url = "https://maps.googleapis.com/maps/api/elevation/json?locations=" + urllib.parse.quote(locs_str) + "&key=" + gkey
                 req = urllib.request.Request(url)
             else:
                 self.send_response(404)

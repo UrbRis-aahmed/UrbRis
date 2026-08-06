@@ -1252,7 +1252,14 @@ async function aiAn(url) {
   const raw = await r.text();
   if (!r.ok) {
     let msg = 'HTTP ' + r.status;
-    try { const e = JSON.parse(raw); msg = e.error || e.message || JSON.stringify(e); } catch {}
+    try {
+      const e = JSON.parse(raw);
+      // Anthropic's error shape nests the message: {"error":{"type":"...","message":"..."}}
+      // - grabbing e.error directly (when it's an object, not a string) produced
+      // "[object Object]" instead of the real text.
+      if (e.error && typeof e.error === 'object') msg = e.error.message || JSON.stringify(e.error);
+      else msg = e.error || e.message || JSON.stringify(e);
+    } catch {}
     throw new Error(msg);
   }
   let d;
@@ -2385,7 +2392,12 @@ async function deleteSavedRoute(id) {
   if (!confirm('Delete this saved route? This can\'t be undone.')) return;
   try {
     await fetch('/routes/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) });
+    // If you delete the route currently loaded in this session, clear the tracked id -
+    // otherwise the next auto-save (after Pull Images/Risk/Field Media) would upsert
+    // with the same id and silently bring the deleted route back.
+    if (currentSavedRouteId === id) currentSavedRouteId = null;
     refreshSavedList();
+    refreshCompletionStats();
   } catch (e) {
     log('Delete failed: ' + e.message, 'er');
   }
