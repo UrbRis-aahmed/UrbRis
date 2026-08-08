@@ -153,6 +153,47 @@ class H(BaseHTTPRequestHandler):
                 self.send_response(404)
                 self.end_headers()
             return
+        if self.path.startswith("/gpx/"):
+            # A stable, live URL for one saved route's GPX - unlike the client-side
+            # download, Scenic's own servers can actually fetch this directly, which is
+            # what their documented "import GPX from a provided URL" method requires.
+            route_id = self.path[len("/gpx/"):].split("?")[0]
+            if not supabase_configured():
+                self.send_response(500)
+                self.end_headers()
+                return
+            try:
+                rows = supabase_request("GET", "routes?id=eq." + urllib.parse.quote(route_id) + "&select=name,data")
+                if not rows:
+                    self.send_response(404)
+                    self.end_headers()
+                    return
+                route = rows[0]
+                pts = (route.get("data") or {}).get("res", [])
+                name = route.get("name") or "UrbRis Route"
+                esc = lambda s: str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                lines = [
+                    '<?xml version="1.0" encoding="UTF-8"?>',
+                    '<gpx version="1.1" creator="UrbRis" xmlns="http://www.topografix.com/GPX/1/1">',
+                    "  <metadata><name>" + esc(name) + "</name></metadata>",
+                    "  <trk>", "    <name>" + esc(name) + "</name>", "    <trkseg>",
+                ]
+                for p in pts:
+                    lat, lon = p.get("lat"), p.get("lon")
+                    if lat is not None and lon is not None:
+                        lines.append('      <trkpt lat="%.6f" lon="%.6f"></trkpt>' % (lat, lon))
+                lines += ["    </trkseg>", "  </trk>", "</gpx>"]
+                body = ("\n".join(lines) + "\n").encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/gpx+xml")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.send_header("Content-Disposition", 'inline; filename="' + route_id + '.gpx"')
+                self.end_headers()
+                self.wfile.write(body)
+            except Exception:
+                self.send_response(500)
+                self.end_headers()
+            return
         self.send_response(200)
         self.send_header("Content-Type", "text/html")
         self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
@@ -184,13 +225,15 @@ class H(BaseHTTPRequestHandler):
                 rid = data.get("id") or uuid.uuid4().hex[:12]
                 is_update = bool(data.get("id"))
                 saved_at = now_iso()
+                existing_name = None
                 if is_update:
-                    existing = supabase_request("GET", "routes?id=eq." + urllib.parse.quote(rid) + "&select=saved_at")
+                    existing = supabase_request("GET", "routes?id=eq." + urllib.parse.quote(rid) + "&select=saved_at,name")
                     if existing:
                         saved_at = existing[0]["saved_at"]
+                        existing_name = existing[0]["name"]
                 row = {
                     "id": rid,
-                    "name": data.get("name") or ("Route " + now_iso()),
+                    "name": data.get("name") or existing_name or ("Route " + now_iso()),
                     "saved_at": saved_at,
                     "updated_at": now_iso(),
                     "meta": data.get("meta", {}),

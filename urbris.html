@@ -202,6 +202,8 @@ input[type=number]{width:70px;text-align:right}
     </div>
     <button class="savebtn" id="legsBtn" style="margin-top:8px;display:none" onclick="showSuggestedLegs()">Suggest fuel/fatigue stops</button>
     <button class="savebtn" id="gpxBtn" style="margin-top:8px;display:none" onclick="downloadGPX()">Download GPX (for Scenic, Kurviger, etc.)</button>
+    <button class="savebtn" id="gpxLinkBtn" style="margin-top:8px;display:none" onclick="showGPXLink()">Get live link (for Scenic's URL import)</button>
+    <div id="gpxLinkPanel" style="margin-top:6px"></div>
     <div id="legsPanel" style="margin-top:6px"></div>
   </div>
   <div>
@@ -629,6 +631,23 @@ function downloadGPX() {
   log('Downloaded GPX (' + rp.length + ' points) - import into Scenic, Kurviger, or a dedicated GPS unit for exact turn-by-turn', 'ok');
 }
 
+// Scenic's own docs confirm they support importing GPX from a direct URL - but it has
+// to be a real, stable link their servers can fetch, not a one-time local download.
+// This needs the route to actually be saved first (server-side, fetchable by id) -
+// unlike the plain download, which works off whatever's in memory regardless.
+function showGPXLink() {
+  const panel = $('gpxLinkPanel');
+  if (!currentSavedRouteId) {
+    panel.innerHTML = '<div class="hint">Save this route first (it should auto-save shortly after drawing/importing) - the live link needs it to actually exist on the server.</div>';
+    return;
+  }
+  const url = window.location.origin + '/gpx/' + currentSavedRouteId;
+  panel.innerHTML = '<div class="hint">Paste this into Scenic\'s WebApp URL importer (or Kurviger\'s GPX-from-URL option):</div>'
+    + '<input type="text" readonly value="' + url + '" onclick="this.select()" style="margin-top:6px;font-size:11px"/>'
+    + '<div class="hint" style="margin-top:4px">Stays live and up to date - if you re-run Pull Images or Pull Risk on this route later, this same link reflects the update, no need to re-export.</div>';
+  log('Live GPX link ready - paste it into Scenic or Kurviger\'s URL import', 'ok');
+}
+
 function sendToPhone() {
   const url = buildMapsUrl();
   if (!url) return;
@@ -1053,6 +1072,7 @@ async function finishDraw() {
     $('sendPhone').style.display = '';
     $('legsBtn').style.display = '';
     $('gpxBtn').style.display = '';
+    $('gpxLinkBtn').style.display = '';
     $('rt').textContent = 'Route confirmed - click "Pull Images" in the sidebar to continue';
     ust();
     $('run').disabled = false;
@@ -1154,6 +1174,7 @@ async function importRouteFromGPX(file) {
       $('sendPhone').style.display = '';
       $('legsBtn').style.display = '';
       $('gpxBtn').style.display = '';
+      $('gpxLinkBtn').style.display = '';
       ust();
       $('run').disabled = false;
       $('run').textContent = 'Pull Images';
@@ -1250,6 +1271,7 @@ async function buildRouteFromVideoAndTelemetry(file, telemetry, sourceLabel, dis
       $('sendPhone').style.display = '';
       $('legsBtn').style.display = '';
       $('gpxBtn').style.display = '';
+      $('gpxLinkBtn').style.display = '';
       ust();
 
       // Pull an actual frame from the footage for every route point, matched to the
@@ -2656,6 +2678,7 @@ async function loadSavedRoute(id) {
     $('sendPhone').style.display = rp.length ? '' : 'none';
     $('legsBtn').style.display = rp.length ? '' : 'none';
     $('gpxBtn').style.display = rp.length ? '' : 'none';
+    $('gpxLinkBtn').style.display = rp.length ? '' : 'none';
     currentSavedRouteId = id;
     $('riskBtn').style.display = '';
     $('riskBtn').disabled = false;
