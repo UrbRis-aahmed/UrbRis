@@ -178,6 +178,9 @@ input[type=number]{width:70px;text-align:right}
     <div class="hint" style="margin-top:8px">Or import a route straight from a GoPro/DJI video's GPS track - no need to draw it by hand.</div>
     <input type="file" id="videoImportInput" accept="video/mp4,video/quicktime,.srt" multiple style="margin-top:6px"/>
     <div id="videoImportStatus" class="hint" style="margin-top:6px"></div>
+    <div class="hint" style="margin-top:8px">Or import any GPX file - your own saved rides, or a route pulled from Scenic/Kurviger/REVER - and score it, whether you've ridden it or not.</div>
+    <input type="file" id="gpxImportInput" accept=".gpx" style="margin-top:6px"/>
+    <div id="gpxImportStatus" class="hint" style="margin-top:6px"></div>
     <button class="savebtn" id="recordVideoBtn" style="margin-top:8px" onclick="openCameraRecorder()">Record with phone camera</button>
     <div id="cameraRecorder" style="display:none;margin-top:8px">
       <video id="cameraPreview" autoplay playsinline muted style="width:100%;border-radius:8px;background:#000;display:block"></video>
@@ -1073,6 +1076,106 @@ async function finishDraw() {
     $('finishDraw').textContent = 'Finish drawing';
   }
 }
+
+// Builds a route directly from an uploaded GPX file - your own past ride, or a route
+// pulled from Scenic/Kurviger/REVER's public libraries. Unlike video import, a GPX
+// file carries no images - so this produces the same "drawn but not yet imaged" draft
+// state as finishDraw() does, ready for Pull Images/Pull Risk same as any other route.
+// The point: score roads people already ride and search for, not just ones captured
+// in person - Pull Images/Pull Risk still needed afterward to actually assess it.
+function parseGPXPoints(xmlText) {
+  const doc = new DOMParser().parseFromString(xmlText, 'text/xml');
+  if (doc.querySelector('parsererror')) throw new Error('Could not parse this file as GPX (invalid XML)');
+  const pts = [];
+  doc.querySelectorAll('trkpt, rtept').forEach(el => {
+    const lat = parseFloat(el.getAttribute('lat'));
+    const lon = parseFloat(el.getAttribute('lon'));
+    if (!isNaN(lat) && !isNaN(lon)) pts.push({ lat, lon });
+  });
+  return pts;
+}
+
+async function importRouteFromGPX(file) {
+  const gk = $('gkey').value.trim();
+  if (!gk) { log('Enter Google API key first', 'er'); return; }
+  $('gpxImportStatus').textContent = 'Reading ' + file.name + '...';
+  let rawPts;
+  try {
+    rawPts = parseGPXPoints(await file.text());
+  } catch (e) {
+    $('gpxImportStatus').textContent = '';
+    log('Could not read ' + file.name + ': ' + e.message, 'er');
+    return;
+  }
+  if (rawPts.length < 2) {
+    $('gpxImportStatus').textContent = '';
+    log('No usable track points found in ' + file.name, 'er');
+    return;
+  }
+
+  // Thin dense GPX tracks to roughly one point per ~20m, same throttle used for
+  // hand-drawn strokes and video import - defines the route's shape without sending
+  // thousands of redundant points to the Roads API.
+  const thinned = [];
+  let last = null;
+  for (const p of rawPts) {
+    if (!last || hav(last, p) >= 20) { thinned.push(p); last = p; }
+  }
+  if (thinned.length < 2) {
+    $('gpxImportStatus').textContent = '';
+    log('Not enough distinct points in ' + file.name + ' to build a route', 'er');
+    return;
+  }
+
+  ensureMaps(gk, async () => {
+    initDrawMap();
+    $('gpxImportStatus').textContent = 'Snapping imported route to roads (' + thinned.length + ' points)...';
+    log('Snapping route from ' + file.name + ' to roads (' + thinned.length + ' points)...', '');
+    try {
+      const dense = await snapDrawnRoute(thinned, gk);
+      if (!dense.length) throw new Error('No points returned from road snapping');
+      rp = dense;
+      drawMode = false;
+      currentSavedRouteId = null;
+      google.maps.event.clearListeners(gmap, 'click');
+      drawMarkers.forEach(m => m.setMap(null));
+      drawMarkers = [];
+      if (drawPoly) {
+        drawPoly.setPath(dense.map(p => ({ lat: p.lat, lng: p.lon })));
+        drawPoly.setOptions({ strokeColor: '#4f9d76', strokeWeight: 4 });
+        const bounds = new google.maps.LatLngBounds();
+        dense.forEach(p => bounds.extend({ lat: p.lat, lng: p.lon }));
+        gmap.fitBounds(bounds);
+      }
+      $('drawBar').style.display = 'none';
+      $('empty').style.display = 'none';
+      $('rw').style.display = '';
+      $('fn').textContent = '+ Imported from ' + file.name + ' (' + dense.length + ' road points)';
+      $('sendPhone').style.display = '';
+      $('legsBtn').style.display = '';
+      $('gpxBtn').style.display = '';
+      ust();
+      $('run').disabled = false;
+      $('run').textContent = 'Pull Images';
+      res = sp.map(pt => ({ km: pt.distKm, lat: pt.lat, lon: pt.lon, heading: pt.heading, imageUrl: '', hasCoverage: false, etaSec: 0 }));
+      $('xw').style.display = '';
+      rebuildViewFromRes();
+      sv('map');
+      saveCurrentRoute();
+      $('gpxImportStatus').textContent = 'Imported ' + (td(rp) / 1000).toFixed(1) + ' km from ' + file.name + ' - click Pull Images to score it';
+      log('Route imported from GPX: ' + (td(rp) / 1000).toFixed(1) + ' km - click Pull Images to continue', 'ok');
+    } catch (e) {
+      $('gpxImportStatus').textContent = '';
+      log('Failed to import route from ' + file.name + ': ' + e.message, 'er');
+    }
+  });
+}
+
+$('gpxImportInput').addEventListener('change', e => {
+  const file = e.target.files && e.target.files[0];
+  if (file) importRouteFromGPX(file);
+  e.target.value = '';
+});
 
 // Builds a route directly from a video's own GPS track instead of hand-drawing it -
 // reuses the same telemetry parsers built for Field Media (GPMF for GoPro, .SRT for
