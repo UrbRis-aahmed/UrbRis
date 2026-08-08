@@ -158,6 +158,7 @@ input[type=number]{width:70px;text-align:right}
   <div>
     <div class="sl">Saved Routes</div>
     <div class="hint">Saves automatically once images are pulled, and updates in place as you go.</div>
+    <input type="text" id="savedSearch" placeholder="Search by name..." oninput="filterSavedList()" style="margin-top:8px"/>
     <div id="savedList" style="display:flex;flex-direction:column;gap:6px;max-height:220px;overflow-y:auto;margin-top:8px"></div>
   </div>
   <div>
@@ -196,9 +197,8 @@ input[type=number]{width:70px;text-align:right}
       <a id="gmapsLink" href="#" target="_blank" rel="noopener" style="font-size:12px;color:var(--ac2);word-break:break-all;display:block;margin-top:4px">Open in Google Maps</a>
       <div style="font-size:10px;color:var(--mu);margin-top:8px;line-height:1.4;text-align:left">Google Maps recalculates the path between a limited number of stops - on a complex route it may not exactly match what Urbris planned. Ride the road, not the assumption.</div>
     </div>
-    <button class="savebtn" id="compareBtn" style="margin-top:8px;display:none" onclick="compareToGoogleRoute()">Compare to Google's route</button>
-    <div id="compareStatus" class="hint" style="margin-top:6px"></div>
     <button class="savebtn" id="legsBtn" style="margin-top:8px;display:none" onclick="showSuggestedLegs()">Suggest fuel/fatigue stops</button>
+    <button class="savebtn" id="gpxBtn" style="margin-top:8px;display:none" onclick="downloadGPX()">Download GPX (for Scenic, Kurviger, etc.)</button>
     <div id="legsPanel" style="margin-top:6px"></div>
   </div>
   <div>
@@ -546,94 +546,6 @@ function buildMapsUrl() {
   return 'https://www.google.com/maps/dir/?' + params.toString();
 }
 
-// Draws Urbris's actual route alongside what Google's Directions engine computes
-// for the same waypoints it would receive from the QR/phone link - the same
-// "recalculates between a limited number of stops" concern the disclaimer mentions,
-// made visible instead of just asserted. Reuses the exact same smart waypoint
-// selection buildMapsUrl() uses, so this reflects exactly what a rider would get.
-async function compareToGoogleRoute() {
-  if (!rp.length) { log('Load a route first', 'wn'); return; }
-  const gk = $('gkey').value.trim();
-  if (!gk) { log('Enter Google API key first', 'er'); return; }
-
-  const dest = rp[rp.length - 1];
-  const maxWps = Math.min(9, rp.length - 1);
-  const wpCandidates = [{ pt: rp[0], idx: 0 }];
-  if (denseCurve && densePts && densePts.length === rp.length) {
-    const curves = extractDistinctCurves(denseCurve, densePts, maxWps - 1, 150);
-    curves.forEach(c => {
-      let bestIdx = 0, bestDist = Infinity;
-      rp.forEach((p, i) => { const d = hav(p, c); if (d < bestDist) { bestDist = d; bestIdx = i; } });
-      wpCandidates.push({ pt: { lat: c.lat, lon: c.lon }, idx: bestIdx });
-    });
-  }
-  if (wpCandidates.length < maxWps && rp.length > 2) {
-    const need = maxWps - wpCandidates.length;
-    for (let i = 1; i <= need; i++) {
-      const idx = Math.min(rp.length - 2, Math.round(i * (rp.length - 2) / (need + 1)) + 1);
-      wpCandidates.push({ pt: rp[idx], idx });
-    }
-  }
-  wpCandidates.sort((a, b) => a.idx - b.idx);
-  const wps = wpCandidates.map(c => c.pt).slice(0, maxWps);
-
-  $('compareStatus').textContent = 'Computing Google\'s route for comparison...';
-  ensureMaps(gk, () => {
-    initScanMap();
-    google.maps.event.clearListeners(gmap, 'click');
-
-    const urbrisPoly = new google.maps.Polyline({
-      path: rp.map(p => ({ lat: p.lat, lng: p.lon })),
-      strokeColor: '#4f9d76', strokeWeight: 5, strokeOpacity: 0.9, map: gmap
-    });
-
-    const ds = new google.maps.DirectionsService();
-    const usesHighway = res.length && res.some(r => r.speedLimitKmh >= 100);
-    ds.route({
-      origin: { lat: wps[0].lat, lng: wps[0].lon },
-      destination: { lat: dest.lat, lng: dest.lon },
-      waypoints: wps.slice(1).map(p => ({ location: new google.maps.LatLng(p.lat, p.lon), stopover: false })),
-      travelMode: google.maps.TravelMode.DRIVING,
-      avoidHighways: !usesHighway
-    }, (result, status) => {
-      if (status !== 'OK') {
-        $('compareStatus').textContent = '';
-        log('Could not compute Google\'s comparison route: ' + status, 'er');
-        return;
-      }
-      const googlePath = [];
-      result.routes[0].legs.forEach(leg => leg.steps.forEach(step => step.path.forEach(p => googlePath.push(p))));
-      new google.maps.Polyline({
-        path: googlePath, strokeColor: '#e8703f', strokeWeight: 4, strokeOpacity: 0.85, map: gmap
-      });
-
-      // Rough divergence: for a sample of Urbris's own points, how far is the nearest
-      // point on Google's computed path - averaged, gives a real sense of how much the
-      // two paths actually differ, not just that both are "a route" between the stops.
-      let maxDivM = 0, sumDivM = 0, sampleCount = 0;
-      const step = Math.max(1, Math.floor(rp.length / 100));
-      for (let i = 0; i < rp.length; i += step) {
-        let best = Infinity;
-        for (const gp of googlePath) {
-          const d = hav(rp[i], { lat: gp.lat(), lon: gp.lng() });
-          if (d < best) best = d;
-        }
-        sumDivM += best;
-        if (best > maxDivM) maxDivM = best;
-        sampleCount++;
-      }
-      const avgDivM = sampleCount ? sumDivM / sampleCount : 0;
-
-      const bounds = new google.maps.LatLngBounds();
-      rp.forEach(p => bounds.extend({ lat: p.lat, lng: p.lon }));
-      gmap.fitBounds(bounds);
-
-      $('compareStatus').textContent = 'Green = your actual route, orange = what Google would navigate. Average divergence: ' + Math.round(avgDivM) + 'm, max: ' + Math.round(maxDivM) + 'm.';
-      log('Route comparison: avg ' + Math.round(avgDivM) + 'm divergence from Google\'s recalculated path', avgDivM > 100 ? 'wn' : 'ok');
-    });
-  });
-}
-
 // Builds a simple Maps URL scoped to one leg only - same approach as buildMapsUrl
 // (destination + a handful of waypoints, no live current-location origin needed here
 // since each leg has its own defined start point already).
@@ -682,6 +594,36 @@ function showSuggestedLegs() {
   });
   panel.innerHTML = html;
   log('Suggested ' + legs.length + ' leg(s) - route is ' + techNote, 'ok');
+}
+
+// GPX carries the full route - every point Urbris actually captured, not a sparse
+// waypoint set - so apps built for exact track-following (Scenic, Kurviger, Calimoto,
+// Garmin/TomTom motorcycle units) can navigate the precise road, turn for turn.
+// Deliberately not building live navigation ourselves - that's the "let the big fish
+// manage it" call: those apps already solve this well, no reason to compete with them.
+function downloadGPX() {
+  if (!rp.length) { log('Load a route first', 'wn'); return; }
+  const name = ($('fn').textContent || 'UrbRis Route').replace(/^\+\s*/, '');
+  const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  let gpx = '<?xml version="1.0" encoding="UTF-8"?>\n'
+    + '<gpx version="1.1" creator="UrbRis" xmlns="http://www.topografix.com/GPX/1/1">\n'
+    + '  <metadata><name>' + esc(name) + '</name></metadata>\n'
+    + '  <trk>\n    <name>' + esc(name) + '</name>\n    <trkseg>\n';
+  rp.forEach(p => {
+    gpx += '      <trkpt lat="' + p.lat.toFixed(6) + '" lon="' + p.lon.toFixed(6) + '"></trkpt>\n';
+  });
+  gpx += '    </trkseg>\n  </trk>\n</gpx>\n';
+
+  const blob = new Blob([gpx], { type: 'application/gpx+xml' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name.replace(/[^a-z0-9]+/gi, '-').toLowerCase() + '.gpx';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  log('Downloaded GPX (' + rp.length + ' points) - import into Scenic, Kurviger, or a dedicated GPS unit for exact turn-by-turn', 'ok');
 }
 
 function sendToPhone() {
@@ -1106,8 +1048,8 @@ async function finishDraw() {
     $('drawBar').style.display = 'none';
     $('fn').textContent = '+ Drawn route (' + drawPts.length + ' clicks \u2192 ' + dense.length + ' road points)';
     $('sendPhone').style.display = '';
-    $('compareBtn').style.display = '';
     $('legsBtn').style.display = '';
+    $('gpxBtn').style.display = '';
     $('rt').textContent = 'Route confirmed - click "Pull Images" in the sidebar to continue';
     ust();
     $('run').disabled = false;
@@ -1203,8 +1145,8 @@ async function buildRouteFromVideoAndTelemetry(file, telemetry, sourceLabel, dis
       $('rw').style.display = '';
       $('fn').textContent = '+ Imported from ' + displayName + ' (' + dense.length + ' road points)';
       $('sendPhone').style.display = '';
-      $('compareBtn').style.display = '';
       $('legsBtn').style.display = '';
+      $('gpxBtn').style.display = '';
       ust();
 
       // Pull an actual frame from the footage for every route point, matched to the
@@ -1221,7 +1163,6 @@ async function buildRouteFromVideoAndTelemetry(file, telemetry, sourceLabel, dis
       // limits - this is the actual recorded time it took to ride each stretch, more
       // accurate than a guess.
       const startTimeSec = telemetry[0].timeSec;
-      const accelSamples = telemetry.accelSamples || []; // only present for GoPro, not DJI SRT or live recording
       for (let i = 0; i < sp.length; i++) {
         const pt = sp[i];
         let best = null, bestDist = Infinity;
@@ -1233,14 +1174,6 @@ async function buildRouteFromVideoAndTelemetry(file, telemetry, sourceLabel, dis
         if (best) {
           if (best.altitude != null) entry.altitude = best.altitude;
           if (best.speed3d != null) entry.speed3dKmh = best.speed3d * 3.6; // GPMF speed is in m/s
-          if (accelSamples.length) {
-            let bestAccel = null, bestAccelDiff = Infinity;
-            for (const a of accelSamples) {
-              const diff = Math.abs(a.timeSec - best.timeSec);
-              if (diff < bestAccelDiff) { bestAccelDiff = diff; bestAccel = a; }
-            }
-            if (bestAccel && bestAccelDiff < 1) entry.accelG = bestAccel.magnitude / 9.80665; // convert m/s^2 to G-force
-          }
           try {
             const frameUrl = await extractVideoFrame(file, best.timeSec);
             entry = { ...entry, imageUrl: frameUrl, hasCoverage: true, imageSource: sourceLabel };
@@ -1523,7 +1456,6 @@ function renderTelemetryLine(idx) {
   const parts = [];
   if (r.altitude != null) parts.push(Math.round(r.altitude) + 'm elevation');
   if (r.speed3dKmh != null) parts.push(Math.round(r.speed3dKmh) + ' km/h (3D)');
-  if (r.accelG != null) parts.push(r.accelG.toFixed(2) + 'G');
   slot.textContent = parts.join(' \u00b7 ');
 }
 
@@ -1742,7 +1674,6 @@ async function getGoProTelemetryPoints(file) {
   // instead of another guess at a stream name.
   const telemetry = await window.goproTelemetry(extracted, { groupTimes: 1000 });
   const points = [];
-  const accelSamples = [];
   const foundStreamsByDevice = [];
   for (const devKey in telemetry) {
     const streams = telemetry[devKey] && telemetry[devKey].streams;
@@ -1761,24 +1692,11 @@ async function getGoProTelemetryPoints(file) {
         points.push({ timeSec: (s.cts || 0) / 1000, lat: s.value[0], lon: s.value[1], altitude: s.value[2], speed3d: s.value[4] });
       }
     }
-    // Accelerometer - a separate, much higher-frequency stream (~200Hz vs GPS's ~10Hz),
-    // so it's kept as its own list matched to route points by nearest timestamp later,
-    // rather than folded into the GPS points directly.
-    const accelKey = streamKeys.find(k => k === 'ACCL');
-    const accel = accelKey ? streams[accelKey] : null;
-    if (accel && accel.samples) {
-      for (const s of accel.samples) {
-        if (!s.value || s.value.length < 3) continue;
-        const [x, y, z] = s.value;
-        accelSamples.push({ timeSec: (s.cts || 0) / 1000, magnitude: Math.sqrt(x * x + y * y + z * z) });
-      }
-    }
   }
   if (!points.length) {
     const detail = foundStreamsByDevice.length ? foundStreamsByDevice.join(' | ') : 'no devices or streams found at all in the parsed data';
     throw new Error('No GPS stream found. Streams actually present: ' + detail);
   }
-  points.accelSamples = accelSamples; // smuggled onto the array so existing callers reading it as a plain point list are unaffected
   return points;
 }
 
@@ -2288,7 +2206,6 @@ $('run').addEventListener('click', async () => {
           if (cardBtn) { cardBtn.textContent = 'Re-analyse'; cardBtn.classList.add('done'); }
         }
         if (old.speed3dKmh != null) res[best].speed3dKmh = old.speed3dKmh;
-        if (old.accelG != null) res[best].accelG = old.accelG;
         if (old.altitude != null) res[best].altitude = old.altitude; // video-derived altitude takes precedence over the fresh Elevation API lookup for this point
         if (old.etaSec != null) res[best].etaSec = old.etaSec; // video's real elapsed time, more accurate than a speed-limit estimate
         renderTelemetryLine(best);
@@ -2469,31 +2386,45 @@ async function showPaintByRide() {
   });
 }
 
+let allSavedRoutes = [];
+
+function renderSavedListItems(routes) {
+  const list = $('savedList');
+  list.innerHTML = '';
+  if (!routes.length) {
+    list.innerHTML = '<div class="sr-empty">' + (allSavedRoutes.length ? 'No routes match your search' : 'No saved routes yet') + '</div>';
+    return;
+  }
+  routes.forEach(r => {
+    const km = (r.meta && r.meta.totalKm) ? r.meta.totalKm.toFixed(1) + ' km' : '';
+    const dt = r.savedAt ? new Date(r.savedAt).toLocaleDateString() : '';
+    const gaps = (r.meta && r.meta.cellGaps) ? r.meta.cellGaps + ' dead zone' + (r.meta.cellGaps > 1 ? 's' : '') : '';
+    const div = document.createElement('div');
+    div.className = 'sr-item';
+    div.innerHTML = '<div class="sr-main"><div class="sr-name"></div><div class="sr-meta"></div></div>'
+      + '<button class="sr-rename" title="Rename">&#9998;</button><button class="sr-del" title="Delete">&times;</button>';
+    div.querySelector('.sr-name').textContent = r.name;
+    div.querySelector('.sr-meta').textContent = [km, gaps, dt].filter(Boolean).join(' \u00b7 ');
+    div.querySelector('.sr-main').addEventListener('click', () => loadSavedRoute(r.id));
+    div.querySelector('.sr-rename').addEventListener('click', e => { e.stopPropagation(); renameSavedRoute(r.id, r.name); });
+    div.querySelector('.sr-del').addEventListener('click', e => { e.stopPropagation(); deleteSavedRoute(r.id); });
+    list.appendChild(div);
+  });
+}
+
+function filterSavedList() {
+  const q = $('savedSearch').value.trim().toLowerCase();
+  const filtered = q ? allSavedRoutes.filter(r => r.name.toLowerCase().includes(q)) : allSavedRoutes;
+  renderSavedListItems(filtered);
+}
+
 async function refreshSavedList() {
   const list = $('savedList');
   try {
     const resp = await fetch('/routes/list', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
     const data = await resp.json();
-    list.innerHTML = '';
-    if (!data.routes || !data.routes.length) {
-      list.innerHTML = '<div class="sr-empty">No saved routes yet</div>';
-      return;
-    }
-    data.routes.forEach(r => {
-      const km = (r.meta && r.meta.totalKm) ? r.meta.totalKm.toFixed(1) + ' km' : '';
-      const dt = r.savedAt ? new Date(r.savedAt).toLocaleDateString() : '';
-      const gaps = (r.meta && r.meta.cellGaps) ? r.meta.cellGaps + ' dead zone' + (r.meta.cellGaps > 1 ? 's' : '') : '';
-      const div = document.createElement('div');
-      div.className = 'sr-item';
-      div.innerHTML = '<div class="sr-main"><div class="sr-name"></div><div class="sr-meta"></div></div>'
-        + '<button class="sr-rename" title="Rename">&#9998;</button><button class="sr-del" title="Delete">&times;</button>';
-      div.querySelector('.sr-name').textContent = r.name;
-      div.querySelector('.sr-meta').textContent = [km, gaps, dt].filter(Boolean).join(' \u00b7 ');
-      div.querySelector('.sr-main').addEventListener('click', () => loadSavedRoute(r.id));
-      div.querySelector('.sr-rename').addEventListener('click', e => { e.stopPropagation(); renameSavedRoute(r.id, r.name); });
-      div.querySelector('.sr-del').addEventListener('click', e => { e.stopPropagation(); deleteSavedRoute(r.id); });
-      list.appendChild(div);
-    });
+    allSavedRoutes = data.routes || [];
+    filterSavedList(); // re-applies whatever's currently in the search box, if anything
   } catch (e) {
     list.innerHTML = '<div class="sr-empty">Couldn\'t load saved routes</div>';
   }
@@ -2620,8 +2551,8 @@ async function loadSavedRoute(id) {
     // if it had been shown. Rebuilding it from res's own lat/lon fixes both at once.
     rp = res.map(r => ({ lat: r.lat, lon: r.lon }));
     $('sendPhone').style.display = rp.length ? '' : 'none';
-    $('compareBtn').style.display = rp.length ? '' : 'none';
     $('legsBtn').style.display = rp.length ? '' : 'none';
+    $('gpxBtn').style.display = rp.length ? '' : 'none';
     currentSavedRouteId = id;
     $('riskBtn').style.display = '';
     $('riskBtn').disabled = false;
