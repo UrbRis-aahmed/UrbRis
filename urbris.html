@@ -202,7 +202,7 @@ input[type=number]{width:70px;text-align:right}
     </div>
     <button class="savebtn" id="legsBtn" style="margin-top:8px;display:none" onclick="showSuggestedLegs()">Suggest fuel/fatigue stops</button>
     <button class="savebtn" id="gpxBtn" style="margin-top:8px;display:none" onclick="downloadGPX()">Download GPX (for Scenic, Kurviger, etc.)</button>
-    <button class="savebtn" id="gpxLinkBtn" style="margin-top:8px;display:none" onclick="showGPXLink()">Get live link (for Scenic's URL import)</button>
+    <button class="savebtn" id="gpxLinkBtn" style="margin-top:8px;display:none" onclick="showGPXLink()">Send to Scenic / Kurviger</button>
     <div id="gpxLinkPanel" style="margin-top:6px"></div>
     <div id="legsPanel" style="margin-top:6px"></div>
   </div>
@@ -642,10 +642,18 @@ function showGPXLink() {
     return;
   }
   const url = window.location.origin + '/gpx/' + currentSavedRouteId;
-  panel.innerHTML = '<div class="hint">Paste this into Scenic\'s WebApp URL importer (or Kurviger\'s GPX-from-URL option):</div>'
+  const name = ($('fn').textContent || 'UrbRis Route').replace(/^\+\s*/, '');
+  // Scenic's own official integration (github.com/guidove/ScenicAPI) - explicitly
+  // sanctioned by Scenic, not a workaround. Clicking this opens Scenic directly if
+  // installed, or their WebApp login if not - no manual file/URL pasting needed.
+  // Confirmed directly in Scenic's own docs: they copy the GPX to their own server
+  // immediately on click, so this /gpx/ link only needs to stay live for a moment.
+  const scenicUrl = 'https://scenicapp.space/Scenic/api/import/gpxurl?gpxurl=' + encodeURIComponent(url) + '&source=' + encodeURIComponent('UrbRis');
+  panel.innerHTML = '<a href="' + scenicUrl + '" target="_blank" rel="noopener" style="display:block;text-align:center;background:var(--ac);color:#fff;border-radius:980px;padding:10px;font-size:12px;font-weight:600;text-decoration:none">Send to Scenic</a>'
+    + '<div class="hint" style="margin-top:8px">Or paste this link into Kurviger\'s GPX-from-URL import:</div>'
     + '<input type="text" readonly value="' + url + '" onclick="this.select()" style="margin-top:6px;font-size:11px"/>'
-    + '<div class="hint" style="margin-top:4px">Stays live and up to date - if you re-run Pull Images or Pull Risk on this route later, this same link reflects the update, no need to re-export.</div>';
-  log('Live GPX link ready - paste it into Scenic or Kurviger\'s URL import', 'ok');
+    + '<div class="hint" style="margin-top:4px">Stays live and up to date - if you re-run Pull Images or Pull Risk on this route later, both links reflect the update automatically.</div>';
+  log('Scenic/Kurviger links ready for "' + name + '"', 'ok');
 }
 
 function sendToPhone() {
