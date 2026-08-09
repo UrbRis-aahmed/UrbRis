@@ -380,6 +380,29 @@ class H(BaseHTTPRequestHandler):
                 locs_str = "|".join(locations)
                 url = "https://maps.googleapis.com/maps/api/elevation/json?locations=" + urllib.parse.quote(locs_str) + "&key=" + gkey
                 req = urllib.request.Request(url)
+            elif self.path == "/chat":
+                akey = data.get("akey", "")
+                if not akey:
+                    raise ValueError("No Anthropic API key")
+                question = data.get("question", "")
+                context = data.get("context", "")
+                prompt = ("You are analyzing a rider's saved route database from UrbRis, a "
+                           "road-risk verification app for motorcyclists. Here is the current "
+                           "data (route names, distances, risk scores, verification status):\n\n"
+                           + context + "\n\nQuestion: " + question +
+                           "\n\nAnswer concisely and specifically, referencing actual route "
+                           "names from the data above. If the data doesn't contain enough to "
+                           "answer, say so plainly rather than guessing.")
+                payload = json.dumps({
+                    "model": "claude-opus-4-8", "max_tokens": 1000,
+                    "messages": [{"role": "user", "content": prompt}]
+                }).encode()
+                req = urllib.request.Request(
+                    "https://api.anthropic.com/v1/messages", data=payload,
+                    headers={"Content-Type": "application/json",
+                             "x-api-key": akey,
+                             "anthropic-version": "2023-06-01"}
+                )
             else:
                 self.send_response(404)
                 self.end_headers()

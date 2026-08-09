@@ -166,6 +166,13 @@ input[type=number]{width:70px;text-align:right}
     <div id="completionStats"><div class="hint">No routes drawn yet.</div></div>
   </div>
   <div>
+    <div class="sl">Ask About Your Routes</div>
+    <div class="hint">Recommendations and analytics across every saved route - "which route is riskiest," "how many km have I verified this month," "recommend a route under 30km."</div>
+    <input type="text" id="routeChatInput" placeholder="Ask a question..." style="margin-top:8px" onkeydown="if(event.key==='Enter')askAboutRoutes()"/>
+    <button class="savebtn" style="margin-top:8px" onclick="askAboutRoutes()">Ask</button>
+    <div id="routeChatAnswer" style="margin-top:8px"></div>
+  </div>
+  <div>
     <div class="sl">Paint by Ride</div>
     <div class="hint">Every saved route, colored by how it was verified - <b style="color:#4a90e2">blue</b> where you personally captured it on camera, <b style="color:#3a7d5c">green</b> where it's Street View only. Nothing painted means nowhere verified yet.</div>
     <button class="savebtn" id="paintBtn" style="margin-top:8px" onclick="showPaintByRide()">Show painted map</button>
@@ -2656,6 +2663,58 @@ async function refreshCompletionStats() {
       + '<div style="background:var(--sf2);border-radius:20px;height:8px;overflow:hidden"><div style="background:#4a90e2;height:100%;width:' + pct + '%;transition:width .3s"></div></div>';
   } catch (e) {
     el.innerHTML = '<div class="hint">Couldn\'t load progress.</div>';
+  }
+}
+
+async function askAboutRoutes() {
+  const q = $('routeChatInput').value.trim();
+  if (!q) return;
+  const ak = $('akey').value.trim();
+  if (!ak) { log('Enter your Anthropic API key first', 'er'); return; }
+  const answerEl = $('routeChatAnswer');
+  answerEl.innerHTML = '<div class="hint">Thinking...</div>';
+  try {
+    const listResp = await fetch('/routes/list', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    const listData = await listResp.json();
+    const routes = listData.routes || [];
+    if (!routes.length) {
+      answerEl.innerHTML = '<div class="hint">No saved routes yet to ask about.</div>';
+      return;
+    }
+    // Lightweight summary only - name, distance, hazard/gap counts, verification status,
+    // date - not full point/image data. Same fields Paint by Ride and Completion already
+    // use, just handed to Claude as readable text instead of drawn on a map.
+    const context = routes.map(r => {
+      const m = r.meta || {};
+      const dt = r.savedAt ? new Date(r.savedAt).toLocaleDateString() : 'unknown date';
+      return '- "' + r.name + '": ' + (m.totalKm != null ? m.totalKm.toFixed(1) + 'km' : 'distance unknown')
+        + ', ' + (m.points || '?') + ' points'
+        + (m.highRisk ? ', ' + m.highRisk + ' high-risk point(s)' : ', no high-risk points flagged')
+        + (m.cellGaps ? ', ' + m.cellGaps + ' cell coverage gap(s)' : ', no cell gaps')
+        + ', saved ' + dt;
+    }).join('\n');
+
+    const resp = await fetch('/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question: q, context, akey: ak })
+    });
+    const raw = await resp.text();
+    if (!resp.ok) {
+      let msg = 'HTTP ' + resp.status;
+      try {
+        const e = JSON.parse(raw);
+        if (e.error && typeof e.error === 'object') msg = e.error.message || JSON.stringify(e.error);
+        else msg = e.error || e.message || JSON.stringify(e);
+      } catch {}
+      throw new Error(msg);
+    }
+    const d = JSON.parse(raw);
+    const text = (d.content && d.content[0] && d.content[0].text) || '';
+    answerEl.innerHTML = '<div style="background:var(--sf2);border-radius:8px;padding:10px;font-size:12.5px;line-height:1.6;white-space:pre-wrap">' + (text || 'No answer returned.') + '</div>';
+    log('Answered: "' + q + '"', 'ok');
+  } catch (e) {
+    answerEl.innerHTML = '<div class="hint" style="color:var(--er)">Couldn\'t get an answer: ' + e.message + '</div>';
   }
 }
 
