@@ -224,6 +224,13 @@ body[data-workspace-mode="library"] .main{background:radial-gradient(circle at 7
 .mode-panel[data-mode-panel="field"] #paintBtn{border-color:rgba(109,166,216,.28)}
 @media(max-width:1120px){.workspace-mode-nav{margin-left:10px}.mode-tab{min-width:72px;padding:0 9px}.mode-tab small{display:none}.header-status{display:none}.layout{grid-template-columns:310px minmax(0,1fr)}}
 @media(max-width:820px){header{overflow-x:auto}.workspace-mode-nav{order:3;margin-left:8px}.brand-lockup.app-brand{min-width:126px}.badge{display:none}.intelligence-rail{grid-template-columns:repeat(2,1fr);height:auto}.rail-step{min-height:42px;border-bottom:1px solid var(--b)}.layout{grid-template-columns:minmax(280px,84vw) minmax(0,1fr)}}
+/* V2.1 — explicit cross-mode workflow handoff */
+.next-step-card{display:none;margin:4px 12px 2px;padding:13px;border:1px solid rgba(221,106,50,.28);border-radius:12px;background:linear-gradient(135deg,rgba(221,106,50,.10),rgba(221,106,50,.025));box-shadow:0 10px 30px rgba(0,0,0,.12)}
+.next-step-card.visible{display:block}.next-step-kicker{font-size:8px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--ac2)}.next-step-title{font-size:14px;font-weight:750;color:var(--tx);margin-top:3px}.next-step-copy{font-size:10px;color:var(--mu);line-height:1.5;margin:4px 0 10px}.next-step-btn{width:100%;border:0;border-radius:9px;background:var(--ac);color:#fff;padding:10px 12px;font:inherit;font-size:11px;font-weight:750;cursor:pointer;text-align:left;display:flex;align-items:center;justify-content:space-between}.next-step-btn:hover{background:var(--ac2)}
+.mode-tab.attention{color:var(--tx)}.mode-tab.attention:after{content:'';width:5px;height:5px;border-radius:50%;background:var(--ac);position:absolute;right:8px;top:9px;box-shadow:0 0 0 4px rgba(221,106,50,.12)}.mode-tab{position:relative}
+#logWrap summary{cursor:pointer;color:var(--mu);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;list-style:none}#logWrap summary::-webkit-details-marker{display:none}#logWrap summary:after{content:' +';color:var(--ac2)}#logWrap[open] summary:after{content:' −'}#logWrap .log{margin-top:7px}
+@media(max-width:820px){header{position:sticky;top:0;z-index:50;display:flex!important;flex-wrap:wrap;height:auto;min-height:58px;padding:10px 12px 0;overflow:visible}.brand-lockup.app-brand{height:36px}.workspace-mode-nav{order:3;width:100%;margin:4px -12px 0;padding:0 8px;overflow-x:auto;border-top:1px solid var(--b);background:rgba(11,14,13,.96)}.mode-tab{flex:1;min-width:76px;height:48px;padding:0 10px;align-items:center}.mode-tab small{display:none}.layout,.layout.collapsed{display:block!important;height:auto;min-height:calc(100vh - 96px)}.sidebar,.layout.collapsed .sidebar{width:100%;height:auto;max-height:none;border-right:0;border-bottom:1px solid var(--b);padding:10px 10px 12px;overflow:visible}.layout.collapsed .sidebar>*:not(#sbToggle){display:block!important}#sbToggle{display:none}.mode-context{display:none}.main{padding:10px;min-height:60vh}.intelligence-rail{display:none}#gmap{height:62vh;min-height:420px;border-radius:12px}.rh{top:96px;overflow-x:auto}.rh>div:last-child{min-width:max-content}.grid{grid-template-columns:1fr}.next-step-card{margin:4px 2px 2px}.mode-panel[data-mode-panel="analyze"]>#run,.mode-panel[data-mode-panel="analyze"]>#riskBtn{margin-left:2px;margin-right:2px;width:calc(100% - 4px)}.mode-panel[data-mode-panel="analyze"]>#pw,.mode-panel[data-mode-panel="analyze"]>#sw,.mode-panel[data-mode-panel="analyze"]>#xw{margin-left:2px;margin-right:2px}}
+@media(max-width:430px){.mode-tab{min-width:70px;padding:0 7px}.mode-tab .mode-label{font-size:10px}.main{padding:8px}#gmap{height:58vh;min-height:380px}.landing-shell{padding-left:16px;padding-right:16px}}
 </style></head>
 <body>
 <div id="landing">
@@ -343,6 +350,11 @@ body[data-workspace-mode="library"] .main{background:radial-gradient(circle at 7
 <button class="savebtn" id="gpxLinkBtn" onclick="showGPXLink()" style="margin-top:8px;display:none">Send to Scenic / Kurviger</button>
 <div id="gpxLinkPanel" style="margin-top:6px"></div>
 <div id="legsPanel" style="margin-top:6px"></div>
+</div><div class="next-step-card" id="routeNextStep" aria-live="polite">
+<div class="next-step-kicker">Route ready</div>
+<div class="next-step-title" id="routeNextTitle">Continue to analysis</div>
+<div class="next-step-copy" id="routeNextCopy">Collect road imagery next. UrbRis will keep this route in view and take you directly to the analysis controls.</div>
+<button class="next-step-btn" id="routeNextBtn" type="button" onclick="continueRouteWorkflow()"><span id="routeNextBtnLabel">Pull Images</span><span aria-hidden="true">→</span></button>
 </div><div id="sw" style="display:none">
 <div class="sl">Route</div>
 <div class="stats">
@@ -360,7 +372,7 @@ body[data-workspace-mode="library"] .main{background:radial-gradient(circle at 7
 </div><button class="btn" disabled="" id="run">Draw a route first</button><button class="btn" disabled="" id="riskBtn" onclick="pullRisk()" style="margin-top:8px;display:none">Pull Risk</button><div id="pw" style="display:none">
 <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--mu);margin-bottom:4px"><span id="pl">Extracting</span><span id="pp">0%</span></div>
 <div class="pb"><div class="pf" id="pf"></div></div>
-</div><div><div class="sl">Log</div><div class="log" id="log"></div></div><div id="xw" style="display:none">
+</div><details id="logWrap"><summary>Activity log</summary><div class="log" id="log"></div></details><div id="xw" style="display:none">
 <button class="xb" id="xb">Export CSV with iRAP</button>
 <button class="xb" id="bb" style="margin-top:8px">Print ride briefing</button>
 <button class="xb" id="snapshotBtn" onclick="generateSnapshot()" style="margin-top:8px">Share route snapshot</button>
@@ -881,6 +893,7 @@ function sendToPhone() {
 $('sendPhone').addEventListener('click', sendToPhone);
 
 function startDraw() {
+  if (typeof setRouteNextStep === 'function') setRouteNextStep(null);
   const gk = $('gkey').value.trim();
   if (!gk) { log('Enter Google API key first', 'er'); return; }
   drawMode = true;
@@ -1299,10 +1312,11 @@ async function finishDraw() {
     $('conditionsBtn').style.display = '';
     $('gpxBtn').style.display = '';
     $('gpxLinkBtn').style.display = '';
-    $('rt').textContent = 'Route confirmed - click "Pull Images" in the sidebar to continue';
+    $('rt').textContent = 'Route confirmed — ready for road observations';
     ust();
     $('run').disabled = false;
     $('run').textContent = 'Pull Images';
+    setRouteNextStep('images');
     // Save a draft immediately - just the geometry, no images/risk yet - so a route
     // isn't lost if "New route" gets clicked before Pull Images ever runs. Pull Images
     // later overwrites res with real data and updates this same saved entry in place.
@@ -1405,6 +1419,7 @@ async function importRouteFromGPX(file) {
       ust();
       $('run').disabled = false;
       $('run').textContent = 'Pull Images';
+      setRouteNextStep('images');
       res = sp.map(pt => ({ km: pt.distKm, lat: pt.lat, lon: pt.lon, heading: pt.heading, imageUrl: '', hasCoverage: false, etaSec: 0 }));
       $('xw').style.display = '';
       rebuildViewFromRes();
@@ -1545,6 +1560,7 @@ async function buildRouteFromVideoAndTelemetry(file, telemetry, sourceLabel, dis
       $('riskBtn').style.display = '';
       $('riskBtn').disabled = false;
       $('riskBtn').textContent = 'Pull Risk';
+      setRouteNextStep('risk');
       $('xw').style.display = '';
       rebuildViewFromRes();
       sv('map');
@@ -2609,6 +2625,7 @@ $('run').addEventListener('click', async () => {
   $('riskBtn').style.display = '';
   $('riskBtn').disabled = false;
   $('riskBtn').textContent = 'Pull Risk';
+  setRouteNextStep('risk');
   saveCurrentRoute();
 });
 
@@ -3796,6 +3813,38 @@ const WORKSPACE_MODE_META = {
   field:   { title: 'Field',   desc: 'Verify the road yourself and close gaps in the baseline.' },
   library: { title: 'Library', desc: 'Return to saved routes, progress and cross-route intelligence.' }
 };
+function setRouteNextStep(stage) {
+  const card = document.getElementById('routeNextStep');
+  if (!card) return;
+  const title = document.getElementById('routeNextTitle');
+  const copy = document.getElementById('routeNextCopy');
+  const label = document.getElementById('routeNextBtnLabel');
+  const analyzeTab = document.querySelector('.mode-tab[data-mode="analyze"]');
+  if (!stage) { card.classList.remove('visible'); if (analyzeTab) analyzeTab.classList.remove('attention'); return; }
+  card.dataset.stage = stage;
+  card.classList.add('visible');
+  if (analyzeTab) analyzeTab.classList.add('attention');
+  if (stage === 'images') {
+    title.textContent = 'Continue to analysis';
+    copy.textContent = 'Route confirmed. Collect Street View observations next, then UrbRis can code road risk.';
+    label.textContent = 'Pull Images';
+  } else {
+    title.textContent = 'Road imagery ready';
+    copy.textContent = 'Observations are collected. Continue into road-risk coding.';
+    label.textContent = 'Pull Risk';
+  }
+}
+function continueRouteWorkflow() {
+  const card = document.getElementById('routeNextStep');
+  const stage = card && card.dataset.stage || 'images';
+  setWorkspaceMode('analyze');
+  const target = stage === 'risk' ? document.getElementById('riskBtn') : document.getElementById('run');
+  if (target) {
+    target.scrollIntoView({behavior:'smooth',block:'center'});
+    target.animate([{boxShadow:'0 0 0 0 rgba(221,106,50,0)'},{boxShadow:'0 0 0 5px rgba(221,106,50,.22)'},{boxShadow:'0 0 0 0 rgba(221,106,50,0)'}],{duration:900});
+    if (!target.disabled) setTimeout(() => target.click(), 180);
+  }
+}
 function setWorkspaceMode(mode) {
   if (!WORKSPACE_MODE_META[mode]) return;
   document.querySelectorAll('.mode-tab').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
