@@ -235,6 +235,8 @@ input[type=number]{width:70px;text-align:right}
     <div class="or"><label>Light pollution</label><input type="checkbox" id="lp" checked style="width:auto;cursor:pointer"/></div>
     <div class="or" style="margin-top:8px"><label>Live traffic</label><input type="checkbox" id="traffic" checked style="width:auto;cursor:pointer"/></div>
     <div style="margin-top:4px"><a href="#" onclick="refreshTraffic(); return false;" style="font-size:11px;color:var(--ac2)">Force-refresh traffic tiles</a></div>
+    <div class="or" style="margin-top:8px"><label>Weather radar</label><input type="checkbox" id="radar" style="width:auto;cursor:pointer"/></div>
+    <div class="hint" style="margin-top:4px">Live observed precipitation (ECCC), not a forecast - updates roughly every 10 min.</div>
   </div>
   <div id="sw" style="display:none">
     <div class="sl">Route</div>
@@ -622,8 +624,15 @@ async function checkRoadConditions() {
   panel.innerHTML = '<div class="hint">Checking Ontario 511 for live conditions along this route...</div>';
   try {
     const resp = await fetch('/roadconditions511', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
-    const events = await resp.json();
-    if (!Array.isArray(events)) throw new Error('Unexpected response from 511');
+    const raw = await resp.text();
+    if (!resp.ok) {
+      let msg = 'HTTP ' + resp.status;
+      try { const e = JSON.parse(raw); msg = e.error || msg; } catch {}
+      throw new Error(msg);
+    }
+    let events;
+    try { events = JSON.parse(raw); } catch { throw new Error('511 returned something that wasn\'t valid JSON'); }
+    if (!Array.isArray(events)) throw new Error('Unexpected response shape from 511');
 
     // Sample rp rather than checking every point against every event - a proximity
     // flag doesn't need pixel-perfect precision, and this is province-wide data
@@ -788,6 +797,8 @@ function initDrawMap() {
     });
     $('lp').addEventListener('change', toggleLightPollution);
     if ($('lp').checked) toggleLightPollution();
+    $('radar').addEventListener('change', toggleRadar);
+    if ($('radar').checked) toggleRadar();
     $('traffic').addEventListener('change', toggleTraffic);
     if ($('traffic').checked) toggleTraffic();
   }
@@ -991,6 +1002,8 @@ function initScanMap() {
     });
     $('lp').addEventListener('change', toggleLightPollution);
     if ($('lp').checked) toggleLightPollution();
+    $('radar').addEventListener('change', toggleRadar);
+    if ($('radar').checked) toggleRadar();
     $('traffic').addEventListener('change', toggleTraffic);
     if ($('traffic').checked) toggleTraffic();
   }
@@ -2927,28 +2940,81 @@ function lightPollutionLayer() {
   });
 }
 
+// Converts a standard slippy-map tile coordinate into the lat/lon bounding box a WMS
+// GetMap request needs. Standard Web Mercator tile math - every mapping library uses
+// some form of this.
+function tileToLatLonBBox(x, y, zoom) {
+  const n = Math.pow(2, zoom);
+  const lonMin = x / n * 360 - 180;
+  const lonMax = (x + 1) / n * 360 - 180;
+  const toLat = (yTile) => {
+    const rad = Math.atan(Math.sinh(Math.PI * (1 - 2 * yTile / n)));
+    return rad * 180 / Math.PI;
+  };
+  const latMax = toLat(y);
+  const latMin = toLat(y + 1);
+  return { latMin, lonMin, latMax, lonMax };
+}
+
+// Live weather radar from Environment and Climate Change Canada's MSC GeoMet service -
+// genuinely observed precipitation, not a forecast, updated roughly every 10 minutes.
+// Confirmed keyless/open access. WMS 1.3.0 with EPSG:4326 uses reversed axis order
+// (lat,lon,lat,lon) in BBOX - easy to get backwards and get a garbled or blank tile.
+function radarLayer() {
+  return new google.maps.ImageMapType({
+    getTileUrl: function (coord, zoom) {
+      if (zoom > 10 || coord.y < 0 || coord.y >= Math.pow(2, zoom)) return null;
+      const n = Math.pow(2, zoom);
+      let x = coord.x % n; if (x < 0) x += n;
+      const b = tileToLatLonBBox(x, coord.y, zoom);
+      const bbox = b.latMin + ',' + b.lonMin + ',' + b.latMax + ',' + b.lonMax;
+      return 'https://geo.weather.gc.ca/geomet?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap'
+        + '&LAYERS=RADAR_1KM_RRAI&CRS=EPSG:4326&BBOX=' + bbox
+        + '&WIDTH=256&HEIGHT=256&FORMAT=image/png';
+    },
+    tileSize: new google.maps.Size(256, 256),
+    maxZoom: 10, minZoom: 0,
+    name: 'Weather Radar', opacity: 0.7
+  });
+}
+
 const LP_MAX_ZOOM = 7; // above this, tile seams become obtrusive and the wide-view aesthetic isn't the point anyway
+
+let radarLayerObj = null;
 
 function toggleLightPollution() {
   if (!gmap) return;
-  updateLightPollutionVisibility();
-  if (!gmap._lpZoomListenerAdded) {
-    gmap.addListener('zoom_changed', updateLightPollutionVisibility);
-    gmap._lpZoomListenerAdded = true;
+  updateOverlays();
+  if (!gmap._overlayZoomListenerAdded) {
+    gmap.addListener('zoom_changed', updateOverlays);
+    gmap._overlayZoomListenerAdded = true;
   }
 }
 
-function updateLightPollutionVisibility() {
+function toggleRadar() {
   if (!gmap) return;
-  const wantOn = $('lp').checked && gmap.getZoom() <= LP_MAX_ZOOM;
+  updateOverlays();
+}
+
+// Manages every overlayMapType together, not per-layer - .clear() (the only reliable
+// way found to evict stale tiles, confirmed earlier with light pollution) wipes every
+// overlay at once, so toggling one independently would silently wipe the other if
+// each layer tried to manage itself separately.
+function updateOverlays() {
+  if (!gmap) return;
+  const wantLP = $('lp').checked && gmap.getZoom() <= LP_MAX_ZOOM;
+  const wantRadar = !!($('radar') && $('radar').checked);
   if (!lpLayer) lpLayer = lightPollutionLayer();
-  const idx = gmap.overlayMapTypes.getArray().indexOf(lpLayer);
-  const isOn = idx !== -1;
-  if (wantOn === isOn) return; // already in the right state, nothing to do
+  if (!radarLayerObj) radarLayerObj = radarLayer();
+  const current = gmap.overlayMapTypes.getArray();
+  const isLPOn = current.indexOf(lpLayer) !== -1;
+  const isRadarOn = current.indexOf(radarLayerObj) !== -1;
+  if (wantLP === isLPOn && wantRadar === isRadarOn) return; // already correct, nothing to do
   // .clear() reliably evicts already-rendered tiles; removeAt() on its own was
-  // observed leaving stale light-pollution tiles visible after switching off.
+  // observed leaving stale tiles visible after switching a layer off.
   gmap.overlayMapTypes.clear();
-  if (wantOn) gmap.overlayMapTypes.push(lpLayer);
+  if (wantLP) gmap.overlayMapTypes.push(lpLayer);
+  if (wantRadar) gmap.overlayMapTypes.push(radarLayerObj);
 }
 
 // Fully detaches and reattaches the traffic layer, forcing Google to issue completely
@@ -3027,6 +3093,8 @@ function iMap() {
     });
     $('lp').addEventListener('change', toggleLightPollution);
     if ($('lp').checked) toggleLightPollution();
+    $('radar').addEventListener('change', toggleRadar);
+    if ($('radar').checked) toggleRadar();
     $('traffic').addEventListener('change', toggleTraffic);
     if ($('traffic').checked) toggleTraffic();
   }
