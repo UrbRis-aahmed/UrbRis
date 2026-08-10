@@ -120,6 +120,39 @@ input[type=number]{width:70px;text-align:right}
 .clList{margin:0;padding:20px 0 20px 18px;list-style:disc}
 .clList li{font-size:14px;line-height:1.6;color:var(--tx);margin-bottom:6px}
 .clList li:last-child{margin-bottom:0}
+
+/* --- UrbRis V3: Route Intelligence profile --- */
+.route-profile{display:none;margin:0 0 16px;background:linear-gradient(145deg,rgba(212,90,42,.09),rgba(255,255,255,.018) 42%,rgba(255,255,255,.01));border:1px solid var(--b2);border-radius:16px;overflow:hidden}
+.route-profile.show{display:block}
+.rp-head{display:flex;justify-content:space-between;gap:18px;align-items:flex-start;padding:18px 20px;border-bottom:1px solid var(--b)}
+.rp-eyebrow{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--ac2);font-weight:700}
+.rp-title{font-size:20px;line-height:1.2;font-weight:650;letter-spacing:-.025em;margin-top:5px}
+.rp-sub{font-size:11px;color:var(--mu);margin-top:5px;max-width:650px}
+.rp-badge{white-space:nowrap;border:1px solid var(--b2);background:rgba(0,0,0,.16);border-radius:999px;padding:6px 10px;font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.rp-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;background:var(--b)}
+.rp-metric{background:rgba(16,18,20,.9);padding:16px 18px;min-height:118px}
+.rp-metric-label{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--mu);font-weight:600}
+.rp-metric-value{display:flex;align-items:baseline;gap:6px;margin-top:7px}
+.rp-metric-value strong{font-size:29px;letter-spacing:-.04em;font-weight:650}
+.rp-metric-value span{font-size:11px;color:var(--mu)}
+.rp-metric-note{font-size:11px;color:var(--mu);line-height:1.45;margin-top:5px}
+.rp-bar{height:4px;background:rgba(255,255,255,.08);border-radius:4px;overflow:hidden;margin-top:10px}
+.rp-bar>i{display:block;height:100%;background:var(--ac);border-radius:4px}
+.rp-evidence{display:flex;gap:7px;flex-wrap:wrap;margin-top:8px}
+.rp-evidence span{font-size:10px;border:1px solid var(--b);border-radius:999px;padding:3px 7px;color:var(--mu)}
+.rp-body{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(280px,.65fr);gap:0;border-top:1px solid var(--b)}
+.rp-section{padding:18px 20px}
+.rp-section+.rp-section{border-left:1px solid var(--b)}
+.rp-section h3{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--mu);font-weight:600;margin:0 0 10px}
+.segment-list{display:flex;flex-direction:column;gap:7px}
+.segment-row{display:grid;grid-template-columns:72px 1fr auto;align-items:center;gap:10px;padding:9px 10px;background:rgba(255,255,255,.025);border:1px solid var(--b);border-radius:9px}
+.segment-km{font-family:monospace;font-size:10px;color:var(--ac2)}
+.segment-main b{display:block;font-size:11px;font-weight:600}.segment-main small{display:block;color:var(--mu);font-size:10px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.segment-score{text-align:right;font-size:11px;font-weight:650}.segment-score small{display:block;color:var(--mu);font-size:9px;font-weight:500}
+.rp-factors{display:flex;gap:6px;flex-wrap:wrap}.rp-factor{font-size:10px;padding:5px 7px;border-radius:6px;background:rgba(212,90,42,.09);border:1px solid rgba(212,90,42,.18);color:var(--tx)}
+.rp-empty{font-size:11px;color:var(--mu);line-height:1.55}
+@media(max-width:850px){.rp-grid{grid-template-columns:1fr}.rp-body{grid-template-columns:1fr}.rp-section+.rp-section{border-left:0;border-top:1px solid var(--b)}.rp-head{flex-direction:column}.rp-badge{align-self:flex-start}}
+
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/exif-js/2.3.0/exif.js"></script>
 <script src="/gopro-telemetry.bundle.js"></script>
@@ -421,12 +454,13 @@ body[data-workspace-mode="library"] .main{background:radial-gradient(circle at 7
 <div class="rt" id="rt">Route frames</div>
 <div style="display:flex;gap:10px;align-items:center">
 <div style="display:flex;align-items:center;gap:6px">
-<label style="font-size:11px;color:var(--mu)">Min risk</label>
+<label style="font-size:11px;color:var(--mu)">Min index</label>
 <input id="rf" max="100" min="0" step="5" style="width:80px;cursor:pointer" type="range" value="0"/>
 <span id="rfv" style="font-size:11px;color:var(--mu);width:38px">0%+</span>
 </div>
 <span id="cs" style="font-size:12px;color:var(--mu)"></span>
 <button class="vb on" id="bg" onclick="sv('grid')">Images</button>
+<button class="vb" id="bp" onclick="sv('profile')">Profile</button>
 <button class="vb" id="bm" onclick="sv('map')">Map</button>
 <button class="vb" id="bbt" onclick="sv('brief')">Briefing</button>
 </div>
@@ -435,6 +469,21 @@ body[data-workspace-mode="library"] .main{background:radial-gradient(circle at 7
 <div id="wxbar" style="display:none">
 <div class="wxwarnmsg" id="wxwarnmsg" style="display:none">⚠ Rain or high wind flagged along part of this route - check the cards below.</div>
 <div class="wxstrip" id="wxstrip"></div>
+</div>
+<div class="route-profile" id="routeProfile" aria-live="polite">
+  <div class="rp-head">
+    <div><div class="rp-eyebrow">UrbRis Route Profile</div><div class="rp-title" id="rpTitle">Route intelligence</div><div class="rp-sub">Road Risk Index summarizes flagged infrastructure indicators. Technical Complexity comes from measured route geometry. Neither is a crash-probability estimate.</div></div>
+    <div class="rp-badge" id="rpState">Assessment building</div>
+  </div>
+  <div class="rp-grid">
+    <div class="rp-metric"><div class="rp-metric-label">Road Risk Index</div><div class="rp-metric-value"><strong id="rpRisk">—</strong><span id="rpRiskScale">/ 100</span></div><div class="rp-metric-note" id="rpRiskNote">Run road analysis to calculate infrastructure indicators.</div><div class="rp-bar"><i id="rpRiskBar" style="width:0%"></i></div></div>
+    <div class="rp-metric"><div class="rp-metric-label">Technical Complexity</div><div class="rp-metric-value"><strong id="rpTech">—</strong><span>/ 100</span></div><div class="rp-metric-note" id="rpTechNote">Calculated from measured curvature along the route.</div><div class="rp-bar"><i id="rpTechBar" style="width:0%"></i></div></div>
+    <div class="rp-metric"><div class="rp-metric-label">Assessment Confidence</div><div class="rp-metric-value"><strong id="rpConfidence">—</strong></div><div class="rp-metric-note" id="rpConfidenceNote">Confidence reflects evidence coverage and coding completeness.</div><div class="rp-evidence" id="rpEvidence"></div></div>
+  </div>
+  <div class="rp-body">
+    <div class="rp-section"><h3>Priority segments</h3><div class="segment-list" id="rpSegments"><div class="rp-empty">Segments appear as route evidence and analysis become available.</div></div></div>
+    <div class="rp-section"><h3>Dominant infrastructure indicators</h3><div class="rp-factors" id="rpFactors"></div><div class="rp-empty" id="rpFactorsEmpty">Run road analysis to identify recurring infrastructure indicators.</div></div>
+  </div>
 </div>
 <div id="vg"><div class="grid" id="grid"></div></div>
 <div id="vm" style="display:none">
@@ -447,9 +496,9 @@ body[data-workspace-mode="library"] .main{background:radial-gradient(circle at 7
 </div>
 <div style="font-size:11px;color:var(--mu);margin-bottom:10px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
 <div style="display:flex;align-items:center;gap:6px">
-<span>Low risk</span>
+<span>Fewer indicators</span>
 <div style="width:110px;height:8px;border-radius:4px;background:linear-gradient(90deg,hsl(120,72%,50%),hsl(60,72%,50%),hsl(0,72%,50%))"></div>
-<span>High risk</span>
+<span>More indicators</span>
 </div>
 <div style="display:flex;align-items:center;gap:5px"><span style="width:9px;height:9px;border-radius:50%;background:#5a5f66;display:inline-block"></span>Not yet analysed</div>
 <div style="display:flex;align-items:center;gap:5px"><span style="width:9px;height:9px;border-radius:50%;background:#f09595;display:inline-block"></span>No coverage</div>
@@ -1815,6 +1864,115 @@ function riskColor(score) {
   return 'hsl(' + hue + ',72%,50%)';
 }
 
+
+// V3 product-level metrics. Road Risk Index intentionally describes the existing
+// infrastructure-indicator heuristic; it is not presented as crash probability.
+function riskIndexLabel(v) {
+  if (v == null) return 'Pending';
+  if (v < 25) return 'Lower';
+  if (v < 50) return 'Moderate';
+  if (v < 75) return 'Elevated';
+  return 'High';
+}
+function technicalScoreForPoint(r) {
+  const weights = { 'Straight':0, 'Gentle curve':25, 'Moderate curve':50, 'Sharp curve':78, 'Hairpin':100 };
+  return weights[r && r.curveClass] != null ? weights[r.curveClass] : 0;
+}
+function technicalLabel(v) {
+  if (v < 20) return 'Low';
+  if (v < 45) return 'Moderate';
+  if (v < 70) return 'High';
+  return 'Very high';
+}
+function evidenceSummary() {
+  if (!res.length) return { field:0, street:0, unverified:0, coded:0, label:'Pending' };
+  let field=0, street=0, unverified=0, coded=0;
+  res.forEach(r => {
+    if (r.imageSource || r.validationImage) field++;
+    else if (r.hasCoverage) street++;
+    else unverified++;
+    if (r.irap) coded++;
+  });
+  const n=res.length;
+  const coverage=(field+street)/n;
+  const codedShare=coded/n;
+  const fieldShare=field/n;
+  // A transparent evidence-completeness heuristic, not statistical confidence.
+  const strength=(coverage*.50)+(codedShare*.35)+(fieldShare*.15);
+  const label=strength>=.80?'High':strength>=.52?'Medium':'Low';
+  return {field,street,unverified,coded,label,strength};
+}
+function indicatorCounts(points) {
+  const labels={road_surface:'Surface',road_condition:'Road condition',delineation:'Delineation',safety_barrier:'Barrier',shoulder_type:'Shoulder',roadside_distance:'Roadside proximity',curvature:'Visual curvature',street_lighting:'Lighting'};
+  const counts={};
+  points.forEach(r => {
+    if (!r.irap) return;
+    Object.keys(RF).forEach(k => {
+      const v=r.irap[k];
+      if (v!=null && RF[k].some(f=>String(v).toLowerCase().includes(f))) counts[labels[k]||k]=(counts[labels[k]||k]||0)+1;
+    });
+  });
+  return Object.entries(counts).sort((a,b)=>b[1]-a[1]);
+}
+function buildRouteSegments() {
+  if (!res.length) return [];
+  const totalKm = Math.max(.1, res[res.length-1].km || 0);
+  const targetKm = Math.max(1.5, Math.min(5, totalKm/10));
+  const bins=[];
+  let start=0;
+  while(start<res.length){
+    const startKm=res[start].km||0;
+    let end=start;
+    while(end+1<res.length && (res[end+1].km-startKm)<targetKm) end++;
+    const pts=res.slice(start,end+1);
+    const analysed=pts.filter(r=>r.irap);
+    const idx=analysed.length?Math.round(analysed.reduce((a,r)=>a+riskScore(r.irap),0)/analysed.length*100):null;
+    const tech=Math.round(pts.reduce((a,r)=>a+technicalScoreForPoint(r),0)/Math.max(1,pts.length));
+    const factors=indicatorCounts(pts).slice(0,2).map(x=>x[0]);
+    const evidence=pts.filter(r=>r.imageSource||r.validationImage).length;
+    bins.push({startKm,endKm:pts[pts.length-1].km||startKm,idx,tech,factors,evidence,points:pts});
+    start=end+1;
+  }
+  return bins.sort((a,b)=>((b.idx==null?-1:b.idx)*1.2+b.tech)-((a.idx==null?-1:a.idx)*1.2+a.tech));
+}
+function currentRouteDisplayName(){
+  const raw=($('fn')&&$('fn').textContent||'').replace(/^\+\s*/,'').trim();
+  return raw || 'Current route';
+}
+function renderRouteProfile() {
+  const panel=$('routeProfile');
+  if(!panel) return;
+  if(!res.length){ panel.classList.remove('show'); return; }
+  panel.classList.add('show');
+  $('rpTitle').textContent=currentRouteDisplayName();
+  const analysed=res.filter(r=>r.irap);
+  const idx=analysed.length?Math.round(analysed.reduce((a,r)=>a+riskScore(r.irap),0)/analysed.length*100):null;
+  const tech=Math.round(res.reduce((a,r)=>a+technicalScoreForPoint(r),0)/Math.max(1,res.length));
+  const ev=evidenceSummary();
+  $('rpRisk').textContent=idx==null?'—':idx;
+  $('rpRiskScale').style.display=idx==null?'none':'';
+  $('rpRiskBar').style.width=(idx||0)+'%';
+  $('rpRiskNote').textContent=idx==null?'Run road analysis to calculate infrastructure indicators.':riskIndexLabel(idx)+' — average flagged infrastructure indicators across '+analysed.length+' coded observation'+(analysed.length===1?'':'s')+'.';
+  $('rpTech').textContent=tech;
+  $('rpTechBar').style.width=tech+'%';
+  $('rpTechNote').textContent=technicalLabel(tech)+' — based on measured route curvature, separate from infrastructure risk indicators.';
+  $('rpConfidence').textContent=ev.label;
+  $('rpConfidenceNote').textContent=ev.coded+' of '+res.length+' points coded; confidence describes evidence completeness, not prediction certainty.';
+  const pct=n=>Math.round(n/res.length*100);
+  $('rpEvidence').innerHTML='<span>'+pct(ev.field)+'% field verified</span><span>'+pct(ev.street)+'% Street View</span><span>'+pct(ev.unverified)+'% unverified</span>';
+  $('rpState').textContent=analysed.length===res.length?'Assessment complete':analysed.length?'Assessment partial':'Evidence collected';
+  const segs=buildRouteSegments().slice(0,5);
+  $('rpSegments').innerHTML=segs.length?segs.map((sg,i)=>{
+    const score=sg.idx==null?sg.tech:Math.round(sg.idx*.65+sg.tech*.35);
+    const label=sg.idx==null?'Complexity':riskIndexLabel(sg.idx);
+    const detail=(sg.factors.length?sg.factors.join(' · '):technicalLabel(sg.tech)+' geometry')+(sg.evidence?' · field evidence':'');
+    return '<div class="segment-row"><div class="segment-km">KM '+sg.startKm.toFixed(1)+'–'+sg.endKm.toFixed(1)+'</div><div class="segment-main"><b>'+(i===0?'Highest-priority segment':label+' segment')+'</b><small>'+detail+'</small></div><div class="segment-score">'+score+'<small>priority</small></div></div>';
+  }).join(''):'<div class="rp-empty">No segment data available yet.</div>';
+  const factors=indicatorCounts(res).slice(0,6);
+  $('rpFactors').innerHTML=factors.map(([name,count])=>'<span class="rp-factor">'+name+' · '+count+'</span>').join('');
+  $('rpFactorsEmpty').style.display=factors.length?'none':'';
+}
+
 // Shows whichever of altitude/3D speed/accelerometer intensity a point actually has -
 // altitude comes from Google Elevation (any route), the other two only exist where
 // GoPro telemetry captured them during a video import.
@@ -2626,6 +2784,7 @@ $('run').addEventListener('click', async () => {
   $('riskBtn').disabled = false;
   $('riskBtn').textContent = 'Pull Risk';
   setRouteNextStep('risk');
+  renderRouteProfile();
   saveCurrentRoute();
 });
 
@@ -2657,6 +2816,8 @@ async function pullRisk() {
   $('pw').style.display = 'none';
   btn.disabled = false;
   btn.textContent = 'Re-run risk analysis';
+  renderRouteProfile();
+  sv('profile');
   saveCurrentRoute();
 }
 
@@ -2664,11 +2825,14 @@ function sv(v) {
   $('vg').style.display = v === 'grid' ? '' : 'none';
   $('vm').style.display = v === 'map' ? '' : 'none';
   $('vbr').style.display = v === 'brief' ? '' : 'none';
+  $('routeProfile').style.display = v === 'profile' ? '' : 'none';
   $('bg').className = 'vb' + (v === 'grid' ? ' on' : '');
+  $('bp').className = 'vb' + (v === 'profile' ? ' on' : '');
   $('bm').className = 'vb' + (v === 'map' ? ' on' : '');
   $('bbt').className = 'vb' + (v === 'brief' ? ' on' : '');
   if (v === 'map') drawMap($('gkey').value.trim());
   if (v === 'brief') renderBriefingTab();
+  if (v === 'profile') renderRouteProfile();
 }
 
 // ---- Saved routes (server-side storage, so extraction/analysis never has to re-run) ----
@@ -3043,6 +3207,7 @@ function rebuildViewFromRes() {
   const c = res.filter(r => r.hasCoverage).length;
   $('cs').textContent = c + '/' + res.length + ' covered (' + Math.round(c / res.length * 100) + '%)';
   $('rt').textContent = 'Route frames - ' + res.length + ' points (loaded from saved route)';
+  renderRouteProfile();
   applyFilter();
   sv('grid');
 }
@@ -3438,10 +3603,10 @@ function buildBriefingData() {
   if (analysed.length) {
     if (highRisk.length) {
       const worst = highRisk[0];
-      overview += 'Road conditions average ' + Math.round(avgRisk * 100) + '% risk across the ' + analysed.length + ' coded sections. Showing hazards at ' + Math.round(riskThreshold * 100) + '% risk or higher (' + highRisk.length + ' point' + (highRisk.length > 1 ? 's' : '') + ') - the most significant is around km ' + worst.r.km.toFixed(1) + ' (' + (totalKm - worst.r.km).toFixed(1) + ' km from the end) at ' + Math.round(worst.sc * 100) + '% risk' + (worst.r.irap.notes ? ' (' + worst.r.irap.notes + ')' : '') + '.';
+      overview += 'Road conditions average ' + Math.round(avgRisk * 100) + ' Road Risk Index across the ' + analysed.length + ' coded sections. Showing hazards at ' + Math.round(riskThreshold * 100) + ' index or higher (' + highRisk.length + ' point' + (highRisk.length > 1 ? 's' : '') + ') - the most significant is around km ' + worst.r.km.toFixed(1) + ' (' + (totalKm - worst.r.km).toFixed(1) + ' km from the end) at ' + Math.round(worst.sc * 100) + ' index' + (worst.r.irap.notes ? ' (' + worst.r.irap.notes + ')' : '') + '.';
       if (flaggedWx.length) overview += ' Treat that stretch with extra caution given the weather flagged nearby.';
     } else {
-      overview += 'Road conditions across the ' + analysed.length + ' coded sections average a low ' + Math.round(avgRisk * 100) + '% risk, with nothing at or above the ' + Math.round(riskThreshold * 100) + '% risk filter currently set.';
+      overview += 'Road conditions across the ' + analysed.length + ' coded sections average a low ' + Math.round(avgRisk * 100) + ' Road Risk Index, with nothing at or above the ' + Math.round(riskThreshold * 100) + ' index filter currently set.';
     }
   } else {
     overview += 'No sections have been iRAP-coded yet, so this briefing reflects weather only - run the analysis for road-hazard detail.';
