@@ -208,6 +208,8 @@ input[type=number]{width:70px;text-align:right}
       <div style="font-size:10px;color:var(--mu);margin-top:8px;line-height:1.4;text-align:left">Google Maps recalculates the path between a limited number of stops - on a complex route it may not exactly match what Urbris planned. Ride the road, not the assumption.</div>
     </div>
     <button class="savebtn" id="legsBtn" style="margin-top:8px;display:none" onclick="showSuggestedLegs()">Suggest fuel/fatigue stops</button>
+    <button class="savebtn" id="conditionsBtn" style="margin-top:8px;display:none" onclick="checkRoadConditions()">Check live road conditions (Ontario 511)</button>
+    <div id="conditionsPanel" style="margin-top:6px"></div>
     <button class="savebtn" id="gpxBtn" style="margin-top:8px;display:none" onclick="downloadGPX()">Download GPX (for Scenic, Kurviger, etc.)</button>
     <button class="savebtn" id="gpxLinkBtn" style="margin-top:8px;display:none" onclick="showGPXLink()">Send to Scenic / Kurviger</button>
     <div id="gpxLinkPanel" style="margin-top:6px"></div>
@@ -606,6 +608,63 @@ function showSuggestedLegs() {
   });
   panel.innerHTML = html;
   log('Suggested ' + legs.length + ' leg(s) - route is ' + techNote, 'ok');
+}
+
+// Ontario 511's live construction/closure/incident feed - genuinely open, no key
+// needed. Unlike Google's crowd-inferred traffic, this is official MTO-sourced data
+// that doesn't require other vehicles present to generate a signal, so it isn't
+// subject to the same thin-coverage problem on quiet rural roads.
+const CONDITIONS_RADIUS_KM = 3;
+
+async function checkRoadConditions() {
+  if (!rp.length) { log('Load a route first', 'wn'); return; }
+  const panel = $('conditionsPanel');
+  panel.innerHTML = '<div class="hint">Checking Ontario 511 for live conditions along this route...</div>';
+  try {
+    const resp = await fetch('/roadconditions511', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    const events = await resp.json();
+    if (!Array.isArray(events)) throw new Error('Unexpected response from 511');
+
+    // Sample rp rather than checking every point against every event - a proximity
+    // flag doesn't need pixel-perfect precision, and this is province-wide data
+    // (thousands of events) being checked against a route that could have hundreds
+    // of points.
+    const step = Math.max(1, Math.floor(rp.length / 150));
+    const sampled = [];
+    for (let i = 0; i < rp.length; i += step) sampled.push(rp[i]);
+
+    const nearby = events.filter(e => {
+      if (e.Latitude == null || e.Longitude == null) return false;
+      const pt = { lat: e.Latitude, lon: e.Longitude };
+      return sampled.some(p => hav(p, pt) <= CONDITIONS_RADIUS_KM * 1000);
+    });
+
+    if (!nearby.length) {
+      panel.innerHTML = '<div class="hint">No active construction, closures, or incidents reported near this route right now.</div>';
+      log('511 check: nothing active near this route', 'ok');
+      return;
+    }
+
+    let html = '<div class="hint">' + nearby.length + ' active item(s) near this route:</div>';
+    nearby.forEach(e => {
+      const typeLabel = e.EventType === 'closures' ? 'Closure' : e.EventType === 'accidentsAndIncidents' ? 'Incident' : 'Roadwork';
+      const closureNote = e.IsFullClosure ? ' <b style="color:var(--er)">(full closure)</b>' : '';
+      // Showing the source organization here deliberately - it's the direct, live way
+      // to see whether Waze-sourced (crowd) reports are actually flowing through this
+      // same feed alongside MTO's own official events, since that's not confirmed in
+      // 511's public API docs one way or the other.
+      html += '<div style="background:var(--sf2);border-radius:8px;padding:8px;margin-top:6px;font-size:11px">'
+        + '<b>' + typeLabel + closureNote + '</b> - ' + (e.RoadwayName || 'Unknown road')
+        + ' <span style="color:var(--mu)">(' + (e.Organization || 'unknown source') + ')</span>'
+        + '<div style="color:var(--mu);margin-top:2px">' + (e.Description || '') + '</div>'
+        + '</div>';
+    });
+    panel.innerHTML = html;
+    const orgs = [...new Set(nearby.map(e => e.Organization).filter(Boolean))];
+    log('511 check: ' + nearby.length + ' active item(s) found near this route - source(s): ' + (orgs.join(', ') || 'unknown'), nearby.some(e => e.IsFullClosure) ? 'wn' : 'ok');
+  } catch (e) {
+    panel.innerHTML = '<div class="hint" style="color:var(--er)">Couldn\'t check road conditions: ' + e.message + '</div>';
+  }
 }
 
 // GPX carries the full route - every point Urbris actually captured, not a sparse
@@ -1086,6 +1145,7 @@ async function finishDraw() {
     $('fn').textContent = '+ Drawn route (' + drawPts.length + ' clicks \u2192 ' + dense.length + ' road points)';
     $('sendPhone').style.display = '';
     $('legsBtn').style.display = '';
+    $('conditionsBtn').style.display = '';
     $('gpxBtn').style.display = '';
     $('gpxLinkBtn').style.display = '';
     $('rt').textContent = 'Route confirmed - click "Pull Images" in the sidebar to continue';
@@ -1188,6 +1248,7 @@ async function importRouteFromGPX(file) {
       $('fn').textContent = '+ Imported from ' + file.name + ' (' + dense.length + ' road points)';
       $('sendPhone').style.display = '';
       $('legsBtn').style.display = '';
+      $('conditionsBtn').style.display = '';
       $('gpxBtn').style.display = '';
       $('gpxLinkBtn').style.display = '';
       ust();
@@ -1285,6 +1346,7 @@ async function buildRouteFromVideoAndTelemetry(file, telemetry, sourceLabel, dis
       $('fn').textContent = '+ Imported from ' + displayName + ' (' + dense.length + ' road points)';
       $('sendPhone').style.display = '';
       $('legsBtn').style.display = '';
+      $('conditionsBtn').style.display = '';
       $('gpxBtn').style.display = '';
       $('gpxLinkBtn').style.display = '';
       ust();
@@ -2744,6 +2806,7 @@ async function loadSavedRoute(id) {
     rp = res.map(r => ({ lat: r.lat, lon: r.lon }));
     $('sendPhone').style.display = rp.length ? '' : 'none';
     $('legsBtn').style.display = rp.length ? '' : 'none';
+    $('conditionsBtn').style.display = rp.length ? '' : 'none';
     $('gpxBtn').style.display = rp.length ? '' : 'none';
     $('gpxLinkBtn').style.display = rp.length ? '' : 'none';
     currentSavedRouteId = id;
