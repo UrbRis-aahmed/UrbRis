@@ -1,14 +1,15 @@
 <!DOCTYPE html>
+
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-<meta http-equiv="Pragma" content="no-cache">
-<title>UrbRis v2</title>
+<meta charset="utf-8"/>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<meta content="no-cache, no-store, must-revalidate" http-equiv="Cache-Control"/>
+<meta content="no-cache" http-equiv="Pragma"/>
+<title>UrbRis — Road Intelligence v2</title>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{--bg:#0e1012;--sf:#181a1d;--sf2:#1f2124;--b:rgba(255,255,255,.08);--b2:rgba(255,255,255,.14);--tx:#e8e6e0;--mu:#888680;--ac:#d45a2a;--ac2:#e8703f;--ok:#97c459;--wn:#ef9f27;--er:#f09595;--r:8px}
@@ -122,192 +123,329 @@ input[type=number]{width:70px;text-align:right}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/exif-js/2.3.0/exif.js"></script>
 <script src="/gopro-telemetry.bundle.js"></script>
-</head>
+<style id="urbris-redesign-v3">
+:root{
+  --bg:#0b0e0d;--sf:#121715;--sf2:#18201d;--sf3:#202a26;
+  --b:rgba(229,235,229,.08);--b2:rgba(229,235,229,.16);
+  --tx:#f0f2ec;--mu:#8d9890;--muted2:#69736c;
+  --ac:#dd6a32;--ac2:#f1844e;--ac-soft:rgba(221,106,50,.12);
+  --ok:#8fbf72;--wn:#e3ad54;--er:#e78378;--blue:#6da6d8;
+  --r:10px;--r-lg:16px;--shadow:0 24px 70px rgba(0,0,0,.28);
+}
+html{background:var(--bg)}
+body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);letter-spacing:-.005em}
+button,input{font-family:inherit}
+::selection{background:rgba(221,106,50,.25)}
+.logo{font-family:'Inter',sans-serif;font-weight:760;letter-spacing:-.045em}.logo span{color:var(--ac2)}
+.brand-lockup{display:flex;align-items:baseline;gap:0;position:relative;padding-right:108px}
+.brand-lockup small{position:absolute;left:0;top:27px;font-size:8px;font-weight:700;letter-spacing:.16em;color:var(--mu);white-space:nowrap}
+.app-brand{font-size:19px}.app-brand small{top:23px}
+
+/* Landing */
+#landing{display:flex;align-items:stretch;justify-content:center;text-align:left;padding:0;min-height:100vh;background:
+ radial-gradient(circle at 78% 14%,rgba(221,106,50,.10),transparent 32%),
+ radial-gradient(circle at 8% 82%,rgba(92,126,108,.08),transparent 28%),
+ linear-gradient(180deg,#0c100f 0%,#090c0b 100%);overflow:hidden}
+.landing-shell{width:min(1440px,100%);min-height:100vh;padding:34px clamp(28px,5vw,76px) 48px;display:flex;flex-direction:column;position:relative}
+.landing-shell:before{content:"";position:absolute;inset:0;pointer-events:none;background-image:linear-gradient(rgba(255,255,255,.018) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.018) 1px,transparent 1px);background-size:54px 54px;mask-image:linear-gradient(to right,rgba(0,0,0,.6),transparent 65%)}
+.landing-nav{display:flex;align-items:flex-start;justify-content:space-between;position:relative;z-index:2}
+#landing .logo{font-size:25px;margin:0}
+#landing .brand-lockup small{top:30px}
+.landing-text-link{font-size:12px;color:var(--mu);text-decoration:none;padding:9px 0;border-bottom:1px solid transparent}.landing-text-link:hover{color:var(--tx);border-color:var(--b2)}
+.landing-grid{display:grid;grid-template-columns:minmax(0,.88fr) minmax(520px,1.12fr);align-items:center;gap:clamp(46px,6vw,100px);flex:1;position:relative;z-index:1;padding:50px 0 30px}
+.landing-copy{max-width:640px}.eyebrow{font-size:10px;letter-spacing:.16em;font-weight:700;color:var(--ac2);margin-bottom:22px}
+#landing h1{font-size:clamp(50px,6.2vw,88px);font-weight:760;letter-spacing:-.065em;line-height:.94;margin:0 0 26px;color:var(--tx)}
+#landing h1 span{color:#a9b1aa}
+#landing .tagline{font-size:18px;color:#a3aaa4;max-width:590px;line-height:1.65;margin:0 0 34px}
+.landing-actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+#landing .launchbtn{border-radius:10px;padding:13px 18px;font-size:13px;font-weight:650;min-height:46px;letter-spacing:-.01em;box-shadow:none;display:inline-flex;align-items:center;gap:12px}
+#landing .launchbtn:first-child{background:var(--ac);padding-left:20px;padding-right:16px}
+#landing .launchbtn:first-child:hover{transform:translateY(-1px);background:var(--ac2)}
+#landing .bookbtn{background:rgba(255,255,255,.02);border:1px solid var(--b2);color:var(--tx)}#landing .bookbtn:hover{background:var(--sf2);border-color:rgba(255,255,255,.24)}
+.subscribe-link{border:0;background:transparent;color:var(--mu);padding:14px 0 0;font-size:12px;cursor:pointer}.subscribe-link:hover{color:var(--ac2)}
+.landing-proof{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:54px;border-top:1px solid var(--b);padding-top:18px;max-width:650px}
+.landing-proof div{display:flex;flex-direction:column;gap:4px}.landing-proof b{font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--tx)}.landing-proof span{font-size:11px;line-height:1.45;color:var(--mu)}
+.landing-visual{background:rgba(18,23,21,.8);border:1px solid var(--b2);border-radius:22px;padding:14px;box-shadow:var(--shadow);backdrop-filter:blur(16px);transform:perspective(1200px) rotateY(-2deg) rotateX(1deg)}
+.preview-top{height:36px;display:flex;justify-content:space-between;align-items:center;padding:0 5px 10px;font-size:9px;font-weight:700;letter-spacing:.14em;color:var(--mu)}
+.live-dot{display:flex;gap:7px;align-items:center}.live-dot:before{content:"";width:6px;height:6px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 4px rgba(143,191,114,.1)}
+.preview-map{position:relative;min-height:410px;border-radius:14px;overflow:hidden;background:linear-gradient(145deg,#141b18,#0e1311);border:1px solid var(--b)}
+.map-gridlines{position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.035) 1px,transparent 1px);background-size:44px 44px;opacity:.6}
+.preview-map:before,.preview-map:after{content:"";position:absolute;border:1px solid rgba(126,150,137,.13);border-radius:50%}.preview-map:before{width:360px;height:360px;left:-110px;bottom:-160px}.preview-map:after{width:220px;height:220px;right:-70px;top:-80px}
+.preview-map svg{position:absolute;inset:0;width:100%;height:100%;filter:drop-shadow(0 12px 12px rgba(0,0,0,.35))}.route-shadow{fill:none;stroke:#0a0c0b;stroke-width:12;stroke-linecap:round}.route-line{fill:none;stroke:var(--ac2);stroke-width:5;stroke-linecap:round;stroke-dasharray:10 4}.route-node{stroke:#101513;stroke-width:3}.route-node.start{fill:var(--ok)}.route-node.end{fill:var(--tx)}.risk-node{fill:var(--wn);stroke:#17120a;stroke-width:3}.risk-pulse{fill:var(--er);stroke:rgba(231,131,120,.22);stroke-width:12}
+.map-label{position:absolute;left:46%;top:43%;width:218px;background:rgba(10,14,12,.92);border:1px solid var(--b2);border-radius:10px;padding:10px 11px;box-shadow:0 16px 35px rgba(0,0,0,.28)}.map-label span,.map-label small{display:block;font-size:9px;color:var(--mu)}.map-label b{display:block;font-size:11px;margin:3px 0;color:var(--tx)}
+.preview-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;margin-top:10px;border:1px solid var(--b);border-radius:12px;overflow:hidden;background:var(--b)}.preview-stats div{background:#121715;padding:12px}.preview-stats span{font-size:8px;letter-spacing:.11em;color:var(--mu);display:block;margin-bottom:3px}.preview-stats b{font-size:15px;font-weight:650;color:var(--tx)}
+
+/* App shell */
+header{height:64px;padding:0 20px 0 22px;background:rgba(11,14,13,.92);backdrop-filter:blur(14px);border-bottom:1px solid var(--b);gap:16px;position:relative;z-index:20}
+header .badge{margin-left:14px;background:var(--ac-soft);border-color:rgba(221,106,50,.22);color:var(--ac2);font-weight:700;letter-spacing:.08em;font-size:9px;padding:5px 8px}
+.header-spacer{flex:1}.header-status{font-size:10px;color:var(--mu);display:flex;align-items:center;gap:7px}.header-status span{width:6px;height:6px;border-radius:50%;background:var(--ok)}
+.layout{grid-template-columns:320px minmax(0,1fr);height:calc(100vh - 64px);background:var(--bg)}.layout.collapsed{grid-template-columns:48px minmax(0,1fr)}
+.sidebar{background:#0e1210;border-right:1px solid var(--b);padding:14px 12px 28px;gap:10px}
+.sidebar>div:not(#sw):not(#pw):not(#xw){padding:13px 12px 14px;border:1px solid transparent;border-radius:12px;transition:.15s}.sidebar>div:not(#sw):not(#pw):not(#xw):hover{background:rgba(255,255,255,.012);border-color:var(--b)}
+#sbToggle{width:30px;height:30px;border-radius:8px;background:transparent;border:1px solid var(--b);color:var(--mu);margin-bottom:3px}#sbToggle:hover{background:var(--sf2);border-color:var(--b2);color:var(--tx)}
+.sl{font-size:9px;font-weight:750;letter-spacing:.13em;color:#a0aaa2;margin-bottom:9px}.fl{font-size:10px;color:var(--mu);margin-bottom:5px}
+.hint{font-size:10.5px;color:var(--mu);line-height:1.55}
+input[type=text],input[type=password],input[type=number]{background:#111714;border:1px solid var(--b2);border-radius:8px;color:var(--tx);font-size:11px;padding:8px 9px}input:focus{border-color:rgba(221,106,50,.7);box-shadow:0 0 0 3px rgba(221,106,50,.08)}
+.btn,.savebtn,.xb,.vb,.ab{transition:background .14s,border-color .14s,color .14s,transform .14s}
+.btn{background:var(--ac);border-radius:9px;padding:10px 12px;font-size:12px;font-weight:650}.btn:hover{background:var(--ac2);transform:translateY(-1px)}
+.savebtn,.xb,.vb,.ab{background:#121815;border:1px solid var(--b2);color:#aab2ac}.savebtn{border-radius:8px;padding:7px 9px;text-align:left}.savebtn:hover,.xb:hover,.vb:hover,.ab:hover{background:var(--sf2);border-color:rgba(221,106,50,.42);color:var(--tx)}
+.sr-item{background:#121815;border:1px solid var(--b);border-radius:9px;padding:8px 8px}.sr-name{font-size:11px}.sr-meta{font-size:9px}.stats{gap:5px}.st{background:#121815;border:1px solid var(--b);border-radius:9px;padding:9px 6px}.sv{font-size:17px}.sl2{font-size:8px;letter-spacing:.08em;text-transform:uppercase}
+.dz{border:1px dashed rgba(229,235,229,.2);background:rgba(255,255,255,.01);padding:16px;border-radius:9px}.dz:hover,.dz.over{background:var(--ac-soft);border-color:rgba(221,106,50,.65)}
+.log{background:#0b0f0d;border:1px solid var(--b);border-radius:9px;font-size:9.5px;height:92px}
+.main{padding:18px 20px 28px;background:radial-gradient(circle at 70% 10%,rgba(64,93,77,.05),transparent 32%),var(--bg)}
+.empty{min-height:calc(100vh - 118px);border:1px dashed var(--b);border-radius:16px;background:rgba(255,255,255,.01)}
+.rh{padding:0 2px 12px;margin-bottom:12px;border-bottom:1px solid var(--b)}.rt{font-size:14px;font-weight:650;letter-spacing:-.02em}.vb{border-radius:8px;font-size:10px;padding:6px 10px}.vb.on{background:var(--ac);border-color:var(--ac);color:white}
+.grid{grid-template-columns:repeat(auto-fill,minmax(285px,1fr));gap:12px}.card{background:#111614;border:1px solid var(--b);border-radius:14px;box-shadow:0 6px 22px rgba(0,0,0,.08)}.card img,.nc{height:168px}.cb{padding:11px 12px}.ckm{font-size:10px;letter-spacing:.04em}
+#gmap{height:calc(100vh - 185px);min-height:560px;border-radius:14px;border:1px solid var(--b2);box-shadow:0 16px 50px rgba(0,0,0,.18)}
+.wxcard{background:#111614;border:1px solid var(--b);border-radius:12px}.brf .overview,.brf .stat{background:#111614;border:1px solid var(--b)}
+.clTable tr{border-color:var(--b)}
+
+@media (max-width:1050px){.landing-grid{grid-template-columns:1fr;gap:48px;padding-top:70px}.landing-copy{max-width:760px}.landing-visual{width:min(760px,100%);transform:none}.landing-shell{overflow-y:auto}.landing-proof{max-width:760px}}
+@media (max-width:760px){.landing-shell{padding:24px 20px 34px}.landing-grid{padding-top:65px}.landing-visual{display:none}#landing h1{font-size:clamp(48px,15vw,70px)}#landing .tagline{font-size:16px}.landing-proof{grid-template-columns:1fr;gap:14px}.landing-actions{flex-direction:column;align-items:stretch}#landing .launchbtn{justify-content:center;width:100%}.header-status{display:none}.layout{grid-template-columns:minmax(275px,82vw) minmax(0,1fr)}.main{padding:12px}#gmap{min-height:520px}}
+</style>
+<style id="urbris-v2-ia">
+/* UrbRis v2 — mode-based road intelligence workspace */
+header{padding-right:18px}.workspace-mode-nav{display:flex;align-self:stretch;margin-left:26px;gap:2px}.mode-tab{appearance:none;border:0;border-bottom:2px solid transparent;background:transparent;color:var(--mu);padding:0 14px;min-width:92px;cursor:pointer;display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:1px;transition:.15s}.mode-tab:hover{color:var(--tx);background:rgba(255,255,255,.018)}.mode-tab.active{color:var(--tx);border-bottom-color:var(--ac)}.mode-tab .mode-label{font-size:11px;font-weight:700;letter-spacing:-.01em}.mode-tab small{font-size:8px;color:var(--muted2);white-space:nowrap}.mode-tab.active small{color:var(--mu)}
+.layout{grid-template-columns:332px minmax(0,1fr)}.mode-context{padding:9px 12px 12px!important;border:0!important;border-bottom:1px solid var(--b)!important;border-radius:0!important;margin:0 2px 2px}.mode-context:hover{background:transparent!important}.mode-context-title{font-size:18px;font-weight:720;letter-spacing:-.04em;color:var(--tx)}.mode-context-desc{font-size:10px;line-height:1.5;color:var(--mu);margin-top:4px;max-width:270px}
+.mode-panel{display:none;flex-direction:column;gap:8px}.mode-panel.active{display:flex}.mode-panel>div:not(#sw):not(#pw):not(#xw){padding:13px 12px 14px;border:1px solid transparent;border-radius:12px;transition:.15s}.mode-panel>div:not(#sw):not(#pw):not(#xw):hover{background:rgba(255,255,255,.012);border-color:var(--b)}
+.mode-panel[data-mode-panel="analyze"]>#run,.mode-panel[data-mode-panel="analyze"]>#riskBtn{margin:0 12px;width:calc(100% - 24px)}.mode-panel[data-mode-panel="analyze"]>#pw,.mode-panel[data-mode-panel="analyze"]>#sw,.mode-panel[data-mode-panel="analyze"]>#xw{margin:0 12px}.mode-panel[data-mode-panel="analyze"]>#xw{display:none}
+.layout.collapsed .sidebar>*:not(#sbToggle){display:none!important}
+.intelligence-rail{height:48px;border:1px solid var(--b);border-radius:12px;background:rgba(17,22,20,.78);display:grid;grid-template-columns:repeat(4,1fr);margin-bottom:12px;overflow:hidden}.rail-step{display:flex;align-items:center;gap:9px;padding:0 13px;border-right:1px solid var(--b)}.rail-step:last-child{border-right:0}.rail-step>span{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:8px;color:var(--ac2)}.rail-step div{display:flex;flex-direction:column;gap:1px}.rail-step b{font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:#b8c0ba}.rail-step small{font-size:8px;color:var(--muted2)}
+/* Signature analysis surface */
+body[data-workspace-mode="analyze"] .main{background:radial-gradient(circle at 82% 4%,rgba(221,106,50,.055),transparent 25%),radial-gradient(circle at 35% 80%,rgba(80,122,99,.05),transparent 30%),var(--bg)}
+body[data-workspace-mode="field"] .main{background:radial-gradient(circle at 85% 5%,rgba(109,166,216,.05),transparent 26%),var(--bg)}
+body[data-workspace-mode="library"] .main{background:radial-gradient(circle at 72% 5%,rgba(143,191,114,.035),transparent 28%),var(--bg)}
+.rh{position:sticky;top:0;z-index:8;background:rgba(11,14,13,.86);backdrop-filter:blur(12px);padding:9px 4px 12px}.rt{font-size:15px}
+#drawBar{padding:9px 10px;border:1px solid var(--b);border-radius:10px;background:#0f1412}
+#gmap{height:calc(100vh - 245px);min-height:520px;border-radius:16px}
+.card{transition:transform .16s,border-color .16s,box-shadow .16s}.card:hover{transform:translateY(-2px);border-color:var(--b2);box-shadow:0 15px 36px rgba(0,0,0,.16)}
+/* Make primary workflow buttons unmistakable */
+#newRouteBtn,#run,#riskBtn{font-weight:700}.mode-panel[data-mode-panel="routes"] #newRouteBtn{background:var(--ac);border-color:var(--ac);color:#fff;text-align:center;padding:10px}.mode-panel[data-mode-panel="routes"] #newRouteBtn:hover{background:var(--ac2)}
+.mode-panel[data-mode-panel="field"] #paintBtn{border-color:rgba(109,166,216,.28)}
+@media(max-width:1120px){.workspace-mode-nav{margin-left:10px}.mode-tab{min-width:72px;padding:0 9px}.mode-tab small{display:none}.header-status{display:none}.layout{grid-template-columns:310px minmax(0,1fr)}}
+@media(max-width:820px){header{overflow-x:auto}.workspace-mode-nav{order:3;margin-left:8px}.brand-lockup.app-brand{min-width:126px}.badge{display:none}.intelligence-rail{grid-template-columns:repeat(2,1fr);height:auto}.rail-step{min-height:42px;border-bottom:1px solid var(--b)}.layout{grid-template-columns:minmax(280px,84vw) minmax(0,1fr)}}
+</style></head>
 <body>
 <div id="landing">
-  <div class="logo">Urb<span>Ris</span></div>
-  <h1>Let's make roads safer.</h1>
-  <div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center">
-    <button class="launchbtn" onclick="enterApp()">Launch UrbRis</button>
-    <button class="launchbtn bookbtn" onclick="window.open(BOOKING_URL, '_blank')">Book a ride with me</button>
-    <button class="launchbtn bookbtn" onclick="window.open(SUBSCRIBE_URL, '_blank')">Get a new route every week</button>
-  </div>
-  <a href="#" onclick="showChangelog(); return false;" style="display:block;margin-top:20px;font-size:12px;color:var(--mu)">Changelog</a>
+<div class="landing-shell">
+<div class="landing-nav">
+<div class="logo brand-lockup">Urb<span>Ris</span><small>ROAD INTELLIGENCE</small></div>
+<a class="landing-text-link" href="#" onclick="showChangelog(); return false;">Changelog</a>
+</div>
+<div class="landing-grid">
+<section class="landing-copy">
+<div class="eyebrow">ROUTE RISK · FIELD VERIFICATION · RIDER INTELLIGENCE</div>
+<h1>Know the road<br/><span>before you ride it.</span></h1>
+<p class="tagline">Turn routes into usable road intelligence. Analyze risk, verify what is actually there, and build a clearer picture of the road ahead.</p>
+<div class="landing-actions">
+<button class="launchbtn" onclick="enterApp()">Open route workspace <span aria-hidden="true">→</span></button>
+<button class="launchbtn bookbtn" onclick="window.open(BOOKING_URL, '_blank')">Ride with UrbRis</button>
+</div>
+<button class="subscribe-link" onclick="window.open(SUBSCRIBE_URL, '_blank')">Get a new route every week <span aria-hidden="true">↗</span></button>
+<div class="landing-proof">
+<div><b>Analyze</b><span>Street View + iRAP-style coding</span></div>
+<div><b>Verify</b><span>GoPro, drone and phone field media</span></div>
+<div><b>Ride</b><span>Briefings, conditions and route export</span></div>
+</div>
+</section>
+<aside aria-label="UrbRis route intelligence preview" class="landing-visual">
+<div class="preview-top"><span>ROUTE INTELLIGENCE</span><span class="live-dot">FIELD READY</span></div>
+<div class="preview-map">
+<div class="map-gridlines"></div>
+<svg aria-label="Stylized route risk map" role="img" viewbox="0 0 620 410">
+<path class="route-shadow" d="M54 340 C110 310,120 250,180 258 S250 315,295 230 S350 105,410 150 S480 235,570 72"></path>
+<path class="route-line" d="M54 340 C110 310,120 250,180 258 S250 315,295 230 S350 105,410 150 S480 235,570 72"></path>
+<circle class="route-node start" cx="54" cy="340" r="7"></circle><circle class="route-node end" cx="570" cy="72" r="7"></circle>
+<circle class="risk-pulse" cx="294" cy="231" r="10"></circle><circle class="risk-node" cx="409" cy="150" r="7"></circle>
+</svg>
+<div class="map-label label-a"><span>KM 18.4–24.7</span><b>Elevated workload</b><small>Curve sequence · limited sight distance</small></div>
+</div>
+<div class="preview-stats">
+<div><span>ROUTE</span><b>147 km</b></div>
+<div><span>RISK</span><b>64</b></div>
+<div><span>TECHNICALITY</span><b>78</b></div>
+<div><span>VERIFIED</span><b>62%</b></div>
+</div>
+</aside>
+</div>
+</div>
 </div>
 <div id="changelogView" style="display:none;min-height:100vh;padding:48px 24px;max-width:680px;margin:0 auto;font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif">
-  <a href="#" onclick="hideChangelog(); return false;" style="font-size:13px;color:var(--ac2)">&larr; Back</a>
-  <div class="logo" style="margin:20px 0 4px">Urb<span>Ris</span> Changelog</div>
-  <div style="font-size:13px;color:var(--mu);margin-bottom:32px">What's changed, session by session.</div>
-  <div id="changelogContent"></div>
+<a href="#" onclick="hideChangelog(); return false;" style="font-size:13px;color:var(--ac2)">← Back</a>
+<div class="logo" style="margin:20px 0 4px">Urb<span>Ris</span> Changelog</div>
+<div style="font-size:13px;color:var(--mu);margin-bottom:32px">What's changed, session by session.</div>
+<div id="changelogContent"></div>
 </div>
 <header style="display:none">
-  <div class="logo">Urb<span>Ris</span></div>
-  <span class="badge">iRAP Street View</span>
+<div class="logo brand-lockup app-brand">Urb<span>Ris</span><small>ROAD INTELLIGENCE</small></div>
+<span class="badge">ROUTE WORKSPACE</span>
+<nav aria-label="Workspace modes" class="workspace-mode-nav"><button class="mode-tab active" data-mode="routes" onclick="setWorkspaceMode('routes')" title="Build &amp; import" type="button"><span class="mode-label">Routes</span><small>Build &amp; import</small></button><button class="mode-tab" data-mode="analyze" onclick="setWorkspaceMode('analyze')" title="Risk &amp; conditions" type="button"><span class="mode-label">Analyze</span><small>Risk &amp; conditions</small></button><button class="mode-tab" data-mode="field" onclick="setWorkspaceMode('field')" title="Verify &amp; collect" type="button"><span class="mode-label">Field</span><small>Verify &amp; collect</small></button><button class="mode-tab" data-mode="library" onclick="setWorkspaceMode('library')" title="Saved intelligence" type="button"><span class="mode-label">Library</span><small>Saved intelligence</small></button></nav><div class="header-spacer"></div>
+<div class="header-status"><span></span> Field + Street View intelligence</div>
 </header>
 <div class="layout" id="layout" style="display:none">
 <div class="sidebar">
-  <button id="sbToggle" onclick="toggleSidebar()" title="Collapse sidebar">&#8249;</button>
-  <div>
-    <div class="sl">API Keys</div>
-    <label class="fl">Google Maps key</label>
-    <input type="text" id="gkey" placeholder="AIza..." />
-    <label class="fl" style="margin-top:8px">Anthropic key</label>
-    <input type="password" id="akey" placeholder="sk-ant-..." />
-    <div class="hint" style="margin-top:8px">Not saved anywhere - cleared on refresh. Re-enter each session.</div>
-  </div>
-  <div>
-    <div class="sl">Saved Routes</div>
-    <div class="hint">Saves automatically once images are pulled, and updates in place as you go.</div>
-    <input type="text" id="savedSearch" placeholder="Search by name..." oninput="filterSavedList()" style="margin-top:8px"/>
-    <div id="savedList" style="display:flex;flex-direction:column;gap:6px;max-height:220px;overflow-y:auto;margin-top:8px"></div>
-  </div>
-  <div>
-    <div class="sl">Completion</div>
-    <div id="completionStats"><div class="hint">No routes drawn yet.</div></div>
-  </div>
-  <div>
-    <div class="sl">Ask About Your Routes</div>
-    <div class="hint">Recommendations and analytics across every saved route - "which route is riskiest," "how many km have I verified this month," "recommend a route under 30km."</div>
-    <input type="text" id="routeChatInput" placeholder="Ask a question..." style="margin-top:8px" onkeydown="if(event.key==='Enter')askAboutRoutes()"/>
-    <button class="savebtn" style="margin-top:8px" onclick="askAboutRoutes()">Ask</button>
-    <div id="routeChatAnswer" style="margin-top:8px"></div>
-  </div>
-  <div>
-    <div class="sl">Paint by Ride</div>
-    <div class="hint">Every saved route, colored by how it was verified - <b style="color:#4a90e2">blue</b> where you personally captured it on camera, <b style="color:#3a7d5c">green</b> where it's Street View only. Nothing painted means nowhere verified yet.</div>
-    <button class="savebtn" id="paintBtn" style="margin-top:8px" onclick="showPaintByRide()">Show painted map</button>
-    <div id="paintStatus" class="hint" style="margin-top:6px"></div>
-  </div>
-  <div>
-    <div class="sl">Route</div>
-    <button class="savebtn" id="newRouteBtn" onclick="startDraw()">New route</button>
-    <div class="hint" style="margin-top:8px">Draw your route on the map to begin - trace it like a pencil, lift and draw again to continue.</div>
-    <div class="hint" style="margin-top:8px">Or import a route straight from a GoPro/DJI video's GPS track - no need to draw it by hand.</div>
-    <input type="file" id="videoImportInput" accept="video/mp4,video/quicktime,.srt" multiple style="margin-top:6px"/>
-    <div id="videoImportStatus" class="hint" style="margin-top:6px"></div>
-    <div class="hint" style="margin-top:8px">Or import any GPX file - your own saved rides, or a route pulled from Scenic/Kurviger/REVER - and score it, whether you've ridden it or not.</div>
-    <input type="file" id="gpxImportInput" accept=".gpx" style="margin-top:6px"/>
-    <div id="gpxImportStatus" class="hint" style="margin-top:6px"></div>
-    <button class="savebtn" id="recordVideoBtn" style="margin-top:8px" onclick="openCameraRecorder()">Record with phone camera</button>
-    <div id="cameraRecorder" style="display:none;margin-top:8px">
-      <video id="cameraPreview" autoplay playsinline muted style="width:100%;border-radius:8px;background:#000;display:block"></video>
-      <div style="display:flex;gap:8px;margin-top:6px">
-        <button class="vb" id="startRecBtn" onclick="startRecording()">Start Recording</button>
-        <button class="vb" id="stopRecBtn" onclick="stopRecording()" disabled>Stop Recording</button>
-        <button class="vb" id="cancelRecBtn" onclick="closeCameraRecorder()">Cancel</button>
-      </div>
-      <div id="recStatus" class="hint" style="margin-top:6px"></div>
-    </div>
-    <div id="fn" style="font-size:11px;color:var(--ok);margin-top:6px"></div>
-    <div style="margin-top:4px"><a href="#" onclick="saveCurrentRoute(); return false;" style="font-size:11px;color:var(--ac2)">Save current route now</a></div>
-    <button class="savebtn" id="sendPhone" style="margin-top:8px;display:none">Send to phone (Google Maps)</button>
-    <div id="phonePanel" style="display:none;margin-top:8px;text-align:center;background:var(--sf2);border:.5px solid var(--b);border-radius:8px;padding:10px">
-      <img id="qrImg" style="width:150px;height:150px;border-radius:6px;background:#fff;padding:6px" alt="QR code for Google Maps directions"/>
-      <div style="font-size:11px;color:var(--mu);margin-top:6px">Scan with your phone, or</div>
-      <a id="gmapsLink" href="#" target="_blank" rel="noopener" style="font-size:12px;color:var(--ac2);word-break:break-all;display:block;margin-top:4px">Open in Google Maps</a>
-      <div style="font-size:10px;color:var(--mu);margin-top:8px;line-height:1.4;text-align:left">Google Maps recalculates the path between a limited number of stops - on a complex route it may not exactly match what Urbris planned. Ride the road, not the assumption.</div>
-    </div>
-    <button class="savebtn" id="legsBtn" style="margin-top:8px;display:none" onclick="showSuggestedLegs()">Suggest fuel/fatigue stops</button>
-    <button class="savebtn" id="conditionsBtn" style="margin-top:8px;display:none" onclick="checkRoadConditions()">Check live road conditions (Ontario 511)</button>
-    <div id="conditionsPanel" style="margin-top:6px"></div>
-    <button class="savebtn" id="gpxBtn" style="margin-top:8px;display:none" onclick="downloadGPX()">Download GPX (for Scenic, Kurviger, etc.)</button>
-    <button class="savebtn" id="gpxLinkBtn" style="margin-top:8px;display:none" onclick="showGPXLink()">Send to Scenic / Kurviger</button>
-    <div id="gpxLinkPanel" style="margin-top:6px"></div>
-    <div id="legsPanel" style="margin-top:6px"></div>
-  </div>
-  <div>
-    <div class="sl">Coverage Gap Scanner</div>
-    <div class="hint">Click a point on the map to scan every road within an area for Street View gaps - a fast way to find where to point a GoPro instead of checking one route at a time.</div>
-    <div class="or" style="margin-top:8px"><label>Area (sq km)</label><input type="number" id="scanArea" value="10" min="1" max="50" step="1" style="width:60px"/></div>
-    <button class="btn" id="scanBtn" style="margin-top:8px" onclick="startScan()">Scan area for gaps</button>
-  </div>
-  <div>
-    <div class="sl">Field Media</div>
-    <div class="hint">Drop photos or video from a drone/GoPro flight - matched to the nearest point by GPS automatically. Fills points marked "No Street View coverage", and attaches as a separate validation image on points that already have coverage, so you can compare what was actually seen against the Street View baseline.</div>
-    <div class="dz" style="margin-top:8px">
-      <div style="font-size:12px;color:var(--mu)">Drop or click to select photos/video</div>
-      <input type="file" id="dronePhotos" accept="image/jpeg,video/mp4,video/quicktime,.srt" multiple />
-    </div>
-    <div id="droneStatus" class="hint" style="margin-top:6px"></div>
-  </div>
-  <div>
-    <div class="sl">Options</div>
-    <div class="or"><label>Light pollution</label><input type="checkbox" id="lp" checked style="width:auto;cursor:pointer"/></div>
-    <div class="or" style="margin-top:8px"><label>Live traffic</label><input type="checkbox" id="traffic" checked style="width:auto;cursor:pointer"/></div>
-    <div style="margin-top:4px"><a href="#" onclick="refreshTraffic(); return false;" style="font-size:11px;color:var(--ac2)">Force-refresh traffic tiles</a></div>
-    <div class="or" style="margin-top:8px"><label>Weather radar</label><input type="checkbox" id="radar" style="width:auto;cursor:pointer"/></div>
-    <div class="hint" style="margin-top:4px">Live observed precipitation (ECCC), not a forecast - updates roughly every 10 min.</div>
-  </div>
-  <div id="sw" style="display:none">
-    <div class="sl">Route</div>
-    <div class="stats">
-      <div class="st"><div class="sv" id="sd">-</div><div class="sl2">km</div></div>
-      <div class="st"><div class="sv" id="sp">-</div><div class="sl2">points</div></div>
-      <div class="st"><div class="sv" id="si">-</div><div class="sl2">images</div></div>
-    </div>
-  </div>
-  <button class="btn" id="run" disabled>Draw a route first</button>
-  <button class="btn" id="riskBtn" style="margin-top:8px;display:none" onclick="pullRisk()" disabled>Pull Risk</button>
-  <div id="pw" style="display:none">
-    <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--mu);margin-bottom:4px"><span id="pl">Extracting</span><span id="pp">0%</span></div>
-    <div class="pb"><div class="pf" id="pf"></div></div>
-  </div>
-  <div><div class="sl">Log</div><div class="log" id="log"></div></div>
-  <div id="xw" style="display:none">
-    <button class="xb" id="xb">Export CSV with iRAP</button>
-    <button class="xb" id="bb" style="margin-top:8px">Print ride briefing</button>
-    <button class="xb" id="snapshotBtn" style="margin-top:8px" onclick="generateSnapshot()">Share route snapshot</button>
-    <button class="xb" id="bookPageBtn" style="margin-top:8px" onclick="generateBookPage()">Create book page</button>
-  </div>
+<button id="sbToggle" onclick="toggleSidebar()" title="Collapse sidebar">‹</button><div class="mode-context"><div class="mode-context-title" id="modeContextTitle">Routes</div><div class="mode-context-desc" id="modeContextDesc">Build, draw or import the road you want to understand.</div></div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<section class="mode-panel active" data-mode-panel="routes"><div>
+<div class="sl">Workspace setup</div>
+<label class="fl">Google Maps key</label>
+<input id="gkey" placeholder="AIza..." type="text"/>
+<label class="fl" style="margin-top:8px">Anthropic key</label>
+<input id="akey" placeholder="sk-ant-..." type="password"/>
+<div class="hint" style="margin-top:8px">Not saved anywhere - cleared on refresh. Re-enter each session.</div>
+</div><div>
+<div class="sl">Route</div>
+<button class="savebtn" id="newRouteBtn" onclick="startDraw()">New route</button>
+<div class="hint" style="margin-top:8px">Draw your route on the map to begin - trace it like a pencil, lift and draw again to continue.</div>
+<div class="hint" style="margin-top:8px">Or import a route straight from a GoPro/DJI video's GPS track - no need to draw it by hand.</div>
+<input accept="video/mp4,video/quicktime,.srt" id="videoImportInput" multiple="" style="margin-top:6px" type="file"/>
+<div class="hint" id="videoImportStatus" style="margin-top:6px"></div>
+<div class="hint" style="margin-top:8px">Or import any GPX file - your own saved rides, or a route pulled from Scenic/Kurviger/REVER - and score it, whether you've ridden it or not.</div>
+<input accept=".gpx" id="gpxImportInput" style="margin-top:6px" type="file"/>
+<div class="hint" id="gpxImportStatus" style="margin-top:6px"></div>
+<button class="savebtn" id="recordVideoBtn" onclick="openCameraRecorder()" style="margin-top:8px">Record with phone camera</button>
+<div id="cameraRecorder" style="display:none;margin-top:8px">
+<video autoplay="" id="cameraPreview" muted="" playsinline="" style="width:100%;border-radius:8px;background:#000;display:block"></video>
+<div style="display:flex;gap:8px;margin-top:6px">
+<button class="vb" id="startRecBtn" onclick="startRecording()">Start Recording</button>
+<button class="vb" disabled="" id="stopRecBtn" onclick="stopRecording()">Stop Recording</button>
+<button class="vb" id="cancelRecBtn" onclick="closeCameraRecorder()">Cancel</button>
 </div>
-<div class="main">
-  <div class="empty" id="empty">
-    <div style="font-size:36px;opacity:.2">&#128247;</div>
-    <div style="font-size:14px;font-weight:500;color:var(--tx)">Enter your Google Maps key to begin</div>
-    <div style="font-size:12px;max-width:240px;margin-top:4px">Then draw your route on the map, and Urbris will pull Street View frames and code iRAP attributes along the way.</div>
-  </div>
-  <div id="rw" style="display:none">
-    <div class="rh">
-      <div class="rt" id="rt">Route frames</div>
-      <div style="display:flex;gap:10px;align-items:center">
-        <div style="display:flex;align-items:center;gap:6px">
-          <label style="font-size:11px;color:var(--mu)">Min risk</label>
-          <input type="range" id="rf" min="0" max="100" value="0" step="5" style="width:80px;cursor:pointer"/>
-          <span id="rfv" style="font-size:11px;color:var(--mu);width:38px">0%+</span>
-        </div>
-        <span id="cs" style="font-size:12px;color:var(--mu)"></span>
-        <button class="vb on" id="bg" onclick="sv('grid')">Images</button>
-        <button class="vb" id="bm" onclick="sv('map')">Map</button>
-        <button class="vb" id="bbt" onclick="sv('brief')">Briefing</button>
-      </div>
-    </div>
-    <div id="fs" style="display:none;font-size:11px;color:var(--mu);margin:-8px 0 12px">Points not yet analysed are hidden while a filter is active - they might still be risky, they just haven't been coded yet.</div>
-    <div id="wxbar" style="display:none">
-      <div id="wxwarnmsg" class="wxwarnmsg" style="display:none">&#9888; Rain or high wind flagged along part of this route - check the cards below.</div>
-      <div id="wxstrip" class="wxstrip"></div>
-    </div>
-    <div id="vg"><div class="grid" id="grid"></div></div>
-    <div id="vm" style="display:none">
-      <div id="drawBar" style="display:none;margin-bottom:10px;gap:8px;align-items:center;flex-wrap:wrap">
-        <button class="vb" id="drawToolBtn" onclick="toggleDrawTool()">Pan/zoom mode - tap to draw</button>
-        <button class="vb" id="finishDraw" onclick="finishDraw()">Finish drawing</button>
-        <button class="vb" id="undoStroke" onclick="undoLastStroke()">Undo last stroke</button>
-        <button class="vb" id="clearDraw" onclick="clearDraw()">Clear all</button>
-        <span id="drawCount" style="font-size:12px;color:var(--mu)">0 km traced - draw on the map to trace your route</span>
-      </div>
-      <div style="font-size:11px;color:var(--mu);margin-bottom:10px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
-        <div style="display:flex;align-items:center;gap:6px">
-          <span>Low risk</span>
-          <div style="width:110px;height:8px;border-radius:4px;background:linear-gradient(90deg,hsl(120,72%,50%),hsl(60,72%,50%),hsl(0,72%,50%))"></div>
-          <span>High risk</span>
-        </div>
-        <div style="display:flex;align-items:center;gap:5px"><span style="width:9px;height:9px;border-radius:50%;background:#5a5f66;display:inline-block"></span>Not yet analysed</div>
-        <div style="display:flex;align-items:center;gap:5px"><span style="width:9px;height:9px;border-radius:50%;background:#f09595;display:inline-block"></span>No coverage</div>
-      </div>
-      <div id="gmap"></div>
-    </div>
-    <div id="vbr" style="display:none"></div>
-  </div>
+<div class="hint" id="recStatus" style="margin-top:6px"></div>
+</div>
+<div id="fn" style="font-size:11px;color:var(--ok);margin-top:6px"></div>
+<div style="margin-top:4px"><a href="#" onclick="saveCurrentRoute(); return false;" style="font-size:11px;color:var(--ac2)">Save current route now</a></div>
+<button class="savebtn" id="sendPhone" style="margin-top:8px;display:none">Send to phone (Google Maps)</button>
+<div id="phonePanel" style="display:none;margin-top:8px;text-align:center;background:var(--sf2);border:.5px solid var(--b);border-radius:8px;padding:10px">
+<img alt="QR code for Google Maps directions" id="qrImg" style="width:150px;height:150px;border-radius:6px;background:#fff;padding:6px"/>
+<div style="font-size:11px;color:var(--mu);margin-top:6px">Scan with your phone, or</div>
+<a href="#" id="gmapsLink" rel="noopener" style="font-size:12px;color:var(--ac2);word-break:break-all;display:block;margin-top:4px" target="_blank">Open in Google Maps</a>
+<div style="font-size:10px;color:var(--mu);margin-top:8px;line-height:1.4;text-align:left">Google Maps recalculates the path between a limited number of stops - on a complex route it may not exactly match what Urbris planned. Ride the road, not the assumption.</div>
+</div>
+<button class="savebtn" id="legsBtn" onclick="showSuggestedLegs()" style="margin-top:8px;display:none">Suggest fuel/fatigue stops</button>
+<button class="savebtn" id="conditionsBtn" onclick="checkRoadConditions()" style="margin-top:8px;display:none">Check live road conditions (Ontario 511)</button>
+<div id="conditionsPanel" style="margin-top:6px"></div>
+<button class="savebtn" id="gpxBtn" onclick="downloadGPX()" style="margin-top:8px;display:none">Download GPX (for Scenic, Kurviger, etc.)</button>
+<button class="savebtn" id="gpxLinkBtn" onclick="showGPXLink()" style="margin-top:8px;display:none">Send to Scenic / Kurviger</button>
+<div id="gpxLinkPanel" style="margin-top:6px"></div>
+<div id="legsPanel" style="margin-top:6px"></div>
+</div><div id="sw" style="display:none">
+<div class="sl">Route</div>
+<div class="stats">
+<div class="st"><div class="sv" id="sd">-</div><div class="sl2">km</div></div>
+<div class="st"><div class="sv" id="sp">-</div><div class="sl2">points</div></div>
+<div class="st"><div class="sv" id="si">-</div><div class="sl2">images</div></div>
+</div>
+</div></section><section class="mode-panel" data-mode-panel="analyze"><div>
+<div class="sl">Map layers</div>
+<div class="or"><label>Light pollution</label><input checked="" id="lp" style="width:auto;cursor:pointer" type="checkbox"/></div>
+<div class="or" style="margin-top:8px"><label>Live traffic</label><input checked="" id="traffic" style="width:auto;cursor:pointer" type="checkbox"/></div>
+<div style="margin-top:4px"><a href="#" onclick="refreshTraffic(); return false;" style="font-size:11px;color:var(--ac2)">Force-refresh traffic tiles</a></div>
+<div class="or" style="margin-top:8px"><label>Weather radar</label><input id="radar" style="width:auto;cursor:pointer" type="checkbox"/></div>
+<div class="hint" style="margin-top:4px">Live observed precipitation (ECCC), not a forecast - updates roughly every 10 min.</div>
+</div><button class="btn" disabled="" id="run">Draw a route first</button><button class="btn" disabled="" id="riskBtn" onclick="pullRisk()" style="margin-top:8px;display:none">Pull Risk</button><div id="pw" style="display:none">
+<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--mu);margin-bottom:4px"><span id="pl">Extracting</span><span id="pp">0%</span></div>
+<div class="pb"><div class="pf" id="pf"></div></div>
+</div><div><div class="sl">Log</div><div class="log" id="log"></div></div><div id="xw" style="display:none">
+<button class="xb" id="xb">Export CSV with iRAP</button>
+<button class="xb" id="bb" style="margin-top:8px">Print ride briefing</button>
+<button class="xb" id="snapshotBtn" onclick="generateSnapshot()" style="margin-top:8px">Share route snapshot</button>
+<button class="xb" id="bookPageBtn" onclick="generateBookPage()" style="margin-top:8px">Create book page</button>
+</div></section><section class="mode-panel" data-mode-panel="field"><div>
+<div class="sl">Paint by Ride</div>
+<div class="hint">Every saved route, colored by how it was verified - <b style="color:#4a90e2">blue</b> where you personally captured it on camera, <b style="color:#3a7d5c">green</b> where it's Street View only. Nothing painted means nowhere verified yet.</div>
+<button class="savebtn" id="paintBtn" onclick="showPaintByRide()" style="margin-top:8px">Show painted map</button>
+<div class="hint" id="paintStatus" style="margin-top:6px"></div>
+</div><div>
+<div class="sl">Coverage gaps</div>
+<div class="hint">Click a point on the map to scan every road within an area for Street View gaps - a fast way to find where to point a GoPro instead of checking one route at a time.</div>
+<div class="or" style="margin-top:8px"><label>Area (sq km)</label><input id="scanArea" max="50" min="1" step="1" style="width:60px" type="number" value="10"/></div>
+<button class="btn" id="scanBtn" onclick="startScan()" style="margin-top:8px">Scan area for gaps</button>
+</div><div>
+<div class="sl">Field verification</div>
+<div class="hint">Drop photos or video from a drone/GoPro flight - matched to the nearest point by GPS automatically. Fills points marked "No Street View coverage", and attaches as a separate validation image on points that already have coverage, so you can compare what was actually seen against the Street View baseline.</div>
+<div class="dz" style="margin-top:8px">
+<div style="font-size:12px;color:var(--mu)">Drop or click to select photos/video</div>
+<input accept="image/jpeg,video/mp4,video/quicktime,.srt" id="dronePhotos" multiple="" type="file"/>
+</div>
+<div class="hint" id="droneStatus" style="margin-top:6px"></div>
+</div></section><section class="mode-panel" data-mode-panel="library"><div>
+<div class="sl">Route library</div>
+<div class="hint">Saves automatically once images are pulled, and updates in place as you go.</div>
+<input id="savedSearch" oninput="filterSavedList()" placeholder="Search by name..." style="margin-top:8px" type="text"/>
+<div id="savedList" style="display:flex;flex-direction:column;gap:6px;max-height:220px;overflow-y:auto;margin-top:8px"></div>
+</div><div>
+<div class="sl">Completion</div>
+<div id="completionStats"><div class="hint">No routes drawn yet.</div></div>
+</div><div>
+<div class="sl">Route intelligence</div>
+<div class="hint">Recommendations and analytics across every saved route - "which route is riskiest," "how many km have I verified this month," "recommend a route under 30km."</div>
+<input id="routeChatInput" onkeydown="if(event.key==='Enter')askAboutRoutes()" placeholder="Ask a question..." style="margin-top:8px" type="text"/>
+<button class="savebtn" onclick="askAboutRoutes()" style="margin-top:8px">Ask</button>
+<div id="routeChatAnswer" style="margin-top:8px"></div>
+</div></section></div>
+<div class="main"><div class="intelligence-rail"><div class="rail-step"><span>01</span><div><b>Route</b><small>Draw or import</small></div></div><div class="rail-step"><span>02</span><div><b>Observe</b><small>Street View + field</small></div></div><div class="rail-step"><span>03</span><div><b>Analyze</b><small>Risk + conditions</small></div></div><div class="rail-step"><span>04</span><div><b>Act</b><small>Brief, export, ride</small></div></div></div>
+<div class="empty" id="empty">
+<div style="font-size:36px;opacity:.2">📷</div>
+<div style="font-size:14px;font-weight:500;color:var(--tx)">Enter your Google Maps key to begin</div>
+<div style="font-size:12px;max-width:240px;margin-top:4px">Then draw your route on the map, and Urbris will pull Street View frames and code iRAP attributes along the way.</div>
+</div>
+<div id="rw" style="display:none">
+<div class="rh">
+<div class="rt" id="rt">Route frames</div>
+<div style="display:flex;gap:10px;align-items:center">
+<div style="display:flex;align-items:center;gap:6px">
+<label style="font-size:11px;color:var(--mu)">Min risk</label>
+<input id="rf" max="100" min="0" step="5" style="width:80px;cursor:pointer" type="range" value="0"/>
+<span id="rfv" style="font-size:11px;color:var(--mu);width:38px">0%+</span>
+</div>
+<span id="cs" style="font-size:12px;color:var(--mu)"></span>
+<button class="vb on" id="bg" onclick="sv('grid')">Images</button>
+<button class="vb" id="bm" onclick="sv('map')">Map</button>
+<button class="vb" id="bbt" onclick="sv('brief')">Briefing</button>
+</div>
+</div>
+<div id="fs" style="display:none;font-size:11px;color:var(--mu);margin:-8px 0 12px">Points not yet analysed are hidden while a filter is active - they might still be risky, they just haven't been coded yet.</div>
+<div id="wxbar" style="display:none">
+<div class="wxwarnmsg" id="wxwarnmsg" style="display:none">⚠ Rain or high wind flagged along part of this route - check the cards below.</div>
+<div class="wxstrip" id="wxstrip"></div>
+</div>
+<div id="vg"><div class="grid" id="grid"></div></div>
+<div id="vm" style="display:none">
+<div id="drawBar" style="display:none;margin-bottom:10px;gap:8px;align-items:center;flex-wrap:wrap">
+<button class="vb" id="drawToolBtn" onclick="toggleDrawTool()">Pan/zoom mode - tap to draw</button>
+<button class="vb" id="finishDraw" onclick="finishDraw()">Finish drawing</button>
+<button class="vb" id="undoStroke" onclick="undoLastStroke()">Undo last stroke</button>
+<button class="vb" id="clearDraw" onclick="clearDraw()">Clear all</button>
+<span id="drawCount" style="font-size:12px;color:var(--mu)">0 km traced - draw on the map to trace your route</span>
+</div>
+<div style="font-size:11px;color:var(--mu);margin-bottom:10px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+<div style="display:flex;align-items:center;gap:6px">
+<span>Low risk</span>
+<div style="width:110px;height:8px;border-radius:4px;background:linear-gradient(90deg,hsl(120,72%,50%),hsl(60,72%,50%),hsl(0,72%,50%))"></div>
+<span>High risk</span>
+</div>
+<div style="display:flex;align-items:center;gap:5px"><span style="width:9px;height:9px;border-radius:50%;background:#5a5f66;display:inline-block"></span>Not yet analysed</div>
+<div style="display:flex;align-items:center;gap:5px"><span style="width:9px;height:9px;border-radius:50%;background:#f09595;display:inline-block"></span>No coverage</div>
+</div>
+<div id="gmap"></div>
+</div>
+<div id="vbr" style="display:none"></div>
+</div>
 </div>
 </div>
 <script>
@@ -3651,5 +3789,33 @@ function generateBookPage() {
 
 $('bb').addEventListener('click', generateBriefing);
 </script>
-</body>
+<script>
+const WORKSPACE_MODE_META = {
+  routes:  { title: 'Routes',  desc: 'Build, draw or import the road you want to understand.' },
+  analyze: { title: 'Analyze', desc: 'Turn route observations into risk, conditions and usable decisions.' },
+  field:   { title: 'Field',   desc: 'Verify the road yourself and close gaps in the baseline.' },
+  library: { title: 'Library', desc: 'Return to saved routes, progress and cross-route intelligence.' }
+};
+function setWorkspaceMode(mode) {
+  if (!WORKSPACE_MODE_META[mode]) return;
+  document.querySelectorAll('.mode-tab').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+  document.querySelectorAll('.mode-panel').forEach(p => p.classList.toggle('active', p.dataset.modePanel === mode));
+  const meta = WORKSPACE_MODE_META[mode];
+  const t = document.getElementById('modeContextTitle');
+  const d = document.getElementById('modeContextDesc');
+  if (t) t.textContent = meta.title;
+  if (d) d.textContent = meta.desc;
+  document.body.dataset.workspaceMode = mode;
+  localStorage.setItem('urbris_workspaceMode', mode);
+  // Route creation and field verification are map-first workflows. Keep the route
+  // spatially visible when moving into those modes, without touching analysis state.
+  if ((mode === 'routes' || mode === 'field') && typeof sv === 'function' && typeof gmap !== 'undefined' && gmap) {
+    try { sv('map'); } catch (_) {}
+  }
+}
+window.addEventListener('load', () => {
+  const savedMode = localStorage.getItem('urbris_workspaceMode');
+  setWorkspaceMode(WORKSPACE_MODE_META[savedMode] ? savedMode : 'routes');
+});
+</script></body>
 </html>
