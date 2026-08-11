@@ -2830,7 +2830,11 @@ function sv(v) {
   $('bp').className = 'vb' + (v === 'profile' ? ' on' : '');
   $('bm').className = 'vb' + (v === 'map' ? ' on' : '');
   $('bbt').className = 'vb' + (v === 'brief' ? ' on' : '');
-  if (v === 'map') drawMap($('gkey').value.trim());
+  // Paint by Ride reuses this same map container - if the user switches to a normal
+  // route's map view, Paint by Ride is no longer what's on screen, so its own
+  // "currently active" tracking (used to decide whether a delete should refresh it)
+  // needs to clear here too.
+  if (v === 'map') { paintByRideActive = false; drawMap($('gkey').value.trim()); }
   if (v === 'brief') renderBriefingTab();
   if (v === 'profile') renderRouteProfile();
 }
@@ -2838,6 +2842,7 @@ function sv(v) {
 // ---- Saved routes (server-side storage, so extraction/analysis never has to re-run) ----
 
 let paintPolys = [];
+let paintByRideActive = false;
 
 // Pulls every saved route and draws it on one map, colored by how each stretch was
 // actually verified - blue where a real camera (GoPro/DJI/drone) captured it, green
@@ -2847,6 +2852,7 @@ let paintPolys = [];
 async function showPaintByRide() {
   const gk = $('gkey').value.trim();
   if (!gk) { log('Enter your Google Maps key first', 'er'); return; }
+  paintByRideActive = true;
   const btn = $('paintBtn');
   btn.disabled = true;
   btn.textContent = 'Loading routes...';
@@ -2909,8 +2915,12 @@ async function showPaintByRide() {
 
       if (paintPolys.length) gmap.fitBounds(bounds);
       const pct = totalKm ? Math.round((verifiedKm / totalKm) * 100) : 0;
-      $('paintStatus').textContent = verifiedKm.toFixed(1) + ' km field-verified, ' + streetViewKm.toFixed(1) + ' km Street View only, across ' + routes.length + ' route(s) - ' + pct + '% personally captured.';
-      log('Paint by Ride: ' + pct + '% of covered distance is field-verified', 'ok');
+      const noCoverageKm = Math.max(0, totalKm - verifiedKm - streetViewKm);
+      let statusText = verifiedKm.toFixed(1) + ' km field-verified, ' + streetViewKm.toFixed(1) + ' km Street View only';
+      if (noCoverageKm > 0.05) statusText += ', ' + noCoverageKm.toFixed(1) + ' km with no coverage at all';
+      statusText += ', across ' + routes.length + ' route(s) - ' + pct + '% personally captured.';
+      $('paintStatus').textContent = statusText;
+      log('Paint by Ride: ' + pct + '% of covered distance is field-verified' + (noCoverageKm > 0.05 ? ', ' + noCoverageKm.toFixed(1) + 'km has no coverage at all' : ''), 'ok');
     } catch (e) {
       $('paintStatus').textContent = 'Failed to load routes: ' + e.message;
       log('Paint by Ride failed: ' + e.message, 'er');
@@ -3233,6 +3243,11 @@ async function deleteSavedRoute(id) {
     if (currentSavedRouteId === id) currentSavedRouteId = null;
     refreshSavedList();
     refreshCompletionStats();
+    // Paint by Ride draws a static snapshot the moment it's shown - a delete doesn't
+    // otherwise touch it, so the deleted route's paint would keep sitting on the map
+    // until the next unrelated click on "Show painted map". If it's actually what's
+    // on screen right now, refresh it for real instead of leaving stale lines visible.
+    if (paintByRideActive) showPaintByRide();
   } catch (e) {
     log('Delete failed: ' + e.message, 'er');
   }
