@@ -466,6 +466,14 @@ body[data-workspace-mode="library"] .main{background:radial-gradient(circle at 7
 </div>
 </div>
 <div id="fs" style="display:none;font-size:11px;color:var(--mu);margin:-8px 0 12px">Points not yet analysed are hidden while a filter is active - they might still be risky, they just haven't been coded yet.</div>
+<div id="depSliderWrap" style="display:none;margin:0 0 12px;background:var(--sf2);border:.5px solid var(--b);border-radius:10px;padding:12px 14px">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+    <span style="font-size:11px;font-weight:600" id="depSliderLabel">Leaving now</span>
+    <span style="font-size:10px;color:var(--mu)">Weather + traffic update as you drag</span>
+  </div>
+  <input type="range" id="depSlider" min="0" max="48" value="0" step="1" oninput="onDepartureSliderChange()" style="width:100%"/>
+  <div id="trafficPredict" style="font-size:11px;color:var(--mu);margin-top:8px"></div>
+</div>
 <div id="wxbar" style="display:none">
 <div class="wxwarnmsg" id="wxwarnmsg" style="display:none">⚠ Rain or high wind flagged along part of this route - check the cards below.</div>
 <div class="wxstrip" id="wxstrip"></div>
@@ -1976,6 +1984,16 @@ function renderRouteProfile() {
 // Shows whichever of altitude/3D speed/accelerometer intensity a point actually has -
 // altitude comes from Google Elevation (any route), the other two only exist where
 // GoPro telemetry captured them during a video import.
+// "2018-10" -> "Oct 2018"; just a year with no month stays as-is; missing entirely
+// returns null so callers can skip it.
+function formatSVDate(dateStr) {
+  if (!dateStr) return null;
+  const m = dateStr.match(/^(\d{4})-(\d{2})$/);
+  if (!m) return dateStr; // year-only, or an unexpected format - show as given
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return months[parseInt(m[2], 10) - 1] + ' ' + m[1];
+}
+
 function renderTelemetryLine(idx) {
   const r = res[idx];
   const slot = $('tel' + idx);
@@ -1983,7 +2001,16 @@ function renderTelemetryLine(idx) {
   const parts = [];
   if (r.altitude != null) parts.push(Math.round(r.altitude) + 'm elevation');
   if (r.speed3dKmh != null) parts.push(Math.round(r.speed3dKmh) + ' km/h (3D)');
-  slot.textContent = parts.join(' \u00b7 ');
+  // Only relevant for Street-View-only points - a field-captured point was verified in
+  // person regardless of what year Google's own photo happens to be from.
+  if (r.streetViewDate && !r.imageSource) {
+    const label = formatSVDate(r.streetViewDate);
+    const yearMatch = r.streetViewDate.match(/^(\d{4})/);
+    const age = yearMatch ? (new Date().getFullYear() - parseInt(yearMatch[1], 10)) : 0;
+    const stale = age >= 3;
+    parts.push('<span' + (stale ? ' style="color:var(--er)"' : '') + '>Street View: ' + label + (stale ? ' (dated)' : '') + '</span>');
+  }
+  slot.innerHTML = parts.join(' \u00b7 ');
 }
 
 async function aiAn(url) {
@@ -2444,6 +2471,36 @@ async function fetchAddresses() {
 
 let cellChecked = false;
 
+// Street View's own capture date, free to check, separate from the image itself -
+// only worth checking for points still relying on Street View, since a field-captured
+// point was verified in person regardless of what year Google's photo happens to be.
+async function fetchStreetViewDates(gk) {
+  const targets = res.map((r, i) => ({ r, i })).filter(x => x.r.hasCoverage && !x.r.imageSource);
+  if (!targets.length) return;
+  try {
+    const locations = targets.map(x => x.r.lat.toFixed(6) + ',' + x.r.lon.toFixed(6));
+    const resp = await fetch('/streetviewdates', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ locations, gkey: gk })
+    });
+    const d = await resp.json();
+    const dates = d.dates || [];
+    let staleCount = 0;
+    targets.forEach((x, j) => {
+      const date = dates[j];
+      if (!date) return;
+      res[x.i].streetViewDate = date;
+      renderTelemetryLine(x.i);
+      const yearMatch = date.match(/^(\d{4})/);
+      if (yearMatch && (new Date().getFullYear() - parseInt(yearMatch[1], 10)) >= 3) staleCount++;
+    });
+    log('Street View dates checked - ' + staleCount + ' point(s) dated 3+ years old', staleCount > 0 ? 'wn' : 'ok');
+  } catch (e) {
+    log('Could not check Street View dates: ' + e.message, 'wn');
+  }
+}
+
 async function fetchCellCoverage() {
   if (!res.length) return;
   try {
@@ -2486,6 +2543,8 @@ async function fetchCellCoverage() {
   }
 }
 
+let wxRawData = null, wxSample = null, wxForecastDays = 0, wxBaseDepMs = 0;
+
 async function fetchAndRenderWeather() {
   const withCoords = res.filter(r => r.lat != null && r.lon != null);
   if (!withCoords.length) return;
@@ -2496,7 +2555,10 @@ async function fetchAndRenderWeather() {
   const depMs = Date.now();
   const maxEtaMs = depMs + (sample[sample.length - 1].etaSec || 0) * 1000;
   const diffDays = Math.max(0, Math.ceil((maxEtaMs - Date.now()) / 86400000));
-  const forecastDays = Math.max(2, Math.min(16, diffDays + 2));
+  // Fetched a bit wider than the route itself needs, specifically so the departure
+  // slider (below) can scrub forward without triggering a re-fetch on every drag -
+  // only re-fetches if someone pushes the slider past this cached window.
+  const forecastDays = Math.max(2, Math.min(16, diffDays + 3));
   if (diffDays > 14) {
     log('Route is too long for hourly forecast data (max ~16 days ahead) - showing the closest available.', 'wn');
   }
@@ -2504,30 +2566,81 @@ async function fetchAndRenderWeather() {
   try {
     log('Fetching weather along route (based on actual road speed limits)...', '');
     const data = await fetchWeather(sample, forecastDays);
-    let warn = false;
-    wxData = sample.map((pt, i) => {
-      const d = data[i];
-      const etaMs = depMs + (pt.etaSec || 0) * 1000;
-      const idx = findHourlyIdx(d.hourly.time, etaMs);
-      const [emoji, label] = wmoDesc(d.hourly.weather_code[idx], d.hourly.is_day[idx]);
-      const temp = Math.round(d.hourly.temperature_2m[idx]);
-      const wind = Math.round(d.hourly.wind_speed_10m[idx]);
-      const gusts = Math.round(d.hourly.wind_gusts_10m[idx]);
-      const precip = d.hourly.precipitation_probability[idx];
-      const risky = (precip != null && precip >= 50) || gusts >= 40;
-      if (risky) warn = true;
-      const etaLabel = new Date(etaMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      return { km: pt.km, etaMs, etaLabel, emoji, label, temp, wind, gusts, precip, risky };
-    });
-    $('wxstrip').innerHTML = wxData.map(w =>
-      '<div class="wxcard' + (w.risky ? ' wxwarn' : '') + '"><div class="wxkm">km ' + w.km.toFixed(1) + ' &middot; ETA ' + w.etaLabel + '</div><div class="wxe">' + w.emoji + '</div><div class="wxt">' + w.temp + '&deg;C</div><div class="wxl">' + w.label + '</div><div class="wxd">Wind ' + w.wind + ' (gust ' + w.gusts + ') km/h</div>' + (w.precip != null ? '<div class="wxd">Rain chance: ' + w.precip + '%</div>' : '') + '</div>'
-    ).join('');
-    $('wxbar').style.display = '';
-    $('wxwarnmsg').style.display = warn ? '' : 'none';
-    log('Weather loaded' + (warn ? ' - rain/wind flagged along the route' : ''), warn ? 'wn' : 'ok');
+    wxRawData = data; wxSample = sample; wxForecastDays = forecastDays; wxBaseDepMs = depMs;
+    $('depSlider').max = Math.max(0, forecastDays * 24 - 6); // stay a few hours inside the fetched window
+    $('depSlider').value = 0;
+    $('depSliderWrap').style.display = '';
+    renderWeatherForDeparture(depMs);
+    log('Weather loaded', '');
   } catch (e) {
     log('Weather fetch failed: ' + e.message, 'er');
   }
+}
+
+// Rebuilds the weather strip for any departure time using the already-fetched hourly
+// data - no network call, so dragging the slider feels instant.
+function renderWeatherForDeparture(depMs) {
+  if (!wxRawData || !wxSample) return;
+  let warn = false;
+  wxData = wxSample.map((pt, i) => {
+    const d = wxRawData[i];
+    const etaMs = depMs + (pt.etaSec || 0) * 1000;
+    const idx = findHourlyIdx(d.hourly.time, etaMs);
+    const [emoji, label] = wmoDesc(d.hourly.weather_code[idx], d.hourly.is_day[idx]);
+    const temp = Math.round(d.hourly.temperature_2m[idx]);
+    const wind = Math.round(d.hourly.wind_speed_10m[idx]);
+    const gusts = Math.round(d.hourly.wind_gusts_10m[idx]);
+    const precip = d.hourly.precipitation_probability[idx];
+    const risky = (precip != null && precip >= 50) || gusts >= 40;
+    if (risky) warn = true;
+    const etaLabel = new Date(etaMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return { km: pt.km, etaMs, etaLabel, emoji, label, temp, wind, gusts, precip, risky };
+  });
+  $('wxstrip').innerHTML = wxData.map(w =>
+    '<div class="wxcard' + (w.risky ? ' wxwarn' : '') + '"><div class="wxkm">km ' + w.km.toFixed(1) + ' &middot; ETA ' + w.etaLabel + '</div><div class="wxe">' + w.emoji + '</div><div class="wxt">' + w.temp + '&deg;C</div><div class="wxl">' + w.label + '</div><div class="wxd">Wind ' + w.wind + ' (gust ' + w.gusts + ') km/h</div>' + (w.precip != null ? '<div class="wxd">Rain chance: ' + w.precip + '%</div>' : '') + '</div>'
+  ).join('');
+  $('wxbar').style.display = '';
+  $('wxwarnmsg').style.display = warn ? '' : 'none';
+}
+
+function onDepartureSliderChange() {
+  const hoursOffset = parseInt($('depSlider').value, 10) || 0;
+  const depMs = Date.now() + hoursOffset * 3600000;
+  const d = new Date(depMs);
+  $('depSliderLabel').textContent = hoursOffset === 0 ? 'Leaving now' : 'Leaving ' + d.toLocaleDateString([], { weekday: 'short' }) + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  renderWeatherForDeparture(depMs);
+  fetchPredictedTraffic(depMs);
+}
+
+// Google's Directions API can return a traffic-adjusted duration for a specific future
+// departure time - not a visual map layer (that only shows current conditions), but a
+// real predicted number: how much longer this route is expected to take given typical
+// traffic patterns at that time of day.
+let trafficPredictDebounce = null;
+function fetchPredictedTraffic(depMs) {
+  if (!rp.length || !window.google || !google.maps) return;
+  clearTimeout(trafficPredictDebounce);
+  trafficPredictDebounce = setTimeout(() => {
+    const ds = new google.maps.DirectionsService();
+    const origin = rp[0], dest = rp[rp.length - 1];
+    ds.route({
+      origin: { lat: origin.lat, lng: origin.lon },
+      destination: { lat: dest.lat, lng: dest.lon },
+      travelMode: google.maps.TravelMode.DRIVING,
+      drivingOptions: { departureTime: new Date(Math.max(depMs, Date.now())), trafficModel: 'bestguess' }
+    }, (result, status) => {
+      const el = $('trafficPredict');
+      if (status !== 'OK' || !result.routes[0] || !result.routes[0].legs[0]) { el.textContent = ''; return; }
+      const leg = result.routes[0].legs[0];
+      if (!leg.duration_in_traffic) { el.textContent = ''; return; }
+      const normalMin = Math.round(leg.duration.value / 60);
+      const trafficMin = Math.round(leg.duration_in_traffic.value / 60);
+      const deltaMin = trafficMin - normalMin;
+      el.textContent = deltaMin > 2
+        ? 'Predicted traffic at this departure time: about +' + deltaMin + ' min beyond typical.'
+        : 'Predicted traffic at this departure time: close to typical, no significant delay expected.';
+    });
+  }, 400); // debounced - avoid firing a Directions request on every single slider tick
 }
 
 function metersPerDeg(lat) {
@@ -2776,6 +2889,7 @@ $('run').addEventListener('click', async () => {
   fetchAndRenderWeather();
   fetchCellCoverage();
   fetchAddresses();
+  fetchStreetViewDates(gk);
 
   $('pw').style.display = 'none';
   $('run').disabled = false;
