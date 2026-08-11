@@ -264,7 +264,26 @@ body[data-workspace-mode="library"] .main{background:radial-gradient(circle at 7
 #logWrap summary{cursor:pointer;color:var(--mu);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;list-style:none}#logWrap summary::-webkit-details-marker{display:none}#logWrap summary:after{content:' +';color:var(--ac2)}#logWrap[open] summary:after{content:' −'}#logWrap .log{margin-top:7px}
 @media(max-width:820px){header{position:sticky;top:0;z-index:50;display:flex!important;flex-wrap:wrap;height:auto;min-height:58px;padding:10px 12px 0;overflow:visible}.brand-lockup.app-brand{height:36px}.workspace-mode-nav{order:3;width:100%;margin:4px -12px 0;padding:0 8px;overflow-x:auto;border-top:1px solid var(--b);background:rgba(11,14,13,.96)}.mode-tab{flex:1;min-width:76px;height:48px;padding:0 10px;align-items:center}.mode-tab small{display:none}.layout,.layout.collapsed{display:block!important;height:auto;min-height:calc(100vh - 96px)}.sidebar,.layout.collapsed .sidebar{width:100%;height:auto;max-height:none;border-right:0;border-bottom:1px solid var(--b);padding:10px 10px 12px;overflow:visible}.layout.collapsed .sidebar>*:not(#sbToggle){display:block!important}#sbToggle{display:none}.mode-context{display:none}.main{padding:10px;min-height:60vh}.intelligence-rail{display:none}#gmap{height:62vh;min-height:420px;border-radius:12px}.rh{top:96px;overflow-x:auto}.rh>div:last-child{min-width:max-content}.grid{grid-template-columns:1fr}.next-step-card{margin:4px 2px 2px}.mode-panel[data-mode-panel="analyze"]>#run,.mode-panel[data-mode-panel="analyze"]>#riskBtn{margin-left:2px;margin-right:2px;width:calc(100% - 4px)}.mode-panel[data-mode-panel="analyze"]>#pw,.mode-panel[data-mode-panel="analyze"]>#sw,.mode-panel[data-mode-panel="analyze"]>#xw{margin-left:2px;margin-right:2px}}
 @media(max-width:430px){.mode-tab{min-width:70px;padding:0 7px}.mode-tab .mode-label{font-size:10px}.main{padding:8px}#gmap{height:58vh;min-height:380px}.landing-shell{padding-left:16px;padding-right:16px}}
-</style></head>
+</style>
+<style id="urbris-v31-styles">
+.evidence-alert{border:1px solid rgba(212,90,42,.55);background:rgba(212,90,42,.09);border-radius:12px;padding:14px 16px;margin:14px 0;display:flex;gap:12px;align-items:flex-start}
+.evidence-alert strong{display:block;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#f0a17d;margin-bottom:4px}
+.evidence-alert p{margin:0;color:var(--mu);font-size:12px;line-height:1.55}
+.evidence-alert .evicon{font-size:18px;line-height:1}
+.provisional-note{font-size:11px;color:#f0a17d;margin-top:5px;font-weight:600;letter-spacing:.02em}
+.brief-purpose{background:var(--sf2);border:.5px solid var(--b);border-radius:10px;padding:11px 13px;margin:0 0 14px;font-size:12px;line-height:1.55;color:var(--mu)}
+.brief-purpose b{color:var(--tx)}
+</style>
+
+<style id="urbris-v32-ux">
+.draw-float{position:absolute;left:50%;bottom:18px;transform:translateX(-50%);z-index:20;display:none;gap:6px;padding:7px;background:rgba(11,14,13,.9);border:1px solid var(--b2);border-radius:999px;box-shadow:0 12px 32px rgba(0,0,0,.35);backdrop-filter:blur(14px)}.draw-float.on{display:flex}.draw-float button{white-space:nowrap;border-radius:999px}.analysis-eta{font-size:11px;color:var(--mu);margin-top:6px}.analysis-eta b{color:var(--tx)}
+.card.skeleton{min-height:220px;overflow:hidden;position:relative;background:var(--sf2)}.card.skeleton:before{content:"";display:block;height:145px;background:linear-gradient(90deg,var(--sf2),var(--sf3),var(--sf2));background-size:220% 100%;animation:urbSk 1.35s ease-in-out infinite}.card.skeleton:after{content:"Loading road imagery…";position:absolute;left:14px;bottom:16px;color:var(--mu);font-size:11px}@keyframes urbSk{0%{background-position:200% 0}100%{background-position:-20% 0}}
+.quick-start{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;width:min(760px,100%);margin-top:18px}.quick-start button{padding:15px;text-align:left;background:var(--sf);border:1px solid var(--b);border-radius:12px;color:var(--tx);cursor:pointer}.quick-start b{display:block;font-size:13px;margin-bottom:4px}.quick-start span{display:block;font-size:11px;color:var(--mu);line-height:1.45}
+.progressive-profile{border:1px solid var(--b);border-radius:12px;background:var(--sf);padding:12px 14px;margin:12px 0;display:none}.progressive-profile.on{display:block}.pp-row{display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid var(--b)}.pp-row:last-child{border-bottom:0}.pp-row span{font-size:11px;color:var(--mu)}.pp-row b{font-size:11px;color:var(--tx)}
+@media(max-width:820px){body{overflow:hidden}.layout{height:calc(100vh - 64px);position:relative;display:block!important}.main{height:100%;min-height:0!important;padding:0!important}.sidebar{position:fixed!important;z-index:50;left:0!important;right:0!important;bottom:0!important;top:auto!important;width:100%!important;max-height:68vh;overflow:auto;border:1px solid var(--b2)!important;border-bottom:0!important;border-radius:18px 18px 0 0!important;background:rgba(18,23,21,.97)!important;box-shadow:0 -18px 50px rgba(0,0,0,.38);backdrop-filter:blur(18px);padding-top:34px!important;transform:translateY(calc(100% - 104px));transition:transform .25s ease}.sidebar:before{content:"";position:absolute;top:12px;left:50%;transform:translateX(-50%);width:42px;height:4px;border-radius:999px;background:var(--b2)}.sidebar.sheet-open{transform:translateY(0)}.sheet-mobile-summary{display:flex!important;position:absolute;top:22px;left:18px;right:18px;height:72px;align-items:center;justify-content:space-between;cursor:pointer}.sidebar>*:not(.sheet-mobile-summary){margin-top:74px}.sidebar>*+*:not(.sheet-mobile-summary){margin-top:0}.quick-start{grid-template-columns:1fr}.draw-float{bottom:118px;max-width:calc(100vw - 24px);overflow-x:auto}}
+@media(min-width:821px){.sheet-mobile-summary{display:none!important}}
+</style>
+</head>
 <body>
 <div id="landing">
 <div class="landing-shell">
@@ -478,7 +497,7 @@ body[data-workspace-mode="library"] .main{background:radial-gradient(circle at 7
   <div class="rp-grid">
     <div class="rp-metric"><div class="rp-metric-label">Road Risk Index</div><div class="rp-metric-value"><strong id="rpRisk">—</strong><span id="rpRiskScale">/ 100</span></div><div class="rp-metric-note" id="rpRiskNote">Run road analysis to calculate infrastructure indicators.</div><div class="rp-bar"><i id="rpRiskBar" style="width:0%"></i></div></div>
     <div class="rp-metric"><div class="rp-metric-label">Technical Complexity</div><div class="rp-metric-value"><strong id="rpTech">—</strong><span>/ 100</span></div><div class="rp-metric-note" id="rpTechNote">Calculated from measured curvature along the route.</div><div class="rp-bar"><i id="rpTechBar" style="width:0%"></i></div></div>
-    <div class="rp-metric"><div class="rp-metric-label">Assessment Confidence</div><div class="rp-metric-value"><strong id="rpConfidence">—</strong></div><div class="rp-metric-note" id="rpConfidenceNote">Confidence reflects evidence coverage and coding completeness.</div><div class="rp-evidence" id="rpEvidence"></div></div>
+    <div class="rp-metric"><div class="rp-metric-label">Evidence Strength</div><div class="rp-metric-value"><strong id="rpConfidence">—</strong></div><div class="rp-metric-note" id="rpConfidenceNote">Confidence reflects evidence coverage and coding completeness.</div><div class="rp-evidence" id="rpEvidence"></div></div>
   </div>
   <div class="rp-body">
     <div class="rp-section"><h3>Priority segments</h3><div class="segment-list" id="rpSegments"><div class="rp-empty">Segments appear as route evidence and analysis become available.</div></div></div>
@@ -1939,6 +1958,38 @@ function currentRouteDisplayName(){
   const raw=($('fn')&&$('fn').textContent||'').replace(/^\+\s*/,'').trim();
   return raw || 'Current route';
 }
+
+function urbrisEvidenceState(){
+  if (!res || !res.length) return {level:'LOW', provisional:true, field:0, street:0, gap:100, coded:0};
+  const total=res.length;
+  const field=res.filter(r => !!(r.imageSource || r.validationImage)).length;
+  const covered=res.filter(r => r.hasCoverage).length;
+  const street=Math.max(0, covered-field);
+  const coded=res.filter(r => r.irap).length;
+  const fieldShare=field/total, coveredShare=covered/total, codedShare=coded/total;
+  // Evidence strength describes completeness/source quality, not statistical certainty.
+  const score=(fieldShare*.55)+(codedShare*.30)+(coveredShare*.15);
+  const level=score>=.72?'HIGH':score>=.42?'MODERATE':'LOW';
+  return {level, provisional:level==='LOW', field:Math.round(fieldShare*100), street:Math.round(street/total*100), gap:Math.round((total-covered)/total*100), coded:Math.round(codedShare*100)};
+}
+function urbrisEvidenceAlertHTML(){
+  const e=urbrisEvidenceState();
+  if(!e.provisional) return '';
+  return '<div class="evidence-alert"><div class="evicon">&#9888;</div><div><strong>Limited evidence</strong><p><b style="color:var(--tx)">Do not rely on the route ranking yet.</b> This assessment is provisional because field verification and/or completed coding are limited. Verify more of the route before treating priority segments as settled.</p><p style="margin-top:6px">'+e.field+'% field verified &middot; '+e.street+'% Street View &middot; '+e.gap+'% unverified &middot; '+e.coded+'% coded</p></div></div>';
+}
+function urbrisMarkProvisionalProfile(){
+  const e=urbrisEvidenceState();
+  const root=document.getElementById('routeProfile') || document.getElementById('profileView') || document.getElementById('vp');
+  if(!root) return;
+  const old=root.querySelector('.evidence-alert'); if(old) old.remove();
+  if(e.provisional){
+    root.insertAdjacentHTML('afterbegin',urbrisEvidenceAlertHTML());
+    root.querySelectorAll('.priority-segment,.segment-card,[data-priority-segment]').forEach(el=>{
+      if(!el.querySelector('.provisional-note')) el.insertAdjacentHTML('beforeend','<div class="provisional-note">Preliminary priority segment · limited evidence</div>');
+    });
+  }
+}
+
 function renderRouteProfile() {
   const panel=$('routeProfile');
   if(!panel) return;
@@ -3666,13 +3717,13 @@ function buildBriefingData() {
 function renderBriefingTab() {
   if (!res.length) { $('vbr').innerHTML = '<div class="empty" style="height:auto;padding:60px 0">Load a route first</div>'; return; }
   const d = buildBriefingData();
-  $('vbr').innerHTML = '<div class="brf">'
+  $('vbr').innerHTML = '<div class="brf">' + '<div class="brief-purpose"><b>Ride Briefing</b> is the operational pre-ride view: current conditions, timing, navigation and the few route cautions that matter before departure. For the enduring route assessment, evidence strength and ranked segments, use <b>Route Profile</b>.</div>'
     + '<div class="sub">Generated ' + new Date().toLocaleString() + ' &middot; Estimated ' + d.durLabel + ' on the road</div>'
     + '<div class="stats">'
     + '<div class="stat"><b>' + d.totalKm.toFixed(1) + '</b><span>km total</span></div>'
     + '<div class="stat"><b>' + d.analysed.length + '/' + res.length + '</b><span>points coded</span></div>'
-    + '<div class="stat"><b>' + (d.avgRisk != null ? Math.round(d.avgRisk * 100) + '%' : '-') + '</b><span>avg risk score</span></div>'
-    + '<div class="stat"><b>' + d.highRisk.length + '</b><span>flagged hazards</span></div>'
+    + '<div class="stat"><b>' + (d.avgRisk != null ? Math.round(d.avgRisk * 100) + '%' : '-') + '</b><span>avg road risk index</span></div>'
+    + '<div class="stat"><b>' + d.highRisk.length + '</b><span>route cautions</span></div>'
     + '</div>'
     + '<div class="overview">' + d.overview + '</div>'
     + (d.qrUrl ? '<div style="display:flex;align-items:center;gap:14px;background:var(--sf2);border:.5px solid var(--b);border-radius:8px;padding:12px 16px;margin-top:16px"><img src="' + d.qrUrl + '" style="width:110px;height:110px;border-radius:6px;background:#fff;padding:4px" alt="QR code for Google Maps directions"/><div style="font-size:12px;color:var(--mu)">Scan to navigate this route from wherever you are.<br><a href="' + d.mapsUrl + '" target="_blank" rel="noopener" style="color:var(--ac2)">Open in Google Maps</a></div></div>' : '')
@@ -3763,8 +3814,8 @@ function generateBriefing() {
     + '<div class="stats">'
     + '<div class="stat"><b>' + d.totalKm.toFixed(1) + '</b><span>km total</span></div>'
     + '<div class="stat"><b>' + d.analysed.length + '/' + res.length + '</b><span>points coded</span></div>'
-    + '<div class="stat"><b>' + (d.avgRisk != null ? Math.round(d.avgRisk * 100) + '%' : '-') + '</b><span>avg risk score</span></div>'
-    + '<div class="stat"><b>' + d.highRisk.length + '</b><span>flagged hazards</span></div>'
+    + '<div class="stat"><b>' + (d.avgRisk != null ? Math.round(d.avgRisk * 100) + '%' : '-') + '</b><span>avg road risk index</span></div>'
+    + '<div class="stat"><b>' + d.highRisk.length + '</b><span>route cautions</span></div>'
     + '</div>'
     + '<div class="overview">' + d.overview + '</div>'
     + (routeMap
@@ -3807,7 +3858,34 @@ function generateBriefing() {
     + '<li><input type="checkbox"/> First aid kit on board</li>'
     + '</ul>'
     + '<button class="pbtn" onclick="window.print()">Print / Save as PDF</button>'
-    + '</body></html>';
+    + '
+<script id="urbris-v31-behavior">
+(function(){
+  function patchProfile(){
+    if(typeof window.renderRouteProfile==='function' && !window.renderRouteProfile.__v31){
+      const original=window.renderRouteProfile;
+      const wrapped=function(){ const v=original.apply(this,arguments); try{urbrisMarkProvisionalProfile();}catch(e){} return v; };
+      wrapped.__v31=true; window.renderRouteProfile=wrapped;
+    }
+  }
+  patchProfile();
+  document.addEventListener('click',function(){setTimeout(function(){try{urbrisMarkProvisionalProfile();}catch(e){}},0)},true);
+})();
+</script>
+
+<script id="urbris-v32-behavior">
+(function(){const id=x=>document.getElementById(x);let samples=[];
+function sheet(){const sb=document.querySelector('.sidebar');if(!sb||sb.querySelector('.sheet-mobile-summary'))return;const h=document.createElement('div');h.className='sheet-mobile-summary';h.innerHTML='<div><b style="display:block;font-size:12px">UrbRis tools</b><span style="font-size:11px;color:var(--mu)">Route controls and results</span></div><button class="vb">Open</button>';h.onclick=()=>{sb.classList.toggle('sheet-open');h.querySelector('button').textContent=sb.classList.contains('sheet-open')?'Close':'Open'};sb.prepend(h)}
+function dock(){if(id('urbDrawFloat'))return;const bar=id('drawBar'),map=id('map')||id('drawMap');if(!bar||!map)return;const host=map.parentElement;host.style.position='relative';const d=document.createElement('div');d.id='urbDrawFloat';d.className='draw-float';['drawToolBtn','undoDraw','finishDraw'].forEach(k=>{const o=id(k);if(o){const b=document.createElement('button');b.className='vb';b.textContent=o.textContent;b.onclick=()=>o.click();d.appendChild(b)}});host.appendChild(d)}
+function syncDock(){const d=id('urbDrawFloat'),b=id('drawBar');if(d&&b)d.classList.toggle('on',getComputedStyle(b).display!=='none')}
+function progressive(){if(id('progressiveProfile'))return;const pw=id('pw');if(!pw)return;const p=document.createElement('div');p.id='progressiveProfile';p.className='progressive-profile';p.innerHTML='<div class="pp-row"><span>Route geometry</span><b id="ppGeom">Waiting</b></div><div class="pp-row"><span>Road imagery</span><b id="ppImg">Waiting</b></div><div class="pp-row"><span>Road analysis</span><b id="ppRisk">Waiting</b></div><div class="pp-row"><span>Route Profile</span><b id="ppProfile">Builds progressively</b></div><div id="urbEta" class="analysis-eta"></div>';pw.parentElement.insertBefore(p,pw.nextSibling)}
+function update(){const p=id('progressiveProfile');if(!p)return;const R=typeof res!=='undefined'?res:[],route=typeof rp!=='undefined'&&rp.length,coded=R.filter(x=>x.irap).length,covered=R.filter(x=>x.hasCoverage).length;p.classList.toggle('on',!!route||R.length>0);id('ppGeom').textContent=route?'✓ Geometry ready':'Waiting';id('ppImg').textContent=R.length?covered+'/'+R.length+' covered':'Waiting';id('ppRisk').textContent=R.length?coded+'/'+R.length+' coded':'Waiting';id('ppProfile').textContent=coded?'Updating as analysis completes':R.length?'Geometry + evidence available':'Waiting'}
+function eta(){const pp=id('pp'),e=id('urbEta');if(!pp||!e)return;const pct=parseInt(pp.textContent)||0,now=Date.now();if(pct<=0||pct>=100){e.textContent=pct>=100?'Analysis complete':'';samples=[];return}samples.push([now,pct]);if(samples.length>8)samples.shift();if(samples.length<3){e.textContent='Estimating remaining time…';return}const a=samples[0],b=samples[samples.length-1],rate=(b[1]-a[1])/((b[0]-a[0])/1000);if(rate<=0){e.textContent='Estimating remaining time…';return}const sec=Math.round((100-pct)/rate),m=Math.floor(sec/60),r=Math.max(0,sec%60);e.innerHTML='<b>~'+(m?m+'m ':'')+r+'s remaining</b> based on current speed'}
+function empty(){const e=id('empty');if(!e||e.querySelector('.quick-start'))return;const q=document.createElement('div');q.className='quick-start';q.innerHTML='<button id="qsDraw"><b>✎ Draw a route</b><span>Trace a road directly on the map.</span></button><button id="qsImport"><b>↥ Import a route</b><span>Use GPX, GoPro or DJI field data.</span></button><button id="qsDemo"><b>◎ Explore a demo</b><span>Preview the UrbRis workflow without setup.</span></button>';e.appendChild(q);id('qsDraw').onclick=()=>{const b=id('drawBtn')||id('newRouteBtn')||id('drawToolBtn');if(b)b.click()};id('qsImport').onclick=()=>{const f=id('gpxFile')||document.querySelector('input[type=file]');if(f)f.click()};id('qsDemo').onclick=()=>{if(typeof loadUrbRisDemo==='function')loadUrbRisDemo();else alert('Demo route dataset is the next hook: bundle a pre-analysed route JSON for zero-setup exploration.')}}
+function skeletons(){document.querySelectorAll('#grid .card').forEach(c=>{const im=c.querySelector('img');if(im&&!im.complete&&!c.classList.contains('skeleton')){c.classList.add('skeleton');const done=()=>c.classList.remove('skeleton');im.addEventListener('load',done,{once:true});im.addEventListener('error',done,{once:true})}})}
+function tick(){sheet();dock();progressive();empty();syncDock();update();eta();skeletons()}window.addEventListener('load',tick);new MutationObserver(()=>requestAnimationFrame(tick)).observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:['style','class']});setInterval(tick,1000)})();
+</script>
+</body></html>';
 
   const w = window.open('', '_blank');
   if (!w) { log('Pop-up blocked - allow pop-ups for this page to open the briefing', 'er'); return; }
