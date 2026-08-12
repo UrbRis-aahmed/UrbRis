@@ -2245,7 +2245,12 @@ async function getGoProTelemetryPoints(file) {
       browserMode: true,
       cancellationToken: currentImportCancelToken,
       progress: pct => {
-        const p = Math.round((pct || 0) * 100);
+        // gpmf-extract passes progress already scaled 0-100, not a 0-1 fraction -
+        // multiplying by 100 again produced exactly this bug (24% became "2400%").
+        // Handling both conventions here and clamping to 100 either way, so a future
+        // library version reporting the other convention can't silently repeat this.
+        const raw = pct || 0;
+        const p = Math.min(100, Math.round(raw > 1 ? raw : raw * 100));
         $('videoImportProgressBar').style.width = p + '%';
         $('videoImportStatus').textContent = 'Extracting telemetry... ' + p + '%';
       }
@@ -2254,6 +2259,13 @@ async function getGoProTelemetryPoints(file) {
     $('videoImportProgress').style.display = 'none';
     currentImportCancelToken = null;
   }
+  // Extraction (above) is only half the work - this second step turns the raw
+  // extracted buffer into structured telemetry, and on a large file this can itself
+  // take real time with no progress API of its own to report against. Without a
+  // status line here, the progress bar disappearing (implying "done") followed by
+  // nothing happening looks exactly like a freeze rather than a second, silent stage
+  // still genuinely running.
+  $('videoImportStatus').textContent = 'Extraction complete - processing telemetry data into a route...';
   // Don't filter by a specific stream preset here - pull everything back and search
   // for whatever GPS stream is actually present. Filtering by name turned out to be
   // unreliable across camera generations (GPS5 vs GPS9); if this still comes back
