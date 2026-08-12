@@ -354,6 +354,10 @@ body[data-workspace-mode="library"] .main{background:radial-gradient(circle at 7
 <div class="hint" style="margin-top:8px">Or import a route straight from a GoPro/DJI video's GPS track - no need to draw it by hand.</div>
 <input accept="video/mp4,video/quicktime,.srt" id="videoImportInput" multiple="" style="margin-top:6px" type="file"/>
 <div class="hint" id="videoImportStatus" style="margin-top:6px"></div>
+<div id="videoImportProgress" style="display:none;margin-top:6px">
+  <div style="background:var(--sf2);border-radius:20px;height:8px;overflow:hidden"><div id="videoImportProgressBar" style="background:#4a90e2;height:100%;width:0%;transition:width .2s"></div></div>
+  <button class="vb" id="videoImportCancelBtn" style="margin-top:6px;font-size:11px" onclick="cancelVideoImport()">Cancel extraction</button>
+</div>
 <div class="hint" style="margin-top:8px">Or import any GPX file - your own saved rides, or a route pulled from Scenic/Kurviger/REVER - and score it, whether you've ridden it or not.</div>
 <input accept=".gpx" id="gpxImportInput" style="margin-top:6px" type="file"/>
 <div class="hint" id="gpxImportStatus" style="margin-top:6px"></div>
@@ -2216,11 +2220,40 @@ function parseDjiSrt(text) {
 }
 
 // ---- GoPro video: parse embedded GPMF telemetry (no sidecar file needed) ----
+// progress/cancellationToken are real, documented gpmf-extract options that were
+// previously unused - large files can genuinely take a long time to process in a
+// browser (a known limitation of the library itself, not something specific to this
+// app), so this at least makes that visible and interruptible instead of a single
+// static status line with no way to tell whether it's working or stuck.
+let currentImportCancelToken = null;
+
+function cancelVideoImport() {
+  if (currentImportCancelToken) currentImportCancelToken.cancelled = true;
+  log('Cancelling extraction...', 'wn');
+}
+
 async function getGoProTelemetryPoints(file) {
   if (typeof window.gpmfExtract !== 'function' || typeof window.goproTelemetry !== 'function') {
     throw new Error('GoPro telemetry parser did not load - check /gopro-telemetry.bundle.js is deployed alongside urbris.py');
   }
-  const extracted = await window.gpmfExtract(file, { browserMode: true });
+  currentImportCancelToken = { cancelled: false };
+  $('videoImportProgress').style.display = '';
+  $('videoImportProgressBar').style.width = '0%';
+  let extracted;
+  try {
+    extracted = await window.gpmfExtract(file, {
+      browserMode: true,
+      cancellationToken: currentImportCancelToken,
+      progress: pct => {
+        const p = Math.round((pct || 0) * 100);
+        $('videoImportProgressBar').style.width = p + '%';
+        $('videoImportStatus').textContent = 'Extracting telemetry... ' + p + '%';
+      }
+    });
+  } finally {
+    $('videoImportProgress').style.display = 'none';
+    currentImportCancelToken = null;
+  }
   // Don't filter by a specific stream preset here - pull everything back and search
   // for whatever GPS stream is actually present. Filtering by name turned out to be
   // unreliable across camera generations (GPS5 vs GPS9); if this still comes back
