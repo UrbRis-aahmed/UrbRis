@@ -276,7 +276,7 @@ class H(BaseHTTPRequestHandler):
                     "km": p["_km"], "lat": p["lat"], "lon": p["lon"],
                     "heading": p.get("heading", 0), "imageUrl": image_url,
                     "hasCoverage": bool(image_url), "imageSource": "local-desktop-extract" if image_url else None,
-                    "etaSec": 0
+                    "etaSec": p.get("eta_sec", 0) or 0
                 })
             km = res[-1]["km"] if res else 0.0
 
