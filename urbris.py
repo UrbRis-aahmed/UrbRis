@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import json, urllib.request, urllib.error, urllib.parse, webbrowser, os, sys, csv, math, uuid, base64, re
+import json, urllib.request, urllib.error, urllib.parse, webbrowser, os, sys, csv, math, uuid, base64, re, time
 from datetime import datetime, timezone
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from concurrent.futures import ThreadPoolExecutor
@@ -198,10 +198,13 @@ class H(BaseHTTPRequestHandler):
         return SUPABASE_URL + "/storage/v1/object/public/" + bucket + "/" + urllib.parse.quote(path)
 
     def _handle_import_local(self, body, content_type):
+        t_start = time.time()
         try:
+            print("[import-local] body received: %.2fMB" % (len(body) / (1024 * 1024)))
             fields, files = self._parse_multipart(body, content_type)
             manifest = json.loads(fields.get("manifest", "{}"))
             pts = manifest.get("points", [])
+            print("[import-local] parsed: %d points, %d files (%.1fs elapsed)" % (len(pts), len(files), time.time() - t_start))
             if not pts:
                 self._json({"error": "No points in manifest"}, code=400)
                 return
@@ -249,9 +252,11 @@ class H(BaseHTTPRequestHandler):
                     return i, self._upload_to_storage(
                         "route-images", rid + "/" + ("pt_%04d.jpg" % i), img_bytes, "image/jpeg"
                     )
-                except Exception:
+                except Exception as e:
+                    print("[import-local] upload failed for point %d: %s" % (i, e))
                     return i, None  # None = attempted but failed, distinct from "no image"
 
+            print("[import-local] starting %d uploads (%.1fs elapsed)" % (len(pts), time.time() - t_start))
             urls_by_index = {}
             upload_failures = 0
             with ThreadPoolExecutor(max_workers=5) as pool:
@@ -261,6 +266,8 @@ class H(BaseHTTPRequestHandler):
                         urls_by_index[i] = ""
                     else:
                         urls_by_index[i] = url
+
+            print("[import-local] uploads done: %d failed of %d (%.1fs elapsed)" % (upload_failures, len(pts), time.time() - t_start))
 
             res = []
             for i, p in enumerate(pts):
@@ -281,10 +288,12 @@ class H(BaseHTTPRequestHandler):
                 "data": {"res": res},
             }
             try:
+                print("[import-local] saving route row to database (%.1fs elapsed)" % (time.time() - t_start))
                 supabase_request("POST", "routes", body=row, extra_headers={"Prefer": "resolution=merge-duplicates"})
                 result = {"id": rid, "name": row["name"], "points": len(res), "km": round(km, 2)}
                 if upload_failures:
                     result["warning"] = str(upload_failures) + " image(s) failed to upload - route saved without them"
+                print("[import-local] DONE - responding to client (%.1fs total)" % (time.time() - t_start))
                 self._json(result)
             except urllib.error.HTTPError as e:
                 # str(e) alone only gives the generic "HTTP Error 500: Internal Server
