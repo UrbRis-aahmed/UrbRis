@@ -414,6 +414,8 @@ body[data-workspace-mode="library"] .main{background:radial-gradient(circle at 7
 <button class="xb" id="bb" style="margin-top:8px">Print ride briefing</button>
 <button class="xb" id="snapshotBtn" onclick="generateSnapshot()" style="margin-top:8px">Share route snapshot</button>
 <button class="xb" id="bookPageBtn" onclick="generateBookPage()" style="margin-top:8px">Create book page</button>
+<button class="xb" id="ytChaptersBtn" onclick="generateYouTubeChapters()" style="margin-top:8px">Generate YouTube chapters</button>
+<div id="ytChaptersPanel" style="margin-top:8px"></div>
 </div></section><section class="mode-panel" data-mode-panel="field"><div>
 <div class="sl">Paint by Ride</div>
 <div class="hint">Every saved route, colored by how it was verified - <b style="color:#4a90e2">blue</b> where you personally captured it on camera, <b style="color:#3a7d5c">green</b> where it's Street View only. Nothing painted means nowhere verified yet.</div>
@@ -4010,6 +4012,65 @@ function nearestCoveredImage(km) {
 // A compact, single-card public-facing summary - separate from the dense full
 // briefing, meant to be screenshotted or linked at the end of a road review rather
 // than read like a document. One photo, one verdict, one number.
+// YouTube's chapter format fails silently if it's even slightly wrong - no error,
+// the whole list just sits there as plain text. Real, confirmed rules enforced here:
+// first entry must be exactly 0:00 (this is the literal activation trigger), at
+// least 3 chapters total, each 10+ seconds apart, ascending order, M:SS or H:MM:SS.
+function formatYtTimestamp(totalSec, useHours) {
+  const s = Math.floor(totalSec % 60);
+  const m = Math.floor(totalSec / 60) % 60;
+  const h = Math.floor(totalSec / 3600);
+  const pad = n => String(n).padStart(2, '0');
+  return useHours ? (h + ':' + pad(m) + ':' + pad(s)) : (m + ':' + pad(s));
+}
+
+function generateYouTubeChapters() {
+  const panel = $('ytChaptersPanel');
+  // Only meaningful for a route with genuine per-point video timestamps - a
+  // hand-drawn or GPX-imported route's etaSec is a speed-limit estimate, not a real
+  // moment in an actual video file, and the local-desktop-extract tool doesn't
+  // currently carry per-point video time at all (it saves etaSec as 0).
+  const distinctEtas = new Set(res.map(r => r.etaSec || 0));
+  const hasRealVideoTiming = res.length >= 3 && distinctEtas.size >= 3 && res.some(r => (r.etaSec || 0) > 0);
+  if (!hasRealVideoTiming) {
+    panel.innerHTML = '<div class="hint">This route doesn\'t have real per-point video timestamps (only routes imported directly from a video in the browser do) - chapters need actual elapsed time in a real video file to point to.</div>';
+    return;
+  }
+
+  const totalSec = Math.max(...res.map(r => r.etaSec || 0));
+  const useHours = totalSec >= 3600;
+  const MIN_GAP_SEC = 12; // a couple seconds of margin over YouTube's real 10s minimum
+
+  // Reuses the same risk scoring already used everywhere else in the app - no
+  // separate threshold invented just for this.
+  const flagged = res
+    .filter(r => r.irap && riskScore(r.irap) >= 0.5)
+    .sort((a, b) => (a.etaSec || 0) - (b.etaSec || 0));
+
+  const chapters = [{ t: 0, label: 'Start of ride' }];
+  flagged.forEach(r => {
+    const t = Math.round(r.etaSec);
+    const last = chapters[chapters.length - 1];
+    if (t - last.t < MIN_GAP_SEC) return; // would violate YouTube's 10s minimum spacing
+    const pct = Math.round(riskScore(r.irap) * 100);
+    const note = (r.irap && r.irap.note) ? r.irap.note.split('.')[0] : 'High-risk section';
+    chapters.push({ t, label: note + ' (' + pct + '% index)' });
+  });
+
+  // Minimum 3 chapters or YouTube won't activate the feature at all - pad with a
+  // genuine, honest fallback rather than fabricating fake hazard entries.
+  if (chapters.length < 3) {
+    if (chapters.length === 1) chapters.push({ t: Math.round(totalSec / 2), label: 'Midpoint' });
+    chapters.push({ t: Math.round(totalSec) - MIN_GAP_SEC, label: 'Approaching end of ride' });
+  }
+
+  const lines = chapters.map(c => formatYtTimestamp(c.t, useHours) + ' ' + c.label);
+  const text = lines.join('\n');
+  panel.innerHTML = '<div class="hint">' + (chapters.length - 1) + ' high-risk section(s) flagged - paste this directly into your YouTube video\'s description:</div>'
+    + '<textarea readonly style="width:100%;min-height:120px;margin-top:6px;font-family:monospace;font-size:11px;background:var(--sf2);color:var(--tx);border:.5px solid var(--b);border-radius:8px;padding:8px" onclick="this.select()">' + text + '</textarea>';
+  log('Generated ' + chapters.length + ' YouTube chapter(s)', 'ok');
+}
+
 function generateSnapshot() {
   if (!res.length) { log('Load a route first', 'wn'); return; }
   const totalKm = res[res.length - 1].km;
