@@ -221,8 +221,16 @@ class H(BaseHTTPRequestHandler):
                 "meta": {"totalKm": round(km, 2), "points": len(res)},
                 "data": {"res": res},
             }
-            supabase_request("POST", "routes", body=row, extra_headers={"Prefer": "resolution=merge-duplicates"})
-            self._json({"id": rid, "name": row["name"], "points": len(res), "km": round(km, 2)})
+            payload_size_mb = len(json.dumps(row)) / (1024 * 1024)
+            try:
+                supabase_request("POST", "routes", body=row, extra_headers={"Prefer": "resolution=merge-duplicates"})
+                self._json({"id": rid, "name": row["name"], "points": len(res), "km": round(km, 2)})
+            except urllib.error.HTTPError as e:
+                # str(e) alone only gives the generic "HTTP Error 500: Internal Server
+                # Error" - the actual reason Supabase rejected this lives in the
+                # response body, which has to be read explicitly to see it.
+                body_text = e.read().decode("utf-8", "ignore")
+                self._json({"error": "Supabase rejected the save (payload ~%.1fMB): %s" % (payload_size_mb, body_text)}, code=e.code)
         except Exception as e:
             self._json({"error": "Local import failed: " + str(e)}, code=500)
 
