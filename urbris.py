@@ -170,6 +170,23 @@ class H(BaseHTTPRequestHandler):
                 out.append({"lat": s["location"]["latitude"], "lon": s["location"]["longitude"]})
         return out
 
+    def _upload_to_storage(self, bucket, path, file_bytes, content_type):
+        """Individual image upload to Supabase's actual file storage - not the
+        database. Confirmed via real prior reports that this endpoint needs raw
+        binary bytes in the request body, not a base64 string (a base64 body here
+        produces a corrupted file on Supabase's end). Returns the public URL if the
+        bucket is set to public, matching how Street View URLs already work
+        elsewhere - a short reference, not embedded image data."""
+        url = SUPABASE_URL + "/storage/v1/object/" + bucket + "/" + urllib.parse.quote(path)
+        req = urllib.request.Request(
+            url, data=file_bytes, method="POST",
+            headers={"apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY,
+                     "Content-Type": content_type, "x-upsert": "true"}
+        )
+        with urllib.request.urlopen(req, timeout=20) as r:
+            r.read()
+        return SUPABASE_URL + "/storage/v1/object/public/" + bucket + "/" + urllib.parse.quote(path)
+
     def _handle_import_local(self, body, content_type):
         try:
             fields, files = self._parse_multipart(body, content_type)
@@ -177,6 +194,10 @@ class H(BaseHTTPRequestHandler):
             pts = manifest.get("points", [])
             if not pts:
                 self._json({"error": "No points in manifest"}, code=400)
+                return
+
+            if not supabase_configured():
+                self._json({"error": "Supabase not configured - set SUPABASE_URL and SUPABASE_KEY on the server"}, code=500)
                 return
 
             gkey = manifest.get("gkey", "")
@@ -195,25 +216,34 @@ class H(BaseHTTPRequestHandler):
                 except Exception:
                     pass  # snapping is a nice-to-have here - fall back to raw GPS points
 
+            rid = uuid.uuid4().hex[:12]
             res = []
             km = 0.0
+            upload_failures = 0
             for i, p in enumerate(pts):
                 if i > 0:
                     km += haversine_km(pts[i - 1]["lat"], pts[i - 1]["lon"], p["lat"], p["lon"])
                 img_file = p.get("image_file")
                 img_bytes = files.get(img_file) if img_file else None
-                image_url = ("data:image/jpeg;base64," + base64.b64encode(img_bytes).decode()) if img_bytes else ""
+                image_url = ""
+                if img_bytes:
+                    # Each image is its own small, independent upload - this is the
+                    # actual fix for the timeout: no single write ever grows with ride
+                    # length, since the database row below only ever stores this short
+                    # URL, never the image bytes themselves.
+                    try:
+                        image_url = self._upload_to_storage(
+                            "route-images", rid + "/" + ("pt_%04d.jpg" % i), img_bytes, "image/jpeg"
+                        )
+                    except Exception:
+                        upload_failures += 1
                 res.append({
                     "km": round(km, 4), "lat": p["lat"], "lon": p["lon"],
                     "heading": p.get("heading", 0), "imageUrl": image_url,
-                    "hasCoverage": bool(img_bytes), "imageSource": "local-desktop-extract" if img_bytes else None,
+                    "hasCoverage": bool(image_url), "imageSource": "local-desktop-extract" if image_url else None,
                     "etaSec": 0
                 })
 
-            if not supabase_configured():
-                self._json({"error": "Supabase not configured - set SUPABASE_URL and SUPABASE_KEY on the server"}, code=500)
-                return
-            rid = uuid.uuid4().hex[:12]
             saved_at = now_iso()
             row = {
                 "id": rid, "name": manifest.get("name") or ("Route " + saved_at),
@@ -221,16 +251,18 @@ class H(BaseHTTPRequestHandler):
                 "meta": {"totalKm": round(km, 2), "points": len(res)},
                 "data": {"res": res},
             }
-            payload_size_mb = len(json.dumps(row)) / (1024 * 1024)
             try:
                 supabase_request("POST", "routes", body=row, extra_headers={"Prefer": "resolution=merge-duplicates"})
-                self._json({"id": rid, "name": row["name"], "points": len(res), "km": round(km, 2)})
+                result = {"id": rid, "name": row["name"], "points": len(res), "km": round(km, 2)}
+                if upload_failures:
+                    result["warning"] = str(upload_failures) + " image(s) failed to upload - route saved without them"
+                self._json(result)
             except urllib.error.HTTPError as e:
                 # str(e) alone only gives the generic "HTTP Error 500: Internal Server
                 # Error" - the actual reason Supabase rejected this lives in the
                 # response body, which has to be read explicitly to see it.
                 body_text = e.read().decode("utf-8", "ignore")
-                self._json({"error": "Supabase rejected the save (payload ~%.1fMB): %s" % (payload_size_mb, body_text)}, code=e.code)
+                self._json({"error": "Supabase rejected the save: " + body_text}, code=e.code)
         except Exception as e:
             self._json({"error": "Local import failed: " + str(e)}, code=500)
 
