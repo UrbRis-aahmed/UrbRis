@@ -2,6 +2,7 @@
 import json, urllib.request, urllib.error, urllib.parse, webbrowser, os, sys, csv, math, uuid, base64
 from datetime import datetime, timezone
 from http.server import HTTPServer, BaseHTTPRequestHandler
+from concurrent.futures import ThreadPoolExecutor
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 CELL_CSV = os.path.join(BASE, "cell_towers.csv")
@@ -131,6 +132,100 @@ def fetch_overpass(query):
     return None, last_err
 
 class H(BaseHTTPRequestHandler):
+    def _parse_multipart(self, body_bytes, content_type):
+        # A well-known technique using the email module, since cgi.FieldStorage
+        # (the old easy way to do this) is deprecated and removed entirely in
+        # Python 3.13+.
+        import email
+        header = ("Content-Type: " + content_type + "\r\nMIME-Version: 1.0\r\n\r\n").encode()
+        msg = email.message_from_bytes(header + body_bytes)
+        fields, files = {}, {}
+        if msg.is_multipart():
+            for part in msg.get_payload():
+                cd = part.get("Content-Disposition", "")
+                if "name=" not in cd:
+                    continue
+                name = cd.split('name="')[1].split('"')[0]
+                filename = cd.split('filename="')[1].split('"')[0] if 'filename="' in cd else None
+                payload = part.get_payload(decode=True)
+                if filename:
+                    files[name] = payload
+                else:
+                    fields[name] = payload.decode("utf-8", "ignore") if isinstance(payload, bytes) else payload
+        return fields, files
+
+    def _snap_points_serverside(self, points, gkey):
+        """Same Roads API + chunking-by-100 approach the frontend's /snap
+        endpoint uses, just called directly from here since the desktop tool
+        doesn't do its own browser-side snapping."""
+        out = []
+        for i in range(0, len(points), 100):
+            chunk = points[i:i + 100]
+            path = "|".join(str(p["lat"]) + "," + str(p["lon"]) for p in chunk)
+            url = ("https://roads.googleapis.com/v1/snapToRoads?interpolate=true&path="
+                   + urllib.parse.quote(path) + "&key=" + gkey)
+            with urllib.request.urlopen(urllib.request.Request(url), timeout=20) as r:
+                j = json.loads(r.read())
+            for s in j.get("snappedPoints", []):
+                out.append({"lat": s["location"]["latitude"], "lon": s["location"]["longitude"]})
+        return out
+
+    def _handle_import_local(self, body, content_type):
+        try:
+            fields, files = self._parse_multipart(body, content_type)
+            manifest = json.loads(fields.get("manifest", "{}"))
+            pts = manifest.get("points", [])
+            if not pts:
+                self._json({"error": "No points in manifest"}, code=400)
+                return
+
+            gkey = manifest.get("gkey", "")
+            if gkey:
+                try:
+                    snapped = self._snap_points_serverside(
+                        [{"lat": p["lat"], "lon": p["lon"]} for p in pts], gkey
+                    )
+                    if snapped:
+                        # Road-snapped for shape accuracy, but keep the original
+                        # per-point images/headings paired by nearest index -
+                        # snapping can return a different point count than went in.
+                        for i, p in enumerate(pts):
+                            src = snapped[min(i, len(snapped) - 1)]
+                            p["lat"], p["lon"] = src["lat"], src["lon"]
+                except Exception:
+                    pass  # snapping is a nice-to-have here - fall back to raw GPS points
+
+            res = []
+            km = 0.0
+            for i, p in enumerate(pts):
+                if i > 0:
+                    km += haversine_km(pts[i - 1]["lat"], pts[i - 1]["lon"], p["lat"], p["lon"])
+                img_file = p.get("image_file")
+                img_bytes = files.get(img_file) if img_file else None
+                image_url = ("data:image/jpeg;base64," + base64.b64encode(img_bytes).decode()) if img_bytes else ""
+                res.append({
+                    "km": round(km, 4), "lat": p["lat"], "lon": p["lon"],
+                    "heading": p.get("heading", 0), "imageUrl": image_url,
+                    "hasCoverage": bool(img_bytes), "imageSource": "local-desktop-extract" if img_bytes else None,
+                    "etaSec": 0
+                })
+
+            if not supabase_configured():
+                self._json({"error": "Supabase not configured - set SUPABASE_URL and SUPABASE_KEY on the server"}, code=500)
+                return
+            rid = uuid.uuid4().hex[:12]
+            saved_at = now_iso()
+            row = {
+                "id": rid, "name": manifest.get("name") or ("Route " + saved_at),
+                "saved_at": saved_at, "updated_at": saved_at,
+                "meta": {"totalKm": round(km, 2), "points": len(res)},
+                "data": {"res": res},
+            }
+            supabase_request("POST", "routes", body=row, extra_headers={"Prefer": "resolution=merge-duplicates"})
+            self._json({"id": rid, "name": row["name"], "points": len(res), "km": round(km, 2)})
+        except Exception as e:
+            self._json({"error": "Local import failed: " + str(e)}, code=500)
+
     def log_message(self, fmt, *args):
         print(" ", args[0], self.path)
     def _json(self, obj, code=200):
@@ -206,7 +301,18 @@ class H(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.end_headers()
     def do_POST(self):
-        body = self.rfile.read(int(self.headers.get("Content-Length", 0)))
+        content_type = self.headers.get("Content-Type", "")
+        content_length = int(self.headers.get("Content-Length", 0))
+        if self.path == "/routes/import-local":
+            # The local desktop extraction tool uploads a small JSON manifest
+            # plus a handful of already-extracted images as a normal multipart
+            # form upload (like a plain HTML file input), not JSON - so this
+            # has to be intercepted before the json.loads() below, which would
+            # otherwise crash trying to parse multipart data as JSON.
+            body = self.rfile.read(content_length)
+            self._handle_import_local(body, content_type)
+            return
+        body = self.rfile.read(content_length)
         data = json.loads(body)
         if self.path == "/cellcoverage":
             points = data.get("points", [])
@@ -380,6 +486,66 @@ class H(BaseHTTPRequestHandler):
                 locs_str = "|".join(locations)
                 url = "https://maps.googleapis.com/maps/api/elevation/json?locations=" + urllib.parse.quote(locs_str) + "&key=" + gkey
                 req = urllib.request.Request(url)
+            elif self.path == "/streetviewdates":
+                # Street View's Metadata endpoint - separate from the image itself, and
+                # genuinely free (no quota consumed). Only accepts one location per
+                # request, unlike Elevation's batching, so points are fetched in
+                # parallel here rather than one at a time, to keep this reasonably fast
+                # for a route with many points.
+                gkey = data.get("gkey", "")
+                locations = data.get("locations", [])
+                if not gkey or not locations:
+                    self._json({"dates": []})
+                    return
+
+                def fetch_one(loc):
+                    try:
+                        url = "https://maps.googleapis.com/maps/api/streetview/metadata?location=" + urllib.parse.quote(loc) + "&key=" + gkey
+                        with urllib.request.urlopen(urllib.request.Request(url), timeout=10) as r:
+                            j = json.loads(r.read())
+                        return j.get("date")  # e.g. "2018-10", or None if unavailable
+                    except Exception:
+                        return None
+
+                try:
+                    with ThreadPoolExecutor(max_workers=10) as pool:
+                        dates = list(pool.map(fetch_one, locations))
+                    self._json({"dates": dates})
+                except Exception as e:
+                    self._json({"error": "Street View date lookup failed: " + str(e)}, code=502)
+                return
+            elif self.path == "/roadconditions511":
+                # Ontario 511's own official events feed (MTO-sourced construction,
+                # closures, incidents) - confirmed genuinely keyless and open. Unlike
+                # Google's crowd-inferred traffic, this doesn't need other vehicles
+                # present to generate a signal, so it doesn't inherit Google's specific
+                # weakness on quiet rural roads. Throttled by 511 to 10 calls/60s.
+                # Handled fully here (not via the shared fall-through below) because the
+                # first version returned an empty body - Python's default User-Agent
+                # ("Python-urllib/x.x") looks script-like enough that some servers,
+                # including government ones, silently reject or empty-respond to it
+                # rather than returning a normal error status.
+                try:
+                    r511 = urllib.request.Request(
+                        "https://511on.ca/api/v2/get/event?format=json",
+                        headers={"User-Agent": "Mozilla/5.0 (compatible; UrbRis/1.0; +https://urbris.com)",
+                                 "Accept": "application/json"}
+                    )
+                    with urllib.request.urlopen(r511, timeout=15) as resp511:
+                        body511 = resp511.read()
+                    if not body511:
+                        self._json({"error": "511 returned an empty response - their service may be down or throttling this request"}, code=502)
+                        return
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Access-Control-Allow-Origin", "*")
+                    self.end_headers()
+                    self.wfile.write(body511)
+                except urllib.error.HTTPError as e:
+                    self._json({"error": "511 request failed: HTTP " + str(e.code)}, code=e.code)
+                except Exception as e:
+                    self._json({"error": "511 request failed: " + str(e)}, code=502)
+                return
             elif self.path == "/chat":
                 akey = data.get("akey", "")
                 if not akey:

@@ -1,14 +1,15 @@
 <!DOCTYPE html>
+
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-<meta http-equiv="Pragma" content="no-cache">
-<title>UrbRis v2</title>
+<meta charset="utf-8"/>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<meta content="no-cache, no-store, must-revalidate" http-equiv="Cache-Control"/>
+<meta content="no-cache" http-equiv="Pragma"/>
+<title>UrbRis — Road Intelligence v2</title>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{--bg:#0e1012;--sf:#181a1d;--sf2:#1f2124;--b:rgba(255,255,255,.08);--b2:rgba(255,255,255,.14);--tx:#e8e6e0;--mu:#888680;--ac:#d45a2a;--ac2:#e8703f;--ok:#97c459;--wn:#ef9f27;--er:#f09595;--r:8px}
@@ -110,142 +111,423 @@ input[type=number]{width:70px;text-align:right}
 #landing .tagline{font-size:17px;font-weight:400;color:var(--mu);max-width:460px;margin:0 auto 36px;line-height:1.6;letter-spacing:-.005em}
 #landing .launchbtn{background:var(--ac);color:#fff;border:none;border-radius:980px;padding:14px 34px;font-size:16px;font-weight:600;letter-spacing:-.01em;cursor:pointer;transition:.15s;font-family:inherit}
 #landing .launchbtn:hover{background:var(--ac2)}
+#landing .bookbtn{background:transparent;border:1.5px solid var(--ac);color:var(--ac2)}
+#landing .bookbtn:hover{background:rgba(212,90,42,.1)}
+.clTable{width:100%;border-collapse:collapse}
+.clTable tr{border-bottom:1px solid var(--b)}
+.clTable tr:last-child{border-bottom:none}
+.clDateCell{font-size:12px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ac2);padding:20px 16px 20px 0;white-space:nowrap;vertical-align:top;width:1%}
+.clList{margin:0;padding:20px 0 20px 18px;list-style:disc}
+.clList li{font-size:14px;line-height:1.6;color:var(--tx);margin-bottom:6px}
+.clList li:last-child{margin-bottom:0}
+
+/* --- UrbRis V3: Route Intelligence profile --- */
+.route-profile{display:none;margin:0 0 16px;background:linear-gradient(145deg,rgba(212,90,42,.09),rgba(255,255,255,.018) 42%,rgba(255,255,255,.01));border:1px solid var(--b2);border-radius:16px;overflow:hidden}
+.route-profile.show{display:block}
+.rp-head{display:flex;justify-content:space-between;gap:18px;align-items:flex-start;padding:18px 20px;border-bottom:1px solid var(--b)}
+.rp-eyebrow{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--ac2);font-weight:700}
+.rp-title{font-size:20px;line-height:1.2;font-weight:650;letter-spacing:-.025em;margin-top:5px}
+.rp-sub{font-size:11px;color:var(--mu);margin-top:5px;max-width:650px}
+.rp-badge{white-space:nowrap;border:1px solid var(--b2);background:rgba(0,0,0,.16);border-radius:999px;padding:6px 10px;font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:var(--mu)}
+.rp-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;background:var(--b)}
+.rp-metric{background:rgba(16,18,20,.9);padding:16px 18px;min-height:118px}
+.rp-metric-label{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--mu);font-weight:600}
+.rp-metric-value{display:flex;align-items:baseline;gap:6px;margin-top:7px}
+.rp-metric-value strong{font-size:29px;letter-spacing:-.04em;font-weight:650}
+.rp-metric-value span{font-size:11px;color:var(--mu)}
+.rp-metric-note{font-size:11px;color:var(--mu);line-height:1.45;margin-top:5px}
+.rp-bar{height:4px;background:rgba(255,255,255,.08);border-radius:4px;overflow:hidden;margin-top:10px}
+.rp-bar>i{display:block;height:100%;background:var(--ac);border-radius:4px}
+.rp-evidence{display:flex;gap:7px;flex-wrap:wrap;margin-top:8px}
+.rp-evidence span{font-size:10px;border:1px solid var(--b);border-radius:999px;padding:3px 7px;color:var(--mu)}
+.rp-body{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(280px,.65fr);gap:0;border-top:1px solid var(--b)}
+.rp-section{padding:18px 20px}
+.rp-section+.rp-section{border-left:1px solid var(--b)}
+.rp-section h3{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--mu);font-weight:600;margin:0 0 10px}
+.segment-list{display:flex;flex-direction:column;gap:7px}
+.segment-row{display:grid;grid-template-columns:72px 1fr auto;align-items:center;gap:10px;padding:9px 10px;background:rgba(255,255,255,.025);border:1px solid var(--b);border-radius:9px}
+.segment-km{font-family:monospace;font-size:10px;color:var(--ac2)}
+.segment-main b{display:block;font-size:11px;font-weight:600}.segment-main small{display:block;color:var(--mu);font-size:10px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.segment-score{text-align:right;font-size:11px;font-weight:650}.segment-score small{display:block;color:var(--mu);font-size:9px;font-weight:500}
+.rp-factors{display:flex;gap:6px;flex-wrap:wrap}.rp-factor{font-size:10px;padding:5px 7px;border-radius:6px;background:rgba(212,90,42,.09);border:1px solid rgba(212,90,42,.18);color:var(--tx)}
+.rp-empty{font-size:11px;color:var(--mu);line-height:1.55}
+@media(max-width:850px){.rp-grid{grid-template-columns:1fr}.rp-body{grid-template-columns:1fr}.rp-section+.rp-section{border-left:0;border-top:1px solid var(--b)}.rp-head{flex-direction:column}.rp-badge{align-self:flex-start}}
+
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/exif-js/2.3.0/exif.js"></script>
 <script src="/gopro-telemetry.bundle.js"></script>
-</head>
+<style id="urbris-redesign-v3">
+:root{
+  --bg:#0b0e0d;--sf:#121715;--sf2:#18201d;--sf3:#202a26;
+  --b:rgba(229,235,229,.08);--b2:rgba(229,235,229,.16);
+  --tx:#f0f2ec;--mu:#8d9890;--muted2:#69736c;
+  --ac:#dd6a32;--ac2:#f1844e;--ac-soft:rgba(221,106,50,.12);
+  --ok:#8fbf72;--wn:#e3ad54;--er:#e78378;--blue:#6da6d8;
+  --r:10px;--r-lg:16px;--shadow:0 24px 70px rgba(0,0,0,.28);
+}
+html{background:var(--bg)}
+body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);letter-spacing:-.005em}
+button,input{font-family:inherit}
+::selection{background:rgba(221,106,50,.25)}
+.logo{font-family:'Inter',sans-serif;font-weight:760;letter-spacing:-.045em}.logo span{color:var(--ac2)}
+.brand-lockup{display:flex;align-items:baseline;gap:0;position:relative;padding-right:108px}
+.brand-lockup small{position:absolute;left:0;top:27px;font-size:8px;font-weight:700;letter-spacing:.16em;color:var(--mu);white-space:nowrap}
+.app-brand{font-size:19px}.app-brand small{top:23px}
+
+/* Landing */
+#landing{display:flex;align-items:stretch;justify-content:center;text-align:left;padding:0;min-height:100vh;background:
+ radial-gradient(circle at 78% 14%,rgba(221,106,50,.10),transparent 32%),
+ radial-gradient(circle at 8% 82%,rgba(92,126,108,.08),transparent 28%),
+ linear-gradient(180deg,#0c100f 0%,#090c0b 100%);overflow:hidden}
+.landing-shell{width:min(1440px,100%);min-height:100vh;padding:34px clamp(28px,5vw,76px) 48px;display:flex;flex-direction:column;position:relative}
+.landing-shell:before{content:"";position:absolute;inset:0;pointer-events:none;background-image:linear-gradient(rgba(255,255,255,.018) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.018) 1px,transparent 1px);background-size:54px 54px;mask-image:linear-gradient(to right,rgba(0,0,0,.6),transparent 65%)}
+.landing-nav{display:flex;align-items:flex-start;justify-content:space-between;position:relative;z-index:2}
+#landing .logo{font-size:25px;margin:0}
+#landing .brand-lockup small{top:30px}
+.landing-text-link{font-size:12px;color:var(--mu);text-decoration:none;padding:9px 0;border-bottom:1px solid transparent}.landing-text-link:hover{color:var(--tx);border-color:var(--b2)}
+.landing-grid{display:grid;grid-template-columns:minmax(0,.88fr) minmax(520px,1.12fr);align-items:center;gap:clamp(46px,6vw,100px);flex:1;position:relative;z-index:1;padding:50px 0 30px}
+.landing-copy{max-width:640px}.eyebrow{font-size:10px;letter-spacing:.16em;font-weight:700;color:var(--ac2);margin-bottom:22px}
+#landing h1{font-size:clamp(50px,6.2vw,88px);font-weight:760;letter-spacing:-.065em;line-height:.94;margin:0 0 26px;color:var(--tx)}
+#landing h1 span{color:#a9b1aa}
+#landing .tagline{font-size:18px;color:#a3aaa4;max-width:590px;line-height:1.65;margin:0 0 34px}
+.landing-actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+#landing .launchbtn{border-radius:10px;padding:13px 18px;font-size:13px;font-weight:650;min-height:46px;letter-spacing:-.01em;box-shadow:none;display:inline-flex;align-items:center;gap:12px}
+#landing .launchbtn:first-child{background:var(--ac);padding-left:20px;padding-right:16px}
+#landing .launchbtn:first-child:hover{transform:translateY(-1px);background:var(--ac2)}
+#landing .bookbtn{background:rgba(255,255,255,.02);border:1px solid var(--b2);color:var(--tx)}#landing .bookbtn:hover{background:var(--sf2);border-color:rgba(255,255,255,.24)}
+.subscribe-link{border:0;background:transparent;color:var(--mu);padding:14px 0 0;font-size:12px;cursor:pointer}.subscribe-link:hover{color:var(--ac2)}
+.landing-proof{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:54px;border-top:1px solid var(--b);padding-top:18px;max-width:650px}
+.landing-proof div{display:flex;flex-direction:column;gap:4px}.landing-proof b{font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--tx)}.landing-proof span{font-size:11px;line-height:1.45;color:var(--mu)}
+.landing-visual{background:rgba(18,23,21,.8);border:1px solid var(--b2);border-radius:22px;padding:14px;box-shadow:var(--shadow);backdrop-filter:blur(16px);transform:perspective(1200px) rotateY(-2deg) rotateX(1deg)}
+.preview-top{height:36px;display:flex;justify-content:space-between;align-items:center;padding:0 5px 10px;font-size:9px;font-weight:700;letter-spacing:.14em;color:var(--mu)}
+.live-dot{display:flex;gap:7px;align-items:center}.live-dot:before{content:"";width:6px;height:6px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 4px rgba(143,191,114,.1)}
+.preview-map{position:relative;min-height:410px;border-radius:14px;overflow:hidden;background:linear-gradient(145deg,#141b18,#0e1311);border:1px solid var(--b)}
+.map-gridlines{position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.035) 1px,transparent 1px);background-size:44px 44px;opacity:.6}
+.preview-map:before,.preview-map:after{content:"";position:absolute;border:1px solid rgba(126,150,137,.13);border-radius:50%}.preview-map:before{width:360px;height:360px;left:-110px;bottom:-160px}.preview-map:after{width:220px;height:220px;right:-70px;top:-80px}
+.preview-map svg{position:absolute;inset:0;width:100%;height:100%;filter:drop-shadow(0 12px 12px rgba(0,0,0,.35))}.route-shadow{fill:none;stroke:#0a0c0b;stroke-width:12;stroke-linecap:round}.route-line{fill:none;stroke:var(--ac2);stroke-width:5;stroke-linecap:round;stroke-dasharray:10 4}.route-node{stroke:#101513;stroke-width:3}.route-node.start{fill:var(--ok)}.route-node.end{fill:var(--tx)}.risk-node{fill:var(--wn);stroke:#17120a;stroke-width:3}.risk-pulse{fill:var(--er);stroke:rgba(231,131,120,.22);stroke-width:12}
+.map-label{position:absolute;left:46%;top:43%;width:218px;background:rgba(10,14,12,.92);border:1px solid var(--b2);border-radius:10px;padding:10px 11px;box-shadow:0 16px 35px rgba(0,0,0,.28)}.map-label span,.map-label small{display:block;font-size:9px;color:var(--mu)}.map-label b{display:block;font-size:11px;margin:3px 0;color:var(--tx)}
+.preview-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;margin-top:10px;border:1px solid var(--b);border-radius:12px;overflow:hidden;background:var(--b)}.preview-stats div{background:#121715;padding:12px}.preview-stats span{font-size:8px;letter-spacing:.11em;color:var(--mu);display:block;margin-bottom:3px}.preview-stats b{font-size:15px;font-weight:650;color:var(--tx)}
+
+/* App shell */
+header{height:64px;padding:0 20px 0 22px;background:rgba(11,14,13,.92);backdrop-filter:blur(14px);border-bottom:1px solid var(--b);gap:16px;position:relative;z-index:20}
+header .badge{margin-left:14px;background:var(--ac-soft);border-color:rgba(221,106,50,.22);color:var(--ac2);font-weight:700;letter-spacing:.08em;font-size:9px;padding:5px 8px}
+.header-spacer{flex:1}.header-status{font-size:10px;color:var(--mu);display:flex;align-items:center;gap:7px}.header-status span{width:6px;height:6px;border-radius:50%;background:var(--ok)}
+.layout{grid-template-columns:320px minmax(0,1fr);height:calc(100vh - 64px);background:var(--bg)}.layout.collapsed{grid-template-columns:48px minmax(0,1fr)}
+.sidebar{background:#0e1210;border-right:1px solid var(--b);padding:14px 12px 28px;gap:10px}
+.sidebar>div:not(#sw):not(#pw):not(#xw){padding:13px 12px 14px;border:1px solid transparent;border-radius:12px;transition:.15s}.sidebar>div:not(#sw):not(#pw):not(#xw):hover{background:rgba(255,255,255,.012);border-color:var(--b)}
+#sbToggle{width:30px;height:30px;border-radius:8px;background:transparent;border:1px solid var(--b);color:var(--mu);margin-bottom:3px}#sbToggle:hover{background:var(--sf2);border-color:var(--b2);color:var(--tx)}
+.sl{font-size:9px;font-weight:750;letter-spacing:.13em;color:#a0aaa2;margin-bottom:9px}.fl{font-size:10px;color:var(--mu);margin-bottom:5px}
+.hint{font-size:10.5px;color:var(--mu);line-height:1.55}
+input[type=text],input[type=password],input[type=number]{background:#111714;border:1px solid var(--b2);border-radius:8px;color:var(--tx);font-size:11px;padding:8px 9px}input:focus{border-color:rgba(221,106,50,.7);box-shadow:0 0 0 3px rgba(221,106,50,.08)}
+.btn,.savebtn,.xb,.vb,.ab{transition:background .14s,border-color .14s,color .14s,transform .14s}
+.btn{background:var(--ac);border-radius:9px;padding:10px 12px;font-size:12px;font-weight:650}.btn:hover{background:var(--ac2);transform:translateY(-1px)}
+.savebtn,.xb,.vb,.ab{background:#121815;border:1px solid var(--b2);color:#aab2ac}.savebtn{border-radius:8px;padding:7px 9px;text-align:left}.savebtn:hover,.xb:hover,.vb:hover,.ab:hover{background:var(--sf2);border-color:rgba(221,106,50,.42);color:var(--tx)}
+.sr-item{background:#121815;border:1px solid var(--b);border-radius:9px;padding:8px 8px}.sr-name{font-size:11px}.sr-meta{font-size:9px}.stats{gap:5px}.st{background:#121815;border:1px solid var(--b);border-radius:9px;padding:9px 6px}.sv{font-size:17px}.sl2{font-size:8px;letter-spacing:.08em;text-transform:uppercase}
+.dz{border:1px dashed rgba(229,235,229,.2);background:rgba(255,255,255,.01);padding:16px;border-radius:9px}.dz:hover,.dz.over{background:var(--ac-soft);border-color:rgba(221,106,50,.65)}
+.log{background:#0b0f0d;border:1px solid var(--b);border-radius:9px;font-size:9.5px;height:92px}
+.main{padding:18px 20px 28px;background:radial-gradient(circle at 70% 10%,rgba(64,93,77,.05),transparent 32%),var(--bg)}
+.empty{min-height:calc(100vh - 118px);border:1px dashed var(--b);border-radius:16px;background:rgba(255,255,255,.01)}
+.rh{padding:0 2px 12px;margin-bottom:12px;border-bottom:1px solid var(--b)}.rt{font-size:14px;font-weight:650;letter-spacing:-.02em}.vb{border-radius:8px;font-size:10px;padding:6px 10px}.vb.on{background:var(--ac);border-color:var(--ac);color:white}
+.grid{grid-template-columns:repeat(auto-fill,minmax(285px,1fr));gap:12px}.card{background:#111614;border:1px solid var(--b);border-radius:14px;box-shadow:0 6px 22px rgba(0,0,0,.08)}.card img,.nc{height:168px}.cb{padding:11px 12px}.ckm{font-size:10px;letter-spacing:.04em}
+#gmap{height:calc(100vh - 185px);min-height:560px;border-radius:14px;border:1px solid var(--b2);box-shadow:0 16px 50px rgba(0,0,0,.18)}
+.wxcard{background:#111614;border:1px solid var(--b);border-radius:12px}.brf .overview,.brf .stat{background:#111614;border:1px solid var(--b)}
+.clTable tr{border-color:var(--b)}
+
+@media (max-width:1050px){.landing-grid{grid-template-columns:1fr;gap:48px;padding-top:70px}.landing-copy{max-width:760px}.landing-visual{width:min(760px,100%);transform:none}.landing-shell{overflow-y:auto}.landing-proof{max-width:760px}}
+@media (max-width:760px){.landing-shell{padding:24px 20px 34px}.landing-grid{padding-top:65px}.landing-visual{display:none}#landing h1{font-size:clamp(48px,15vw,70px)}#landing .tagline{font-size:16px}.landing-proof{grid-template-columns:1fr;gap:14px}.landing-actions{flex-direction:column;align-items:stretch}#landing .launchbtn{justify-content:center;width:100%}.header-status{display:none}.layout{grid-template-columns:minmax(275px,82vw) minmax(0,1fr)}.main{padding:12px}#gmap{min-height:520px}}
+</style>
+<style id="urbris-v2-ia">
+/* UrbRis v2 — mode-based road intelligence workspace */
+header{padding-right:18px}.workspace-mode-nav{display:flex;align-self:stretch;margin-left:26px;gap:2px}.mode-tab{appearance:none;border:0;border-bottom:2px solid transparent;background:transparent;color:var(--mu);padding:0 14px;min-width:92px;cursor:pointer;display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:1px;transition:.15s}.mode-tab:hover{color:var(--tx);background:rgba(255,255,255,.018)}.mode-tab.active{color:var(--tx);border-bottom-color:var(--ac)}.mode-tab .mode-label{font-size:11px;font-weight:700;letter-spacing:-.01em}.mode-tab small{font-size:8px;color:var(--muted2);white-space:nowrap}.mode-tab.active small{color:var(--mu)}
+.layout{grid-template-columns:332px minmax(0,1fr)}.mode-context{padding:9px 12px 12px!important;border:0!important;border-bottom:1px solid var(--b)!important;border-radius:0!important;margin:0 2px 2px}.mode-context:hover{background:transparent!important}.mode-context-title{font-size:18px;font-weight:720;letter-spacing:-.04em;color:var(--tx)}.mode-context-desc{font-size:10px;line-height:1.5;color:var(--mu);margin-top:4px;max-width:270px}
+.mode-panel{display:none;flex-direction:column;gap:8px}.mode-panel.active{display:flex}.mode-panel>div:not(#sw):not(#pw):not(#xw){padding:13px 12px 14px;border:1px solid transparent;border-radius:12px;transition:.15s}.mode-panel>div:not(#sw):not(#pw):not(#xw):hover{background:rgba(255,255,255,.012);border-color:var(--b)}
+.mode-panel[data-mode-panel="analyze"]>#run,.mode-panel[data-mode-panel="analyze"]>#riskBtn{margin:0 12px;width:calc(100% - 24px)}.mode-panel[data-mode-panel="analyze"]>#pw,.mode-panel[data-mode-panel="analyze"]>#sw,.mode-panel[data-mode-panel="analyze"]>#xw{margin:0 12px}
+.layout.collapsed .sidebar>*:not(#sbToggle){display:none!important}
+.intelligence-rail{height:48px;border:1px solid var(--b);border-radius:12px;background:rgba(17,22,20,.78);display:grid;grid-template-columns:repeat(4,1fr);margin-bottom:12px;overflow:hidden}.rail-step{display:flex;align-items:center;gap:9px;padding:0 13px;border-right:1px solid var(--b)}.rail-step:last-child{border-right:0}.rail-step>span{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:8px;color:var(--ac2)}.rail-step div{display:flex;flex-direction:column;gap:1px}.rail-step b{font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:#b8c0ba}.rail-step small{font-size:8px;color:var(--muted2)}
+/* Signature analysis surface */
+body[data-workspace-mode="analyze"] .main{background:radial-gradient(circle at 82% 4%,rgba(221,106,50,.055),transparent 25%),radial-gradient(circle at 35% 80%,rgba(80,122,99,.05),transparent 30%),var(--bg)}
+body[data-workspace-mode="field"] .main{background:radial-gradient(circle at 85% 5%,rgba(109,166,216,.05),transparent 26%),var(--bg)}
+body[data-workspace-mode="library"] .main{background:radial-gradient(circle at 72% 5%,rgba(143,191,114,.035),transparent 28%),var(--bg)}
+.rh{position:sticky;top:0;z-index:8;background:rgba(11,14,13,.86);backdrop-filter:blur(12px);padding:9px 4px 12px}.rt{font-size:15px}
+#drawBar{padding:9px 10px;border:1px solid var(--b);border-radius:10px;background:#0f1412}
+#gmap{height:calc(100vh - 245px);min-height:520px;border-radius:16px}
+.card{transition:transform .16s,border-color .16s,box-shadow .16s}.card:hover{transform:translateY(-2px);border-color:var(--b2);box-shadow:0 15px 36px rgba(0,0,0,.16)}
+/* Make primary workflow buttons unmistakable */
+#newRouteBtn,#run,#riskBtn{font-weight:700}.mode-panel[data-mode-panel="routes"] #newRouteBtn{background:var(--ac);border-color:var(--ac);color:#fff;text-align:center;padding:10px}.mode-panel[data-mode-panel="routes"] #newRouteBtn:hover{background:var(--ac2)}
+.mode-panel[data-mode-panel="field"] #paintBtn{border-color:rgba(109,166,216,.28)}
+@media(max-width:1120px){.workspace-mode-nav{margin-left:10px}.mode-tab{min-width:72px;padding:0 9px}.mode-tab small{display:none}.header-status{display:none}.layout{grid-template-columns:310px minmax(0,1fr)}}
+@media(max-width:820px){header{overflow-x:auto}.workspace-mode-nav{order:3;margin-left:8px}.brand-lockup.app-brand{min-width:126px}.badge{display:none}.intelligence-rail{grid-template-columns:repeat(2,1fr);height:auto}.rail-step{min-height:42px;border-bottom:1px solid var(--b)}.layout{grid-template-columns:minmax(280px,84vw) minmax(0,1fr)}}
+/* V2.1 — explicit cross-mode workflow handoff */
+.next-step-card{display:none;margin:4px 12px 2px;padding:13px;border:1px solid rgba(221,106,50,.28);border-radius:12px;background:linear-gradient(135deg,rgba(221,106,50,.10),rgba(221,106,50,.025));box-shadow:0 10px 30px rgba(0,0,0,.12)}
+.next-step-card.visible{display:block}.next-step-kicker{font-size:8px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--ac2)}.next-step-title{font-size:14px;font-weight:750;color:var(--tx);margin-top:3px}.next-step-copy{font-size:10px;color:var(--mu);line-height:1.5;margin:4px 0 10px}.next-step-btn{width:100%;border:0;border-radius:9px;background:var(--ac);color:#fff;padding:10px 12px;font:inherit;font-size:11px;font-weight:750;cursor:pointer;text-align:left;display:flex;align-items:center;justify-content:space-between}.next-step-btn:hover{background:var(--ac2)}
+.mode-tab.attention{color:var(--tx)}.mode-tab.attention:after{content:'';width:5px;height:5px;border-radius:50%;background:var(--ac);position:absolute;right:8px;top:9px;box-shadow:0 0 0 4px rgba(221,106,50,.12)}.mode-tab{position:relative}
+#logWrap summary{cursor:pointer;color:var(--mu);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;list-style:none}#logWrap summary::-webkit-details-marker{display:none}#logWrap summary:after{content:' +';color:var(--ac2)}#logWrap[open] summary:after{content:' −'}#logWrap .log{margin-top:7px}
+@media(max-width:820px){header{position:sticky;top:0;z-index:50;display:flex!important;flex-wrap:wrap;height:auto;min-height:58px;padding:10px 12px 0;overflow:visible}.brand-lockup.app-brand{height:36px}.workspace-mode-nav{order:3;width:100%;margin:4px -12px 0;padding:0 8px;overflow-x:auto;border-top:1px solid var(--b);background:rgba(11,14,13,.96)}.mode-tab{flex:1;min-width:76px;height:48px;padding:0 10px;align-items:center}.mode-tab small{display:none}.layout,.layout.collapsed{display:block!important;height:auto;min-height:calc(100vh - 96px)}.sidebar,.layout.collapsed .sidebar{width:100%;height:auto;max-height:none;border-right:0;border-bottom:1px solid var(--b);padding:10px 10px 12px;overflow:visible}.layout.collapsed .sidebar>*:not(#sbToggle){display:block!important}#sbToggle{display:none}.mode-context{display:none}.main{padding:10px;min-height:60vh}.intelligence-rail{display:none}#gmap{height:62vh;min-height:420px;border-radius:12px}.rh{top:96px;overflow-x:auto}.rh>div:last-child{min-width:max-content}.grid{grid-template-columns:1fr}.next-step-card{margin:4px 2px 2px}.mode-panel[data-mode-panel="analyze"]>#run,.mode-panel[data-mode-panel="analyze"]>#riskBtn{margin-left:2px;margin-right:2px;width:calc(100% - 4px)}.mode-panel[data-mode-panel="analyze"]>#pw,.mode-panel[data-mode-panel="analyze"]>#sw,.mode-panel[data-mode-panel="analyze"]>#xw{margin-left:2px;margin-right:2px}}
+@media(max-width:430px){.mode-tab{min-width:70px;padding:0 7px}.mode-tab .mode-label{font-size:10px}.main{padding:8px}#gmap{height:58vh;min-height:380px}.landing-shell{padding-left:16px;padding-right:16px}}
+</style></head>
 <body>
 <div id="landing">
-  <div class="logo">Urb<span>Ris</span></div>
-  <h1>Let's make roads safer.</h1>
-  <button class="launchbtn" onclick="enterApp()">Launch UrbRis</button>
+<div class="landing-shell">
+<div class="landing-nav">
+<div class="logo brand-lockup">Urb<span>Ris</span><small>ROAD INTELLIGENCE</small></div>
+<a class="landing-text-link" href="#" onclick="showChangelog(); return false;">Changelog</a>
+</div>
+<div class="landing-grid">
+<section class="landing-copy">
+<div class="eyebrow">ROUTE RISK · FIELD VERIFICATION · RIDER INTELLIGENCE</div>
+<h1>Know the road<br/><span>before you ride it.</span></h1>
+<p class="tagline">Turn routes into usable road intelligence. Analyze risk, verify what is actually there, and build a clearer picture of the road ahead.</p>
+<div class="landing-actions">
+<button class="launchbtn" onclick="enterApp()">Open route workspace <span aria-hidden="true">→</span></button>
+<button class="launchbtn bookbtn" onclick="window.open(BOOKING_URL, '_blank')">Ride with UrbRis</button>
+</div>
+<button class="subscribe-link" onclick="window.open(SUBSCRIBE_URL, '_blank')">Get a new route every week <span aria-hidden="true">↗</span></button>
+<div class="landing-proof">
+<div><b>Analyze</b><span>Street View + iRAP-style coding</span></div>
+<div><b>Verify</b><span>GoPro, drone and phone field media</span></div>
+<div><b>Ride</b><span>Briefings, conditions and route export</span></div>
+</div>
+</section>
+<aside aria-label="UrbRis route intelligence preview" class="landing-visual">
+<div class="preview-top"><span>ROUTE INTELLIGENCE</span><span class="live-dot">FIELD READY</span></div>
+<div class="preview-map">
+<div class="map-gridlines"></div>
+<svg aria-label="Stylized route risk map" role="img" viewbox="0 0 620 410">
+<path class="route-shadow" d="M54 340 C110 310,120 250,180 258 S250 315,295 230 S350 105,410 150 S480 235,570 72"></path>
+<path class="route-line" d="M54 340 C110 310,120 250,180 258 S250 315,295 230 S350 105,410 150 S480 235,570 72"></path>
+<circle class="route-node start" cx="54" cy="340" r="7"></circle><circle class="route-node end" cx="570" cy="72" r="7"></circle>
+<circle class="risk-pulse" cx="294" cy="231" r="10"></circle><circle class="risk-node" cx="409" cy="150" r="7"></circle>
+</svg>
+<div class="map-label label-a"><span>KM 18.4–24.7</span><b>Elevated workload</b><small>Curve sequence · limited sight distance</small></div>
+</div>
+<div class="preview-stats">
+<div><span>ROUTE</span><b>147 km</b></div>
+<div><span>RISK</span><b>64</b></div>
+<div><span>TECHNICALITY</span><b>78</b></div>
+<div><span>VERIFIED</span><b>62%</b></div>
+</div>
+</aside>
+</div>
+</div>
+</div>
+<div id="changelogView" style="display:none;min-height:100vh;padding:48px 24px;max-width:680px;margin:0 auto;font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif">
+<a href="#" onclick="hideChangelog(); return false;" style="font-size:13px;color:var(--ac2)">← Back</a>
+<div class="logo" style="margin:20px 0 4px">Urb<span>Ris</span> Changelog</div>
+<div style="font-size:13px;color:var(--mu);margin-bottom:32px">What's changed, session by session.</div>
+<div id="changelogContent"></div>
 </div>
 <header style="display:none">
-  <div class="logo">Urb<span>Ris</span></div>
-  <span class="badge">iRAP Street View</span>
+<div class="logo brand-lockup app-brand">Urb<span>Ris</span><small>ROAD INTELLIGENCE</small></div>
+<span class="badge">ROUTE WORKSPACE</span>
+<nav aria-label="Workspace modes" class="workspace-mode-nav"><button class="mode-tab active" data-mode="routes" onclick="setWorkspaceMode('routes')" title="Build &amp; import" type="button"><span class="mode-label">Routes</span><small>Build &amp; import</small></button><button class="mode-tab" data-mode="analyze" onclick="setWorkspaceMode('analyze')" title="Risk &amp; conditions" type="button"><span class="mode-label">Analyze</span><small>Risk &amp; conditions</small></button><button class="mode-tab" data-mode="field" onclick="setWorkspaceMode('field')" title="Verify &amp; collect" type="button"><span class="mode-label">Field</span><small>Verify &amp; collect</small></button><button class="mode-tab" data-mode="library" onclick="setWorkspaceMode('library')" title="Saved intelligence" type="button"><span class="mode-label">Library</span><small>Saved intelligence</small></button></nav><div class="header-spacer"></div>
+<div class="header-status"><span></span> Field + Street View intelligence</div>
 </header>
 <div class="layout" id="layout" style="display:none">
 <div class="sidebar">
-  <button id="sbToggle" onclick="toggleSidebar()" title="Collapse sidebar">&#8249;</button>
-  <div>
-    <div class="sl">API Keys</div>
-    <label class="fl">Google Maps key</label>
-    <input type="text" id="gkey" placeholder="AIza..." />
-    <label class="fl" style="margin-top:8px">Anthropic key</label>
-    <input type="password" id="akey" placeholder="sk-ant-..." />
-    <div class="hint" style="margin-top:8px">Not saved anywhere - cleared on refresh. Re-enter each session.</div>
+<button id="sbToggle" onclick="toggleSidebar()" title="Collapse sidebar">‹</button><div class="mode-context"><div class="mode-context-title" id="modeContextTitle">Routes</div><div class="mode-context-desc" id="modeContextDesc">Build, draw or import the road you want to understand.</div></div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<section class="mode-panel active" data-mode-panel="routes"><div>
+<div class="sl">Workspace setup</div>
+<label class="fl">Google Maps key</label>
+<input id="gkey" placeholder="AIza..." type="text"/>
+<label class="fl" style="margin-top:8px">Anthropic key</label>
+<input id="akey" placeholder="sk-ant-..." type="password"/>
+<div class="hint" style="margin-top:8px">Not saved anywhere - cleared on refresh. Re-enter each session.</div>
+</div><div>
+<div class="sl">Route</div>
+<button class="savebtn" id="newRouteBtn" onclick="startDraw()">New route</button>
+<div class="hint" style="margin-top:8px">Draw your route on the map to begin - trace it like a pencil, lift and draw again to continue.</div>
+<div class="hint" style="margin-top:8px">Or import a route straight from a GoPro/DJI video's GPS track - no need to draw it by hand.</div>
+<input accept="video/mp4,video/quicktime,.srt" id="videoImportInput" multiple="" style="margin-top:6px" type="file"/>
+<div class="hint" id="videoImportStatus" style="margin-top:6px"></div>
+<div id="videoImportProgress" style="display:none;margin-top:6px">
+  <div style="background:var(--sf2);border-radius:20px;height:8px;overflow:hidden"><div id="videoImportProgressBar" style="background:#4a90e2;height:100%;width:0%;transition:width .2s"></div></div>
+  <button class="vb" id="videoImportCancelBtn" style="margin-top:6px;font-size:11px" onclick="cancelVideoImport()">Cancel extraction</button>
+</div>
+<div class="hint" style="margin-top:8px">Or import any GPX file - your own saved rides, or a route pulled from Scenic/Kurviger/REVER - and score it, whether you've ridden it or not.</div>
+<input accept=".gpx" id="gpxImportInput" style="margin-top:6px" type="file"/>
+<div class="hint" id="gpxImportStatus" style="margin-top:6px"></div>
+<button class="savebtn" id="recordVideoBtn" onclick="openCameraRecorder()" style="margin-top:8px">Record with phone camera</button>
+<div id="cameraRecorder" style="display:none;margin-top:8px">
+<video autoplay="" id="cameraPreview" muted="" playsinline="" style="width:100%;border-radius:8px;background:#000;display:block"></video>
+<div style="display:flex;gap:8px;margin-top:6px">
+<button class="vb" id="startRecBtn" onclick="startRecording()">Start Recording</button>
+<button class="vb" disabled="" id="stopRecBtn" onclick="stopRecording()">Stop Recording</button>
+<button class="vb" id="cancelRecBtn" onclick="closeCameraRecorder()">Cancel</button>
+</div>
+<div class="hint" id="recStatus" style="margin-top:6px"></div>
+</div>
+<div id="fn" style="font-size:11px;color:var(--ok);margin-top:6px"></div>
+<div style="margin-top:4px"><a href="#" onclick="saveCurrentRoute(); return false;" style="font-size:11px;color:var(--ac2)">Save current route now</a></div>
+<button class="savebtn" id="sendPhone" style="margin-top:8px;display:none">Send to phone (Google Maps)</button>
+<div id="phonePanel" style="display:none;margin-top:8px;text-align:center;background:var(--sf2);border:.5px solid var(--b);border-radius:8px;padding:10px">
+<img alt="QR code for Google Maps directions" id="qrImg" style="width:150px;height:150px;border-radius:6px;background:#fff;padding:6px"/>
+<div style="font-size:11px;color:var(--mu);margin-top:6px">Scan with your phone, or</div>
+<a href="#" id="gmapsLink" rel="noopener" style="font-size:12px;color:var(--ac2);word-break:break-all;display:block;margin-top:4px" target="_blank">Open in Google Maps</a>
+<div style="font-size:10px;color:var(--mu);margin-top:8px;line-height:1.4;text-align:left">Google Maps recalculates the path between a limited number of stops - on a complex route it may not exactly match what Urbris planned. Ride the road, not the assumption.</div>
+</div>
+<button class="savebtn" id="legsBtn" onclick="showSuggestedLegs()" style="margin-top:8px;display:none">Suggest fuel/fatigue stops</button>
+<button class="savebtn" id="conditionsBtn" onclick="checkRoadConditions()" style="margin-top:8px;display:none">Check live road conditions (Ontario 511)</button>
+<div id="conditionsPanel" style="margin-top:6px"></div>
+<button class="savebtn" id="gpxBtn" onclick="downloadGPX()" style="margin-top:8px;display:none">Download GPX (for Scenic, Kurviger, etc.)</button>
+<button class="savebtn" id="gpxLinkBtn" onclick="showGPXLink()" style="margin-top:8px;display:none">Send to Scenic / Kurviger</button>
+<div id="gpxLinkPanel" style="margin-top:6px"></div>
+<div id="legsPanel" style="margin-top:6px"></div>
+</div><div class="next-step-card" id="routeNextStep" aria-live="polite">
+<div class="next-step-kicker">Route ready</div>
+<div class="next-step-title" id="routeNextTitle">Continue to analysis</div>
+<div class="next-step-copy" id="routeNextCopy">Collect road imagery next. UrbRis will keep this route in view and take you directly to the analysis controls.</div>
+<button class="next-step-btn" id="routeNextBtn" type="button" onclick="continueRouteWorkflow()"><span id="routeNextBtnLabel">Pull Images</span><span aria-hidden="true">→</span></button>
+</div><div id="sw" style="display:none">
+<div class="sl">Route</div>
+<div class="stats">
+<div class="st"><div class="sv" id="sd">-</div><div class="sl2">km</div></div>
+<div class="st"><div class="sv" id="sp">-</div><div class="sl2">points</div></div>
+<div class="st"><div class="sv" id="si">-</div><div class="sl2">images</div></div>
+</div>
+</div></section><section class="mode-panel" data-mode-panel="analyze"><div>
+<div class="sl">Map layers</div>
+<div class="or"><label>Light pollution</label><input checked="" id="lp" style="width:auto;cursor:pointer" type="checkbox"/></div>
+<div class="or" style="margin-top:8px"><label>Live traffic</label><input checked="" id="traffic" style="width:auto;cursor:pointer" type="checkbox"/></div>
+<div style="margin-top:4px"><a href="#" onclick="refreshTraffic(); return false;" style="font-size:11px;color:var(--ac2)">Force-refresh traffic tiles</a></div>
+<div class="or" style="margin-top:8px"><label>Weather radar</label><input id="radar" style="width:auto;cursor:pointer" type="checkbox"/></div>
+<div class="hint" style="margin-top:4px">Live observed precipitation (ECCC), not a forecast - updates roughly every 10 min.</div>
+</div><button class="btn" disabled="" id="run">Draw a route first</button><button class="btn" disabled="" id="riskBtn" onclick="pullRisk()" style="margin-top:8px;display:none">Pull Risk</button><div id="pw" style="display:none">
+<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--mu);margin-bottom:4px"><span id="pl">Extracting</span><span id="pp">0%</span></div>
+<div class="pb"><div class="pf" id="pf"></div></div>
+</div><details id="logWrap"><summary>Activity log</summary><div class="log" id="log"></div></details><div id="xw" style="display:none">
+<button class="xb" id="xb">Export CSV with iRAP</button>
+<button class="xb" id="bb" style="margin-top:8px">Print ride briefing</button>
+<button class="xb" id="snapshotBtn" onclick="generateSnapshot()" style="margin-top:8px">Share route snapshot</button>
+<button class="xb" id="bookPageBtn" onclick="generateBookPage()" style="margin-top:8px">Create book page</button>
+</div></section><section class="mode-panel" data-mode-panel="field"><div>
+<div class="sl">Paint by Ride</div>
+<div class="hint">Every saved route, colored by how it was verified - <b style="color:#4a90e2">blue</b> where you personally captured it on camera, <b style="color:#3a7d5c">green</b> where it's Street View only. Nothing painted means nowhere verified yet.</div>
+<button class="savebtn" id="paintBtn" onclick="showPaintByRide()" style="margin-top:8px">Show painted map</button>
+<div class="hint" id="paintStatus" style="margin-top:6px"></div>
+</div><div>
+<div class="sl">Coverage gaps</div>
+<div class="hint">Click a point on the map to scan every road within an area for Street View gaps - a fast way to find where to point a GoPro instead of checking one route at a time.</div>
+<div class="or" style="margin-top:8px"><label>Area (sq km)</label><input id="scanArea" max="50" min="1" step="1" style="width:60px" type="number" value="10"/></div>
+<button class="btn" id="scanBtn" onclick="startScan()" style="margin-top:8px">Scan area for gaps</button>
+</div><div>
+<div class="sl">Field verification</div>
+<div class="hint">Drop photos or video from a drone/GoPro flight - matched to the nearest point by GPS automatically. Fills points marked "No Street View coverage", and attaches as a separate validation image on points that already have coverage, so you can compare what was actually seen against the Street View baseline.</div>
+<div class="dz" style="margin-top:8px">
+<div style="font-size:12px;color:var(--mu)">Drop or click to select photos/video</div>
+<input accept="image/jpeg,video/mp4,video/quicktime,.srt" id="dronePhotos" multiple="" type="file"/>
+</div>
+<div class="hint" id="droneStatus" style="margin-top:6px"></div>
+</div></section><section class="mode-panel" data-mode-panel="library"><div>
+<div class="sl">Route library</div>
+<div class="hint">Saves automatically once images are pulled, and updates in place as you go.</div>
+<input id="savedSearch" oninput="filterSavedList()" placeholder="Search by name..." style="margin-top:8px" type="text"/>
+<div id="savedList" style="display:flex;flex-direction:column;gap:6px;max-height:220px;overflow-y:auto;margin-top:8px"></div>
+</div><div>
+<div class="sl">Completion</div>
+<div id="completionStats"><div class="hint">No routes drawn yet.</div></div>
+</div><div>
+<div class="sl">Route intelligence</div>
+<div class="hint">Recommendations and analytics across every saved route - "which route is riskiest," "how many km have I verified this month," "recommend a route under 30km."</div>
+<input id="routeChatInput" onkeydown="if(event.key==='Enter')askAboutRoutes()" placeholder="Ask a question..." style="margin-top:8px" type="text"/>
+<button class="savebtn" onclick="askAboutRoutes()" style="margin-top:8px">Ask</button>
+<div id="routeChatAnswer" style="margin-top:8px"></div>
+</div></section></div>
+<div class="main"><div class="intelligence-rail"><div class="rail-step"><span>01</span><div><b>Route</b><small>Draw or import</small></div></div><div class="rail-step"><span>02</span><div><b>Observe</b><small>Street View + field</small></div></div><div class="rail-step"><span>03</span><div><b>Analyze</b><small>Risk + conditions</small></div></div><div class="rail-step"><span>04</span><div><b>Act</b><small>Brief, export, ride</small></div></div></div>
+<div class="empty" id="empty">
+<div style="font-size:36px;opacity:.2">📷</div>
+<div style="font-size:14px;font-weight:500;color:var(--tx)">Enter your Google Maps key to begin</div>
+<div style="font-size:12px;max-width:240px;margin-top:4px">Then draw your route on the map, and Urbris will pull Street View frames and code iRAP attributes along the way.</div>
+</div>
+<div id="rw" style="display:none">
+<div class="rh">
+<div class="rt" id="rt">Route frames</div>
+<div style="display:flex;gap:10px;align-items:center">
+<div style="display:flex;align-items:center;gap:6px">
+<label style="font-size:11px;color:var(--mu)">Min index</label>
+<input id="rf" max="100" min="0" step="5" style="width:80px;cursor:pointer" type="range" value="0"/>
+<span id="rfv" style="font-size:11px;color:var(--mu);width:38px">0%+</span>
+</div>
+<span id="cs" style="font-size:12px;color:var(--mu)"></span>
+<button class="vb on" id="bg" onclick="sv('grid')">Images</button>
+<button class="vb" id="bp" onclick="sv('profile')">Profile</button>
+<button class="vb" id="bm" onclick="sv('map')">Map</button>
+<button class="vb" id="bbt" onclick="sv('brief')">Briefing</button>
+</div>
+</div>
+<div id="fs" style="display:none;font-size:11px;color:var(--mu);margin:-8px 0 12px">Points not yet analysed are hidden while a filter is active - they might still be risky, they just haven't been coded yet.</div>
+<div id="depSliderWrap" style="display:none;margin:0 0 12px;background:var(--sf2);border:.5px solid var(--b);border-radius:10px;padding:12px 14px">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+    <span style="font-size:11px;font-weight:600" id="depSliderLabel">Leaving now</span>
+    <span style="font-size:10px;color:var(--mu)">Weather + traffic update as you drag</span>
   </div>
-  <div>
-    <div class="sl">Saved Routes</div>
-    <div class="hint">Saves automatically once images are pulled, and updates in place as you go.</div>
-    <div id="savedList" style="display:flex;flex-direction:column;gap:6px;max-height:220px;overflow-y:auto;margin-top:8px"></div>
+  <input type="range" id="depSlider" min="0" max="48" value="0" step="1" oninput="onDepartureSliderChange()" style="width:100%"/>
+  <div id="trafficPredict" style="font-size:11px;color:var(--mu);margin-top:8px"></div>
+</div>
+<div id="wxbar" style="display:none">
+<div class="wxwarnmsg" id="wxwarnmsg" style="display:none">⚠ Rain or high wind flagged along part of this route - check the cards below.</div>
+<div class="wxstrip" id="wxstrip"></div>
+</div>
+<div class="route-profile" id="routeProfile" aria-live="polite">
+  <div class="rp-head">
+    <div><div class="rp-eyebrow">UrbRis Route Profile</div><div class="rp-title" id="rpTitle">Route intelligence</div><div class="rp-sub">Road Risk Index summarizes flagged infrastructure indicators. Technical Complexity comes from measured route geometry. Neither is a crash-probability estimate.</div></div>
+    <div class="rp-badge" id="rpState">Assessment building</div>
   </div>
-  <div>
-    <div class="sl">Route</div>
-    <button class="savebtn" id="newRouteBtn" onclick="startDraw()">New route</button>
-    <div class="hint" style="margin-top:8px">Draw your route on the map to begin - trace it like a pencil, lift and draw again to continue.</div>
-    <div id="fn" style="font-size:11px;color:var(--ok);margin-top:6px"></div>
-    <button class="savebtn" id="sendPhone" style="margin-top:8px;display:none">Send to phone (Google Maps)</button>
-    <div id="phonePanel" style="display:none;margin-top:8px;text-align:center;background:var(--sf2);border:.5px solid var(--b);border-radius:8px;padding:10px">
-      <img id="qrImg" style="width:150px;height:150px;border-radius:6px;background:#fff;padding:6px" alt="QR code for Google Maps directions"/>
-      <div style="font-size:11px;color:var(--mu);margin-top:6px">Scan with your phone, or</div>
-      <a id="gmapsLink" href="#" target="_blank" rel="noopener" style="font-size:12px;color:var(--ac2);word-break:break-all;display:block;margin-top:4px">Open in Google Maps</a>
-    </div>
+  <div class="rp-grid">
+    <div class="rp-metric"><div class="rp-metric-label">Road Risk Index</div><div class="rp-metric-value"><strong id="rpRisk">—</strong><span id="rpRiskScale">/ 100</span></div><div class="rp-metric-note" id="rpRiskNote">Run road analysis to calculate infrastructure indicators.</div><div class="rp-bar"><i id="rpRiskBar" style="width:0%"></i></div></div>
+    <div class="rp-metric"><div class="rp-metric-label">Technical Complexity</div><div class="rp-metric-value"><strong id="rpTech">—</strong><span>/ 100</span></div><div class="rp-metric-note" id="rpTechNote">Calculated from measured curvature along the route.</div><div class="rp-bar"><i id="rpTechBar" style="width:0%"></i></div></div>
+    <div class="rp-metric"><div class="rp-metric-label">Assessment Confidence</div><div class="rp-metric-value"><strong id="rpConfidence">—</strong></div><div class="rp-metric-note" id="rpConfidenceNote">Confidence reflects evidence coverage and coding completeness.</div><div class="rp-evidence" id="rpEvidence"></div></div>
   </div>
-  <div>
-    <div class="sl">Coverage Gap Scanner</div>
-    <div class="hint">Click a point on the map to scan every road within an area for Street View gaps - a fast way to find where to point a GoPro instead of checking one route at a time.</div>
-    <div class="or" style="margin-top:8px"><label>Area (sq km)</label><input type="number" id="scanArea" value="10" min="1" max="50" step="1" style="width:60px"/></div>
-    <button class="btn" id="scanBtn" style="margin-top:8px" onclick="startScan()">Scan area for gaps</button>
-  </div>
-  <div>
-    <div class="sl">Field Media</div>
-    <div class="hint">Drop photos or video from a drone/GoPro flight - matched to the nearest point by GPS automatically. Fills points marked "No Street View coverage", and attaches as a separate validation image on points that already have coverage, so you can compare what was actually seen against the Street View baseline.</div>
-    <div class="dz" style="margin-top:8px">
-      <div style="font-size:12px;color:var(--mu)">Drop or click to select photos/video</div>
-      <input type="file" id="dronePhotos" accept="image/jpeg,video/mp4,video/quicktime,.srt" multiple />
-    </div>
-    <div id="droneStatus" class="hint" style="margin-top:6px"></div>
-  </div>
-  <div>
-    <div class="sl">Options</div>
-    <div class="or"><label>Light pollution</label><input type="checkbox" id="lp" checked style="width:auto;cursor:pointer"/></div>
-    <div class="or" style="margin-top:8px"><label>Live traffic</label><input type="checkbox" id="traffic" checked style="width:auto;cursor:pointer"/></div>
-    <div style="margin-top:4px"><a href="#" onclick="refreshTraffic(); return false;" style="font-size:11px;color:var(--ac2)">Force-refresh traffic tiles</a></div>
-  </div>
-  <div id="sw" style="display:none">
-    <div class="sl">Route</div>
-    <div class="stats">
-      <div class="st"><div class="sv" id="sd">-</div><div class="sl2">km</div></div>
-      <div class="st"><div class="sv" id="sp">-</div><div class="sl2">points</div></div>
-      <div class="st"><div class="sv" id="si">-</div><div class="sl2">images</div></div>
-    </div>
-  </div>
-  <button class="btn" id="run" disabled>Draw a route first</button>
-  <button class="btn" id="riskBtn" style="margin-top:8px;display:none" onclick="pullRisk()" disabled>Pull Risk</button>
-  <div id="pw" style="display:none">
-    <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--mu);margin-bottom:4px"><span id="pl">Extracting</span><span id="pp">0%</span></div>
-    <div class="pb"><div class="pf" id="pf"></div></div>
-  </div>
-  <div><div class="sl">Log</div><div class="log" id="log"></div></div>
-  <div id="xw" style="display:none">
-    <button class="xb" id="xb">Export CSV with iRAP</button>
-    <button class="xb" id="bb" style="margin-top:8px">Print ride briefing</button>
-    <button class="xb" id="snapshotBtn" style="margin-top:8px" onclick="generateSnapshot()">Share route snapshot</button>
-    <button class="xb" id="bookPageBtn" style="margin-top:8px" onclick="generateBookPage()">Create book page</button>
+  <div class="rp-body">
+    <div class="rp-section"><h3>Priority segments</h3><div class="segment-list" id="rpSegments"><div class="rp-empty">Segments appear as route evidence and analysis become available.</div></div></div>
+    <div class="rp-section"><h3>Dominant infrastructure indicators</h3><div class="rp-factors" id="rpFactors"></div><div class="rp-empty" id="rpFactorsEmpty">Run road analysis to identify recurring infrastructure indicators.</div></div>
   </div>
 </div>
-<div class="main">
-  <div class="empty" id="empty">
-    <div style="font-size:36px;opacity:.2">&#128247;</div>
-    <div style="font-size:14px;font-weight:500;color:var(--tx)">Enter your Google Maps key to begin</div>
-    <div style="font-size:12px;max-width:240px;margin-top:4px">Then draw your route on the map, and Urbris will pull Street View frames and code iRAP attributes along the way.</div>
-  </div>
-  <div id="rw" style="display:none">
-    <div class="rh">
-      <div class="rt" id="rt">Route frames</div>
-      <div style="display:flex;gap:10px;align-items:center">
-        <div style="display:flex;align-items:center;gap:6px">
-          <label style="font-size:11px;color:var(--mu)">Min risk</label>
-          <input type="range" id="rf" min="0" max="100" value="0" step="5" style="width:80px;cursor:pointer"/>
-          <span id="rfv" style="font-size:11px;color:var(--mu);width:38px">0%+</span>
-        </div>
-        <span id="cs" style="font-size:12px;color:var(--mu)"></span>
-        <button class="vb on" id="bg" onclick="sv('grid')">Images</button>
-        <button class="vb" id="bm" onclick="sv('map')">Map</button>
-        <button class="vb" id="bbt" onclick="sv('brief')">Briefing</button>
-      </div>
-    </div>
-    <div id="fs" style="display:none;font-size:11px;color:var(--mu);margin:-8px 0 12px">Points not yet analysed are hidden while a filter is active - they might still be risky, they just haven't been coded yet.</div>
-    <div id="wxbar" style="display:none">
-      <div id="wxwarnmsg" class="wxwarnmsg" style="display:none">&#9888; Rain or high wind flagged along part of this route - check the cards below.</div>
-      <div id="wxstrip" class="wxstrip"></div>
-    </div>
-    <div id="vg"><div class="grid" id="grid"></div></div>
-    <div id="vm" style="display:none">
-      <div id="drawBar" style="display:none;margin-bottom:10px;gap:8px;align-items:center;flex-wrap:wrap">
-        <button class="vb" id="drawToolBtn" onclick="toggleDrawTool()">Pan/zoom mode - tap to draw</button>
-        <button class="vb" id="finishDraw" onclick="finishDraw()">Finish drawing</button>
-        <button class="vb" id="undoStroke" onclick="undoLastStroke()">Undo last stroke</button>
-        <button class="vb" id="clearDraw" onclick="clearDraw()">Clear all</button>
-        <span id="drawCount" style="font-size:12px;color:var(--mu)">0 km traced - draw on the map to trace your route</span>
-      </div>
-      <div style="font-size:11px;color:var(--mu);margin-bottom:10px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
-        <div style="display:flex;align-items:center;gap:6px">
-          <span>Low risk</span>
-          <div style="width:110px;height:8px;border-radius:4px;background:linear-gradient(90deg,hsl(120,72%,50%),hsl(60,72%,50%),hsl(0,72%,50%))"></div>
-          <span>High risk</span>
-        </div>
-        <div style="display:flex;align-items:center;gap:5px"><span style="width:9px;height:9px;border-radius:50%;background:#5a5f66;display:inline-block"></span>Not yet analysed</div>
-        <div style="display:flex;align-items:center;gap:5px"><span style="width:9px;height:9px;border-radius:50%;background:#f09595;display:inline-block"></span>No coverage</div>
-      </div>
-      <div id="gmap"></div>
-    </div>
-    <div id="vbr" style="display:none"></div>
-  </div>
+<div id="vg"><div class="grid" id="grid"></div></div>
+<div id="vm" style="display:none">
+<div id="drawBar" style="display:none;margin-bottom:10px;gap:8px;align-items:center;flex-wrap:wrap">
+<button class="vb" id="drawToolBtn" onclick="toggleDrawTool()">Pan/zoom mode - tap to draw</button>
+<button class="vb" id="finishDraw" onclick="finishDraw()">Finish drawing</button>
+<button class="vb" id="undoStroke" onclick="undoLastStroke()">Undo last stroke</button>
+<button class="vb" id="clearDraw" onclick="clearDraw()">Clear all</button>
+<span id="drawCount" style="font-size:12px;color:var(--mu)">0 km traced - draw on the map to trace your route</span>
+</div>
+<div style="font-size:11px;color:var(--mu);margin-bottom:10px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+<div style="display:flex;align-items:center;gap:6px">
+<span>Fewer indicators</span>
+<div style="width:110px;height:8px;border-radius:4px;background:linear-gradient(90deg,hsl(120,72%,50%),hsl(60,72%,50%),hsl(0,72%,50%))"></div>
+<span>More indicators</span>
+</div>
+<div style="display:flex;align-items:center;gap:5px"><span style="width:9px;height:9px;border-radius:50%;background:#5a5f66;display:inline-block"></span>Not yet analysed</div>
+<div style="display:flex;align-items:center;gap:5px"><span style="width:9px;height:9px;border-radius:50%;background:#f09595;display:inline-block"></span>No coverage</div>
+</div>
+<div id="gmap"></div>
+</div>
+<div id="vbr" style="display:none"></div>
+</div>
 </div>
 </div>
 <script>
+// Real Calendly link - update here if it ever changes.
+const BOOKING_URL = 'https://calendly.com/adah147/30min';
+// >>> REPLACE THIS once your Buttondown page is set up (buttondown.email, a couple
+// minutes to create) - it'll look like https://buttondown.email/YOUR-USERNAME
+const SUBSCRIBE_URL = 'https://buttondown.email/YOUR-USERNAME';
+
 const $ = id => document.getElementById(id);
 let rp = [], sp = [], res = [], gmap = null, gm = [], gp = null, gs = [], lpLayer = null, trafficLayer = null, wxData = [], denseCurve = null, densePts = null;
 let drawMode = false, drawPts = [], drawPoly = null, drawMarkers = [];
@@ -257,6 +539,7 @@ window.addEventListener('load', () => {
     $('sbToggle').title = 'Expand sidebar';
   }
   refreshSavedList();
+  refreshCompletionStats();
 });
 
 // Draw mode is the only way in now - the moment a Google Maps key is entered,
@@ -265,6 +548,75 @@ window.addEventListener('load', () => {
 $('gkey').addEventListener('change', () => {
   if ($('gkey').value.trim() && !gmap) startDraw();
 });
+
+// Changelog entries, most recent date first. Add a new dated block here whenever a
+// session produces real, user-facing changes - not every micro-fix, but anything
+// someone using the app would actually notice.
+const CHANGELOG_DATA = [
+  {
+    date: 'August 7, 2026',
+    entries: [
+      'Fixed: coding a single card\u2019s iRAP attributes now saves immediately, matching the full "Pull Risk" batch',
+      'Fixed: loading a saved route now correctly restores "Send to phone" and rebuilds the route path it needs',
+      'Fixed: a route\u2019s name no longer gets overwritten with a timestamp on a second save',
+      'Fixed: deleting the currently-active route no longer risks it being silently resaved afterward',
+      'Fixed: Claude API error messages now show real text instead of "[object Object]"',
+      'Fixed: an invalid/outdated Claude model string that was silently failing every iRAP analysis',
+      'Migrated saved-route storage from a local file to Supabase (Postgres) - survives server restarts/redeploys',
+      'New: "Compare to Google\u2019s route" - overlays Urbris\u2019s actual route against what Google Maps would navigate, with a real divergence measurement',
+      'New: "Suggest fuel/fatigue stops" - splits a route into legs at 220km (fuel range) or 60/90 minutes (fatigue, technical vs. straight roads), each leg getting its own Maps link',
+      'Improved: Google Maps waypoints now concentrate on the route\u2019s actual tightest curves instead of even spacing, and only avoid highways if the real route never used one',
+      'Added a clear disclaimer wherever a Google Maps link/QR code is shown',
+      'Landing page: added "Book a ride with me" and "Get a new route every week" buttons, plus this changelog',
+    ]
+  },
+  {
+    date: 'August 6, 2026',
+    entries: [
+      'New: import a route directly from a GoPro/DJI video\u2019s GPS track - no manual drawing needed',
+      'New: record a route live using the phone\u2019s own camera and GPS, no separate device required',
+      'New: every route point can capture altitude (Google Elevation), 3D speed, and accelerometer G-force from GoPro footage',
+      'New: "Paint by Ride" - a map of every saved route colored by how it was actually verified (camera vs. Street View only)',
+      'New: a persistent completion tracker showing total km drawn vs. km field-verified',
+      'New: "Route Snapshot" and printable "Book Page" - shareable single-card summaries with a QR code back to the live route',
+      'Fixed: GoPro telemetry parsing now works on Hero 11/12/13 (GPS9 format), not just older cameras',
+      'Fixed: freehand drawing no longer breaks into short segments mid-stroke on touch devices',
+      'Fixed: pinch-to-zoom works again while in drawing mode',
+      'Fixed: routes now snap to the actual road drawn, instead of occasionally rerouting through an adjacent one',
+      'Fixed: re-running Pull Images no longer discards previously field-verified points',
+      'New: "New route" button to start a fresh route without reloading the page; drafts auto-save the moment a route is drawn, before images are even pulled',
+    ]
+  },
+  {
+    date: 'Earlier',
+    entries: [
+      'Core pipeline: draw a route, pull Street View images, run iRAP-style risk coding, generate a printable ride briefing',
+      'Field Media: fill Street View gaps and validate existing coverage with your own photos/video',
+      'Cell coverage, weather, and road-speed-based ETA along the route',
+      'Simplified the app down to draw-only route input, an ambient map-first landing experience, and UrbRis branding throughout',
+    ]
+  }
+];
+
+function renderChangelog() {
+  const el = $('changelogContent');
+  el.innerHTML = '<table class="clTable"><tbody>' + CHANGELOG_DATA.map(block =>
+    '<tr><td class="clDateCell">' + block.date + '</td><td><ul class="clList">'
+    + block.entries.map(e => '<li>' + e + '</li>').join('')
+    + '</ul></td></tr>'
+  ).join('') + '</tbody></table>';
+}
+
+function showChangelog() {
+  renderChangelog();
+  $('landing').style.display = 'none';
+  $('changelogView').style.display = 'block';
+}
+
+function hideChangelog() {
+  $('changelogView').style.display = 'none';
+  $('landing').style.display = 'flex';
+}
 
 function enterApp() {
   $('landing').style.display = 'none';
@@ -333,28 +685,261 @@ function ensureMaps(gk, cb) {
   document.head.appendChild(s);
 }
 
+// Fuel/fatigue leg-splitting thresholds. 220km matches real-world range data for a
+// Honda CB650R (2021) with a safety margin before the low-fuel light. Time thresholds
+// come from general motorcycle fatigue guidance (break every 60-90 min) - 60 for a
+// technical/twisty route since constant countersteering and scanning is more tiring
+// per minute than steady riding, not just slower to cover ground.
+const FUEL_RANGE_KM = 220;
+const TECHNICAL_TIME_MIN = 60;
+const NORMAL_TIME_MIN = 90;
+
+function computeSuggestedLegs() {
+  if (!res.length) return { legs: [], isTechnical: false, timeThresholdMin: NORMAL_TIME_MIN };
+  const totalKm = res[res.length - 1].km;
+  const tightCount = res.filter(r => r.curveClass === 'Sharp curve' || r.curveClass === 'Hairpin').length;
+  const isTechnical = totalKm > 0 && (tightCount / totalKm) >= 1; // 1+ tight curve per km on average
+  const timeThresholdMin = isTechnical ? TECHNICAL_TIME_MIN : NORMAL_TIME_MIN;
+  const timeThresholdSec = timeThresholdMin * 60;
+
+  const legs = [];
+  let legStartIdx = 0;
+  for (let i = 1; i < res.length; i++) {
+    const kmSinceStart = res[i].km - res[legStartIdx].km;
+    const secSinceStart = (res[i].etaSec || 0) - (res[legStartIdx].etaSec || 0);
+    const isLast = i === res.length - 1;
+    if (kmSinceStart >= FUEL_RANGE_KM || secSinceStart >= timeThresholdSec || isLast) {
+      legs.push({
+        startIdx: legStartIdx, endIdx: i,
+        km: kmSinceStart, minutes: secSinceStart / 60,
+        limitedBy: kmSinceStart >= FUEL_RANGE_KM ? 'fuel' : (secSinceStart >= timeThresholdSec ? 'time' : 'end')
+      });
+      legStartIdx = i;
+    }
+  }
+  return { legs, isTechnical, timeThresholdMin };
+}
+
 function buildMapsUrl() {
   if (!rp.length) return null;
   const dest = rp[rp.length - 1];
   // No "origin" is set on purpose - Google Maps will use the phone's live
   // current location as the starting point, and navigate from there to the
   // route's actual start (included as the first waypoint), then through it.
-  const n = Math.min(6, rp.length - 1);
-  const wps = [rp[0]];
-  const extra = n - 1;
-  if (extra > 0 && rp.length > 2) {
-    for (let i = 1; i <= extra; i++) {
-      const idx = Math.min(rp.length - 2, Math.round(i * (rp.length - 2) / (extra + 1)) + 1);
-      wps.push(rp[idx]);
+  // 9 waypoints + 1 destination = 10 stops, the real practical ceiling once Google
+  // Maps hands off to its native app (not the much lower 3-waypoint browser-only
+  // fallback that only applies if someone doesn't have the app installed at all).
+  const maxWps = Math.min(9, rp.length - 1);
+  const wpCandidates = [{ pt: rp[0], idx: 0 }];
+
+  // Concentrate waypoints on the route's actual tightest curves instead of spacing
+  // them evenly, so the limited budget captures its real defining turns rather than
+  // wasting points on straight, unremarkable stretches.
+  if (denseCurve && densePts && densePts.length === rp.length) {
+    const curves = extractDistinctCurves(denseCurve, densePts, maxWps - 1, 150);
+    curves.forEach(c => {
+      let bestIdx = 0, bestDist = Infinity;
+      rp.forEach((p, i) => { const d = hav(p, c); if (d < bestDist) { bestDist = d; bestIdx = i; } });
+      wpCandidates.push({ pt: { lat: c.lat, lon: c.lon }, idx: bestIdx });
+    });
+  }
+  // Fill any leftover budget with even spacing if there weren't enough real curves
+  // to use it all (e.g. a fairly straight route).
+  if (wpCandidates.length < maxWps && rp.length > 2) {
+    const need = maxWps - wpCandidates.length;
+    for (let i = 1; i <= need; i++) {
+      const idx = Math.min(rp.length - 2, Math.round(i * (rp.length - 2) / (need + 1)) + 1);
+      wpCandidates.push({ pt: rp[idx], idx });
     }
   }
+  wpCandidates.sort((a, b) => a.idx - b.idx);
+  const wps = wpCandidates.map(c => c.pt).slice(0, maxWps);
+
   const params = new URLSearchParams({
     api: '1',
     destination: dest.lat.toFixed(6) + ',' + dest.lon.toFixed(6),
     travelmode: 'driving'
   });
+  // Only hint Google to avoid highways if the actual planned route never used one
+  // itself (checked via posted speed limits, a reasonable proxy for highway-classified
+  // road) - forcing this blindly would fight the real route on any leg that
+  // genuinely does use a highway, recreating the same "reroutes onto a different
+  // road" problem this whole waypoint system exists to avoid.
+  if (res.length && res.some(r => r.speedLimitKmh != null)) {
+    const usesHighway = res.some(r => r.speedLimitKmh >= 100);
+    if (!usesHighway) params.set('avoid', 'highways');
+  }
   params.set('waypoints', wps.map(p => p.lat.toFixed(6) + ',' + p.lon.toFixed(6)).join('|'));
   return 'https://www.google.com/maps/dir/?' + params.toString();
+}
+
+// Builds a simple Maps URL scoped to one leg only - same approach as buildMapsUrl
+// (destination + a handful of waypoints, no live current-location origin needed here
+// since each leg has its own defined start point already).
+function buildLegMapsUrl(legRes) {
+  if (legRes.length < 2) return null;
+  const origin = legRes[0], dest = legRes[legRes.length - 1];
+  const maxWps = Math.min(9, legRes.length - 1);
+  const wps = [];
+  if (maxWps > 1 && legRes.length > 2) {
+    for (let i = 1; i < maxWps; i++) {
+      const idx = Math.min(legRes.length - 2, Math.round(i * (legRes.length - 2) / maxWps) + 1);
+      wps.push(legRes[idx]);
+    }
+  }
+  const params = new URLSearchParams({
+    api: '1',
+    origin: origin.lat.toFixed(6) + ',' + origin.lon.toFixed(6),
+    destination: dest.lat.toFixed(6) + ',' + dest.lon.toFixed(6),
+    travelmode: 'driving'
+  });
+  if (wps.length) params.set('waypoints', wps.map(p => p.lat.toFixed(6) + ',' + p.lon.toFixed(6)).join('|'));
+  return 'https://www.google.com/maps/dir/?' + params.toString();
+}
+
+function showSuggestedLegs() {
+  const panel = $('legsPanel');
+  if (!res.length) {
+    panel.innerHTML = '<div class="hint">Run Pull Images first - leg suggestions need curve data to know how technical the route is.</div>';
+    return;
+  }
+  const { legs, isTechnical, timeThresholdMin } = computeSuggestedLegs();
+  if (legs.length <= 1) {
+    panel.innerHTML = '<div class="hint">This route fits comfortably within one fuel/fatigue window (' + FUEL_RANGE_KM + 'km or ' + timeThresholdMin + ' min) - no stops needed.</div>';
+    return;
+  }
+  const techNote = isTechnical ? 'technical - using the ' + TECHNICAL_TIME_MIN + 'min threshold' : 'using the ' + NORMAL_TIME_MIN + 'min threshold';
+  let html = '<div class="hint">Route classified as ' + techNote + '. Suggested ' + legs.length + ' legs:</div>';
+  legs.forEach((leg, i) => {
+    const legRes = res.slice(leg.startIdx, leg.endIdx + 1);
+    const url = buildLegMapsUrl(legRes);
+    const reason = leg.limitedBy === 'fuel' ? 'fuel range' : (leg.limitedBy === 'time' ? 'fatigue window' : 'end of route');
+    html += '<div style="background:var(--sf2);border-radius:8px;padding:8px;margin-top:6px;font-size:11px">'
+      + '<b>Leg ' + (i + 1) + '</b> - ' + leg.km.toFixed(1) + 'km, ~' + Math.round(leg.minutes) + 'min (stop for ' + reason + ')'
+      + (url ? '<br><a href="' + url + '" target="_blank" rel="noopener" style="color:var(--ac2)">Open this leg in Google Maps</a>' : '')
+      + '</div>';
+  });
+  panel.innerHTML = html;
+  log('Suggested ' + legs.length + ' leg(s) - route is ' + techNote, 'ok');
+}
+
+// Ontario 511's live construction/closure/incident feed - genuinely open, no key
+// needed. Unlike Google's crowd-inferred traffic, this is official MTO-sourced data
+// that doesn't require other vehicles present to generate a signal, so it isn't
+// subject to the same thin-coverage problem on quiet rural roads.
+const CONDITIONS_RADIUS_KM = 3;
+
+async function checkRoadConditions() {
+  if (!rp.length) { log('Load a route first', 'wn'); return; }
+  const panel = $('conditionsPanel');
+  panel.innerHTML = '<div class="hint">Checking Ontario 511 for live conditions along this route...</div>';
+  try {
+    const resp = await fetch('/roadconditions511', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    const raw = await resp.text();
+    if (!resp.ok) {
+      let msg = 'HTTP ' + resp.status;
+      try { const e = JSON.parse(raw); msg = e.error || msg; } catch {}
+      throw new Error(msg);
+    }
+    let events;
+    try { events = JSON.parse(raw); } catch { throw new Error('511 returned something that wasn\'t valid JSON'); }
+    if (!Array.isArray(events)) throw new Error('Unexpected response shape from 511');
+
+    // Sample rp rather than checking every point against every event - a proximity
+    // flag doesn't need pixel-perfect precision, and this is province-wide data
+    // (thousands of events) being checked against a route that could have hundreds
+    // of points.
+    const step = Math.max(1, Math.floor(rp.length / 150));
+    const sampled = [];
+    for (let i = 0; i < rp.length; i += step) sampled.push(rp[i]);
+
+    const nearby = events.filter(e => {
+      if (e.Latitude == null || e.Longitude == null) return false;
+      const pt = { lat: e.Latitude, lon: e.Longitude };
+      return sampled.some(p => hav(p, pt) <= CONDITIONS_RADIUS_KM * 1000);
+    });
+
+    if (!nearby.length) {
+      panel.innerHTML = '<div class="hint">No active construction, closures, or incidents reported near this route right now.</div>';
+      log('511 check: nothing active near this route', 'ok');
+      return;
+    }
+
+    let html = '<div class="hint">' + nearby.length + ' active item(s) near this route:</div>';
+    nearby.forEach(e => {
+      const typeLabel = e.EventType === 'closures' ? 'Closure' : e.EventType === 'accidentsAndIncidents' ? 'Incident' : 'Roadwork';
+      const closureNote = e.IsFullClosure ? ' <b style="color:var(--er)">(full closure)</b>' : '';
+      // Showing the source organization here deliberately - it's the direct, live way
+      // to see whether Waze-sourced (crowd) reports are actually flowing through this
+      // same feed alongside MTO's own official events, since that's not confirmed in
+      // 511's public API docs one way or the other.
+      html += '<div style="background:var(--sf2);border-radius:8px;padding:8px;margin-top:6px;font-size:11px">'
+        + '<b>' + typeLabel + closureNote + '</b> - ' + (e.RoadwayName || 'Unknown road')
+        + ' <span style="color:var(--mu)">(' + (e.Organization || 'unknown source') + ')</span>'
+        + '<div style="color:var(--mu);margin-top:2px">' + (e.Description || '') + '</div>'
+        + '</div>';
+    });
+    panel.innerHTML = html;
+    const orgs = [...new Set(nearby.map(e => e.Organization).filter(Boolean))];
+    log('511 check: ' + nearby.length + ' active item(s) found near this route - source(s): ' + (orgs.join(', ') || 'unknown'), nearby.some(e => e.IsFullClosure) ? 'wn' : 'ok');
+  } catch (e) {
+    panel.innerHTML = '<div class="hint" style="color:var(--er)">Couldn\'t check road conditions: ' + e.message + '</div>';
+  }
+}
+
+// GPX carries the full route - every point Urbris actually captured, not a sparse
+// waypoint set - so apps built for exact track-following (Scenic, Kurviger, Calimoto,
+// Garmin/TomTom motorcycle units) can navigate the precise road, turn for turn.
+// Deliberately not building live navigation ourselves - that's the "let the big fish
+// manage it" call: those apps already solve this well, no reason to compete with them.
+function downloadGPX() {
+  if (!rp.length) { log('Load a route first', 'wn'); return; }
+  const name = ($('fn').textContent || 'UrbRis Route').replace(/^\+\s*/, '');
+  const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  let gpx = '<?xml version="1.0" encoding="UTF-8"?>\n'
+    + '<gpx version="1.1" creator="UrbRis" xmlns="http://www.topografix.com/GPX/1/1">\n'
+    + '  <metadata><name>' + esc(name) + '</name></metadata>\n'
+    + '  <trk>\n    <name>' + esc(name) + '</name>\n    <trkseg>\n';
+  rp.forEach(p => {
+    gpx += '      <trkpt lat="' + p.lat.toFixed(6) + '" lon="' + p.lon.toFixed(6) + '"></trkpt>\n';
+  });
+  gpx += '    </trkseg>\n  </trk>\n</gpx>\n';
+
+  const blob = new Blob([gpx], { type: 'application/gpx+xml' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name.replace(/[^a-z0-9]+/gi, '-').toLowerCase() + '.gpx';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  log('Downloaded GPX (' + rp.length + ' points) - import into Scenic, Kurviger, or a dedicated GPS unit for exact turn-by-turn', 'ok');
+}
+
+// Scenic's own docs confirm they support importing GPX from a direct URL - but it has
+// to be a real, stable link their servers can fetch, not a one-time local download.
+// This needs the route to actually be saved first (server-side, fetchable by id) -
+// unlike the plain download, which works off whatever's in memory regardless.
+function showGPXLink() {
+  const panel = $('gpxLinkPanel');
+  if (!currentSavedRouteId) {
+    panel.innerHTML = '<div class="hint">Save this route first (it should auto-save shortly after drawing/importing) - the live link needs it to actually exist on the server.</div>';
+    return;
+  }
+  const url = window.location.origin + '/gpx/' + currentSavedRouteId;
+  const name = ($('fn').textContent || 'UrbRis Route').replace(/^\+\s*/, '');
+  // Scenic's own official integration (github.com/guidove/ScenicAPI) - explicitly
+  // sanctioned by Scenic, not a workaround. Clicking this opens Scenic directly if
+  // installed, or their WebApp login if not - no manual file/URL pasting needed.
+  // Confirmed directly in Scenic's own docs: they copy the GPX to their own server
+  // immediately on click, so this /gpx/ link only needs to stay live for a moment.
+  const scenicUrl = 'https://scenicapp.space/Scenic/api/import/gpxurl?gpxurl=' + encodeURIComponent(url) + '&source=' + encodeURIComponent('UrbRis');
+  panel.innerHTML = '<a href="' + scenicUrl + '" target="_blank" rel="noopener" style="display:block;text-align:center;background:var(--ac);color:#fff;border-radius:980px;padding:10px;font-size:12px;font-weight:600;text-decoration:none">Send to Scenic</a>'
+    + '<div class="hint" style="margin-top:8px">Or paste this link into Kurviger\'s GPX-from-URL import:</div>'
+    + '<input type="text" readonly value="' + url + '" onclick="this.select()" style="margin-top:6px;font-size:11px"/>'
+    + '<div class="hint" style="margin-top:4px">Stays live and up to date - if you re-run Pull Images or Pull Risk on this route later, both links reflect the update automatically.</div>';
+  log('Scenic/Kurviger links ready for "' + name + '"', 'ok');
 }
 
 function sendToPhone() {
@@ -369,6 +954,7 @@ function sendToPhone() {
 $('sendPhone').addEventListener('click', sendToPhone);
 
 function startDraw() {
+  if (typeof setRouteNextStep === 'function') setRouteNextStep(null);
   const gk = $('gkey').value.trim();
   if (!gk) { log('Enter Google API key first', 'er'); return; }
   drawMode = true;
@@ -423,6 +1009,8 @@ function initDrawMap() {
     });
     $('lp').addEventListener('change', toggleLightPollution);
     if ($('lp').checked) toggleLightPollution();
+    $('radar').addEventListener('change', toggleRadar);
+    if ($('radar').checked) toggleRadar();
     $('traffic').addEventListener('change', toggleTraffic);
     if ($('traffic').checked) toggleTraffic();
   }
@@ -626,6 +1214,8 @@ function initScanMap() {
     });
     $('lp').addEventListener('change', toggleLightPollution);
     if ($('lp').checked) toggleLightPollution();
+    $('radar').addEventListener('change', toggleRadar);
+    if ($('radar').checked) toggleRadar();
     $('traffic').addEventListener('change', toggleTraffic);
     if ($('traffic').checked) toggleTraffic();
   }
@@ -779,10 +1369,15 @@ async function finishDraw() {
     $('drawBar').style.display = 'none';
     $('fn').textContent = '+ Drawn route (' + drawPts.length + ' clicks \u2192 ' + dense.length + ' road points)';
     $('sendPhone').style.display = '';
-    $('rt').textContent = 'Route confirmed - click "Pull Images" in the sidebar to continue';
+    $('legsBtn').style.display = '';
+    $('conditionsBtn').style.display = '';
+    $('gpxBtn').style.display = '';
+    $('gpxLinkBtn').style.display = '';
+    $('rt').textContent = 'Route confirmed — ready for road observations';
     ust();
     $('run').disabled = false;
     $('run').textContent = 'Pull Images';
+    setRouteNextStep('images');
     // Save a draft immediately - just the geometry, no images/risk yet - so a route
     // isn't lost if "New route" gets clicked before Pull Images ever runs. Pull Images
     // later overwrites res with real data and updates this same saved entry in place.
@@ -802,6 +1397,334 @@ async function finishDraw() {
     $('finishDraw').textContent = 'Finish drawing';
   }
 }
+
+// Builds a route directly from an uploaded GPX file - your own past ride, or a route
+// pulled from Scenic/Kurviger/REVER's public libraries. Unlike video import, a GPX
+// file carries no images - so this produces the same "drawn but not yet imaged" draft
+// state as finishDraw() does, ready for Pull Images/Pull Risk same as any other route.
+// The point: score roads people already ride and search for, not just ones captured
+// in person - Pull Images/Pull Risk still needed afterward to actually assess it.
+function parseGPXPoints(xmlText) {
+  const doc = new DOMParser().parseFromString(xmlText, 'text/xml');
+  if (doc.querySelector('parsererror')) throw new Error('Could not parse this file as GPX (invalid XML)');
+  const pts = [];
+  doc.querySelectorAll('trkpt, rtept').forEach(el => {
+    const lat = parseFloat(el.getAttribute('lat'));
+    const lon = parseFloat(el.getAttribute('lon'));
+    if (!isNaN(lat) && !isNaN(lon)) pts.push({ lat, lon });
+  });
+  return pts;
+}
+
+async function importRouteFromGPX(file) {
+  const gk = $('gkey').value.trim();
+  if (!gk) { log('Enter Google API key first', 'er'); return; }
+  $('gpxImportStatus').textContent = 'Reading ' + file.name + '...';
+  let rawPts;
+  try {
+    rawPts = parseGPXPoints(await file.text());
+  } catch (e) {
+    $('gpxImportStatus').textContent = '';
+    log('Could not read ' + file.name + ': ' + e.message, 'er');
+    return;
+  }
+  if (rawPts.length < 2) {
+    $('gpxImportStatus').textContent = '';
+    log('No usable track points found in ' + file.name, 'er');
+    return;
+  }
+
+  // Thin dense GPX tracks to roughly one point per ~20m, same throttle used for
+  // hand-drawn strokes and video import - defines the route's shape without sending
+  // thousands of redundant points to the Roads API.
+  const thinned = [];
+  let last = null;
+  for (const p of rawPts) {
+    if (!last || hav(last, p) >= 20) { thinned.push(p); last = p; }
+  }
+  if (thinned.length < 2) {
+    $('gpxImportStatus').textContent = '';
+    log('Not enough distinct points in ' + file.name + ' to build a route', 'er');
+    return;
+  }
+
+  ensureMaps(gk, async () => {
+    initDrawMap();
+    $('gpxImportStatus').textContent = 'Snapping imported route to roads (' + thinned.length + ' points)...';
+    log('Snapping route from ' + file.name + ' to roads (' + thinned.length + ' points)...', '');
+    try {
+      const dense = await snapDrawnRoute(thinned, gk);
+      if (!dense.length) throw new Error('No points returned from road snapping');
+      rp = dense;
+      drawMode = false;
+      currentSavedRouteId = null;
+      google.maps.event.clearListeners(gmap, 'click');
+      drawMarkers.forEach(m => m.setMap(null));
+      drawMarkers = [];
+      if (drawPoly) {
+        drawPoly.setPath(dense.map(p => ({ lat: p.lat, lng: p.lon })));
+        drawPoly.setOptions({ strokeColor: '#4f9d76', strokeWeight: 4 });
+        const bounds = new google.maps.LatLngBounds();
+        dense.forEach(p => bounds.extend({ lat: p.lat, lng: p.lon }));
+        gmap.fitBounds(bounds);
+      }
+      $('drawBar').style.display = 'none';
+      $('empty').style.display = 'none';
+      $('rw').style.display = '';
+      $('fn').textContent = '+ Imported from ' + file.name + ' (' + dense.length + ' road points)';
+      $('sendPhone').style.display = '';
+      $('legsBtn').style.display = '';
+      $('conditionsBtn').style.display = '';
+      $('gpxBtn').style.display = '';
+      $('gpxLinkBtn').style.display = '';
+      ust();
+      $('run').disabled = false;
+      $('run').textContent = 'Pull Images';
+      setRouteNextStep('images');
+      res = sp.map(pt => ({ km: pt.distKm, lat: pt.lat, lon: pt.lon, heading: pt.heading, imageUrl: '', hasCoverage: false, etaSec: 0 }));
+      $('xw').style.display = '';
+      rebuildViewFromRes();
+      sv('map');
+      saveCurrentRoute();
+      $('gpxImportStatus').textContent = 'Imported ' + (td(rp) / 1000).toFixed(1) + ' km from ' + file.name + ' - click Pull Images to score it';
+      log('Route imported from GPX: ' + (td(rp) / 1000).toFixed(1) + ' km - click Pull Images to continue', 'ok');
+    } catch (e) {
+      $('gpxImportStatus').textContent = '';
+      log('Failed to import route from ' + file.name + ': ' + e.message, 'er');
+    }
+  });
+}
+
+$('gpxImportInput').addEventListener('change', e => {
+  const file = e.target.files && e.target.files[0];
+  if (file) importRouteFromGPX(file);
+  e.target.value = '';
+});
+
+// Builds a route directly from a video's own GPS track instead of hand-drawing it -
+// reuses the same telemetry parsers built for Field Media (GPMF for GoPro, .SRT for
+// DJI) and the same true road-snapping used for freehand strokes, so the result is
+// exactly as accurate as a manually-traced route, just without the tracing.
+async function importRouteFromVideo(file, srtFile) {
+  const gk = $('gkey').value.trim();
+  if (!gk) { log('Enter Google API key first', 'er'); return; }
+  $('videoImportStatus').textContent = 'Reading telemetry from ' + file.name + '...';
+  let telemetry;
+  try {
+    telemetry = srtFile ? parseDjiSrt(await srtFile.text()) : await getGoProTelemetryPoints(file);
+  } catch (e) {
+    $('videoImportStatus').textContent = '';
+    log('Could not read telemetry from ' + file.name + ': ' + e.message, 'er');
+    return;
+  }
+  if (!telemetry.length) {
+    $('videoImportStatus').textContent = '';
+    log('No GPS telemetry found in ' + file.name, 'er');
+    return;
+  }
+  await buildRouteFromVideoAndTelemetry(file, telemetry, srtFile ? 'dji-video' : 'gopro-video', file.name);
+}
+
+// Shared by both the file-upload import and live in-app recording, once each has
+// obtained a {timeSec, lat, lon} telemetry array by whatever means fits its source
+// (parsed from GPMF/SRT for an uploaded file, or captured live via the browser's own
+// geolocation API while recording).
+async function buildRouteFromVideoAndTelemetry(file, telemetry, sourceLabel, displayName) {
+  const gk = $('gkey').value.trim();
+  if (!gk) { log('Enter Google API key first', 'er'); return; }
+
+  // Thin dense telemetry to roughly one point per ~20m, matching the throttle used for
+  // hand-drawn strokes, purely for defining the route's shape - the full telemetry
+  // (with timestamps) is kept separately below for matching frames to points.
+  const thinned = [];
+  let last = null;
+  for (const t of telemetry) {
+    if (!last || hav(last, t) >= 20) { thinned.push({ lat: t.lat, lon: t.lon }); last = t; }
+  }
+  if (thinned.length < 2) {
+    $('videoImportStatus').textContent = '';
+    log('Not enough distinct GPS points in ' + displayName + ' to build a route', 'er');
+    return;
+  }
+
+  ensureMaps(gk, async () => {
+    initDrawMap(); // ensures gmap/drawPoly exist even if nothing's been drawn yet this session
+    $('videoImportStatus').textContent = 'Snapping imported route to roads (' + thinned.length + ' points)...';
+    log('Snapping route from ' + displayName + ' to roads (' + thinned.length + ' points)...', '');
+    try {
+      const dense = await snapDrawnRoute(thinned, gk);
+      if (!dense.length) throw new Error('No points returned from road snapping');
+      rp = dense;
+      drawMode = false;
+      currentSavedRouteId = null;
+      google.maps.event.clearListeners(gmap, 'click');
+      drawMarkers.forEach(m => m.setMap(null));
+      drawMarkers = [];
+      if (drawPoly) {
+        drawPoly.setPath(dense.map(p => ({ lat: p.lat, lng: p.lon })));
+        drawPoly.setOptions({ strokeColor: '#4f9d76', strokeWeight: 4 });
+        const bounds = new google.maps.LatLngBounds();
+        dense.forEach(p => bounds.extend({ lat: p.lat, lng: p.lon }));
+        gmap.fitBounds(bounds);
+      }
+      $('drawBar').style.display = 'none';
+      $('empty').style.display = 'none';
+      $('rw').style.display = '';
+      $('fn').textContent = '+ Imported from ' + displayName + ' (' + dense.length + ' road points)';
+      $('sendPhone').style.display = '';
+      $('legsBtn').style.display = '';
+      $('conditionsBtn').style.display = '';
+      $('gpxBtn').style.display = '';
+      $('gpxLinkBtn').style.display = '';
+      ust();
+
+      // Pull an actual frame from the footage for every route point, matched to the
+      // closest telemetry timestamp - the video covers the whole route by definition,
+      // so there's no reason to leave points blank waiting on a separate Street View
+      // pull. Street View (Pull Images) is still there afterward if you want a second,
+      // independent source to compare against.
+      $('pw').style.display = '';
+      $('pl').textContent = 'Pulling frames from video';
+      $('rt').textContent = 'Extracting frames from ' + displayName + '...';
+      res = [];
+      let frameFails = 0;
+      // Use the video's own timestamps for ETA rather than estimating from speed
+      // limits - this is the actual recorded time it took to ride each stretch, more
+      // accurate than a guess.
+      const startTimeSec = telemetry[0].timeSec;
+      for (let i = 0; i < sp.length; i++) {
+        const pt = sp[i];
+        let best = null, bestDist = Infinity;
+        for (const t of telemetry) {
+          const d = hav(t, pt);
+          if (d < bestDist) { bestDist = d; best = t; }
+        }
+        let entry = { km: pt.distKm, lat: pt.lat, lon: pt.lon, heading: pt.heading, imageUrl: '', hasCoverage: false, etaSec: best ? Math.max(0, best.timeSec - startTimeSec) : 0 };
+        if (best) {
+          if (best.altitude != null) entry.altitude = best.altitude;
+          if (best.speed3d != null) entry.speed3dKmh = best.speed3d * 3.6; // GPMF speed is in m/s
+          try {
+            const frameUrl = await extractVideoFrame(file, best.timeSec);
+            entry = { ...entry, imageUrl: frameUrl, hasCoverage: true, imageSource: sourceLabel };
+          } catch (e) {
+            frameFails++;
+          }
+        }
+        res.push(entry);
+        $('pf').style.width = Math.round((i + 1) / sp.length * 100) + '%';
+        $('pp').textContent = Math.round((i + 1) / sp.length * 100) + '%';
+      }
+      $('pw').style.display = 'none';
+
+      $('run').disabled = false;
+      $('run').textContent = 'Pull Images (Street View, optional)';
+      $('riskBtn').style.display = '';
+      $('riskBtn').disabled = false;
+      $('riskBtn').textContent = 'Pull Risk';
+      setRouteNextStep('risk');
+      $('xw').style.display = '';
+      rebuildViewFromRes();
+      sv('map');
+      saveCurrentRoute();
+      const covered = res.filter(r => r.hasCoverage).length;
+      $('cs').textContent = covered + '/' + res.length + ' covered (' + Math.round(covered / res.length * 100) + '%)';
+      $('videoImportStatus').textContent = 'Imported ' + (td(rp) / 1000).toFixed(1) + ' km, ' + covered + '/' + res.length + ' frames pulled from ' + displayName;
+      let msg = 'Route imported from ' + displayName + ': ' + covered + '/' + res.length + ' points got a frame from the footage';
+      if (frameFails) msg += ' (' + frameFails + ' failed to extract)';
+      log(msg, 'ok');
+    } catch (e) {
+      $('pw').style.display = 'none';
+      $('videoImportStatus').textContent = '';
+      log('Failed to import route from ' + displayName + ': ' + e.message, 'er');
+    }
+  });
+}
+
+let cameraStream = null, mediaRecorder = null, recordedChunks = [], recordStartMs = 0, gpsWatchId = null, recordedTelemetry = [];
+
+// A video recorded live in the browser has no embedded GPS at all - unlike GoPro,
+// which writes location into the file itself via dedicated hardware, browser
+// recording APIs only capture raw video. So GPS is captured separately, in parallel,
+// using the phone's own location while MediaRecorder runs, then paired with the
+// recording afterward and fed into the exact same route-building pipeline used for
+// GoPro/DJI telemetry.
+async function openCameraRecorder() {
+  try {
+    cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+    $('cameraPreview').srcObject = cameraStream;
+    $('cameraRecorder').style.display = '';
+    $('recStatus').textContent = 'Camera ready - mount the phone facing forward, then tap Start Recording once you\'re moving.';
+  } catch (e) {
+    log('Could not access camera: ' + e.message, 'er');
+  }
+}
+
+function closeCameraRecorder() {
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+  if (gpsWatchId != null) { navigator.geolocation.clearWatch(gpsWatchId); gpsWatchId = null; }
+  if (cameraStream) { cameraStream.getTracks().forEach(t => t.stop()); cameraStream = null; }
+  $('cameraRecorder').style.display = 'none';
+  $('startRecBtn').disabled = false;
+  $('stopRecBtn').disabled = true;
+}
+
+function startRecording() {
+  if (!cameraStream) return;
+  if (!navigator.geolocation) { log('This device/browser has no location access - cannot build a route from a live recording', 'er'); return; }
+  recordedChunks = [];
+  recordedTelemetry = [];
+  recordStartMs = Date.now();
+  const mimeType = MediaRecorder.isTypeSupported('video/mp4') ? 'video/mp4' : 'video/webm';
+  mediaRecorder = new MediaRecorder(cameraStream, { mimeType });
+  mediaRecorder.ondataavailable = e => { if (e.data.size) recordedChunks.push(e.data); };
+  mediaRecorder.start();
+  gpsWatchId = navigator.geolocation.watchPosition(
+    pos => {
+      const entry = { timeSec: (Date.now() - recordStartMs) / 1000, lat: pos.coords.latitude, lon: pos.coords.longitude };
+      if (pos.coords.altitude != null) entry.altitude = pos.coords.altitude; // not every device/browser provides this
+      recordedTelemetry.push(entry);
+      $('recStatus').textContent = 'Recording - ' + recordedTelemetry.length + ' GPS point(s) captured so far.';
+    },
+    err => log('GPS error while recording: ' + err.message, 'wn'),
+    { enableHighAccuracy: true, maximumAge: 0 }
+  );
+  $('startRecBtn').disabled = true;
+  $('stopRecBtn').disabled = false;
+  $('recStatus').textContent = 'Recording...';
+}
+
+async function stopRecording() {
+  if (!mediaRecorder) return;
+  const mimeType = mediaRecorder.mimeType;
+  const stopped = new Promise(resolve => { mediaRecorder.onstop = resolve; });
+  mediaRecorder.stop();
+  if (gpsWatchId != null) { navigator.geolocation.clearWatch(gpsWatchId); gpsWatchId = null; }
+  await stopped;
+  if (cameraStream) { cameraStream.getTracks().forEach(t => t.stop()); cameraStream = null; }
+  $('cameraRecorder').style.display = 'none';
+
+  if (recordedTelemetry.length < 2) {
+    log('Not enough GPS points captured during recording to build a route - try recording for longer, outdoors, with location permission granted', 'er');
+    return;
+  }
+  const blob = new Blob(recordedChunks, { type: mimeType });
+  const ext = mimeType.includes('mp4') ? 'mp4' : 'webm';
+  const file = new File([blob], 'recorded-route.' + ext, { type: mimeType });
+  $('videoImportStatus').textContent = 'Building route from recording (' + recordedTelemetry.length + ' GPS point(s))...';
+  log('Recording finished - ' + recordedTelemetry.length + ' GPS point(s) captured, building route...', '');
+  await buildRouteFromVideoAndTelemetry(file, recordedTelemetry, 'phone-recording', 'live recording');
+}
+
+$('videoImportInput').addEventListener('change', e => {
+  const files = Array.from(e.target.files || []);
+  if (!files.length) return;
+  const video = files.find(f => /\.(mp4|mov)$/i.test(f.name));
+  if (!video) { log('Select a video file (.mp4/.mov) to import a route from', 'er'); e.target.value = ''; return; }
+  const stem = video.name.replace(/\.[^.]+$/, '');
+  const srt = files.find(f => /\.srt$/i.test(f.name) && f.name.replace(/\.[^.]+$/, '') === stem);
+  importRouteFromVideo(video, srt);
+  e.target.value = '';
+});
 
 function ust() {
   const iv = 100;
@@ -900,6 +1823,29 @@ async function fetchSpeedLimits(pts, gk) {
   return speeds;
 }
 
+// Elevation via Google's Elevation API - works for any route regardless of source
+// (drawn, imported from video, whatever), unlike 3D speed/accelerometer which only
+// exist where GoPro telemetry actually captured them.
+async function fetchElevations(pts, gk) {
+  const elevations = new Array(pts.length).fill(null);
+  const B = 100;
+  for (let i = 0; i < pts.length; i += B) {
+    const batch = pts.slice(i, i + B);
+    try {
+      const resp = await fetch('/elevation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ locations: batch.map(p => p.lat + ',' + p.lon), gkey: gk })
+      });
+      const d = await resp.json();
+      (d.results || []).forEach((r, j) => { elevations[i + j] = r.elevation; });
+    } catch (e) {
+      log('Elevation lookup failed for a batch: ' + e.message, 'wn');
+    }
+  }
+  return elevations;
+}
+
 const PROMPT = 'You are an iRAP road safety assessor. Analyse this Street View image. This is a single archived photo that may be months or years old, not a live view - describe only the permanent road infrastructure. Ignore and never mention anything transient that happens to be in the frame: vehicles, pedestrians, cyclists, weather, lighting, or time of day. Return ONLY valid JSON, no markdown, no explanation. Use exactly this structure: {"number_of_lanes":"1/2/3/4+","road_surface":"paved/unpaved/mixed","carriageway_type":"single/dual/one-way","lane_width":"narrow/standard/wide","median_type":"none/painted/raised/barrier","curvature":"straight/slight/moderate/sharp","grade":"flat/undulating/significant","road_condition":"good/fair/poor/very poor","delineation":"good/fair/poor/none","centreline_marking":"yes/no/partial","edge_marking":"yes/no/partial","shoulder_type":"none/unpaved/paved","shoulder_width":"none/narrow/moderate/wide","roadside_object":"none/pole/tree/wall/barrier/cliff/other","roadside_distance":"0-1m/1-5m/5-10m/>10m","safety_barrier":"none/wire rope/guardrail/concrete/damaged","street_lighting":"yes/no/partial","area_type":"rural/semi-rural/suburban/urban","speed_environment":"<60/60-80/80-100/>100","confidence":"high/medium/low","notes":"max 12 words on dominant road-infrastructure risk - never mention vehicles, pedestrians, or weather"}';
 
 const RF = {
@@ -930,6 +1876,147 @@ function riskColor(score) {
   return 'hsl(' + hue + ',72%,50%)';
 }
 
+
+// V3 product-level metrics. Road Risk Index intentionally describes the existing
+// infrastructure-indicator heuristic; it is not presented as crash probability.
+function riskIndexLabel(v) {
+  if (v == null) return 'Pending';
+  if (v < 25) return 'Lower';
+  if (v < 50) return 'Moderate';
+  if (v < 75) return 'Elevated';
+  return 'High';
+}
+function technicalScoreForPoint(r) {
+  const weights = { 'Straight':0, 'Gentle curve':25, 'Moderate curve':50, 'Sharp curve':78, 'Hairpin':100 };
+  return weights[r && r.curveClass] != null ? weights[r.curveClass] : 0;
+}
+function technicalLabel(v) {
+  if (v < 20) return 'Low';
+  if (v < 45) return 'Moderate';
+  if (v < 70) return 'High';
+  return 'Very high';
+}
+function evidenceSummary() {
+  if (!res.length) return { field:0, street:0, unverified:0, coded:0, label:'Pending' };
+  let field=0, street=0, unverified=0, coded=0;
+  res.forEach(r => {
+    if (r.imageSource || r.validationImage) field++;
+    else if (r.hasCoverage) street++;
+    else unverified++;
+    if (r.irap) coded++;
+  });
+  const n=res.length;
+  const coverage=(field+street)/n;
+  const codedShare=coded/n;
+  const fieldShare=field/n;
+  // A transparent evidence-completeness heuristic, not statistical confidence.
+  const strength=(coverage*.50)+(codedShare*.35)+(fieldShare*.15);
+  const label=strength>=.80?'High':strength>=.52?'Medium':'Low';
+  return {field,street,unverified,coded,label,strength};
+}
+function indicatorCounts(points) {
+  const labels={road_surface:'Surface',road_condition:'Road condition',delineation:'Delineation',safety_barrier:'Barrier',shoulder_type:'Shoulder',roadside_distance:'Roadside proximity',curvature:'Visual curvature',street_lighting:'Lighting'};
+  const counts={};
+  points.forEach(r => {
+    if (!r.irap) return;
+    Object.keys(RF).forEach(k => {
+      const v=r.irap[k];
+      if (v!=null && RF[k].some(f=>String(v).toLowerCase().includes(f))) counts[labels[k]||k]=(counts[labels[k]||k]||0)+1;
+    });
+  });
+  return Object.entries(counts).sort((a,b)=>b[1]-a[1]);
+}
+function buildRouteSegments() {
+  if (!res.length) return [];
+  const totalKm = Math.max(.1, res[res.length-1].km || 0);
+  const targetKm = Math.max(1.5, Math.min(5, totalKm/10));
+  const bins=[];
+  let start=0;
+  while(start<res.length){
+    const startKm=res[start].km||0;
+    let end=start;
+    while(end+1<res.length && (res[end+1].km-startKm)<targetKm) end++;
+    const pts=res.slice(start,end+1);
+    const analysed=pts.filter(r=>r.irap);
+    const idx=analysed.length?Math.round(analysed.reduce((a,r)=>a+riskScore(r.irap),0)/analysed.length*100):null;
+    const tech=Math.round(pts.reduce((a,r)=>a+technicalScoreForPoint(r),0)/Math.max(1,pts.length));
+    const factors=indicatorCounts(pts).slice(0,2).map(x=>x[0]);
+    const evidence=pts.filter(r=>r.imageSource||r.validationImage).length;
+    bins.push({startKm,endKm:pts[pts.length-1].km||startKm,idx,tech,factors,evidence,points:pts});
+    start=end+1;
+  }
+  return bins.sort((a,b)=>((b.idx==null?-1:b.idx)*1.2+b.tech)-((a.idx==null?-1:a.idx)*1.2+a.tech));
+}
+function currentRouteDisplayName(){
+  const raw=($('fn')&&$('fn').textContent||'').replace(/^\+\s*/,'').trim();
+  return raw || 'Current route';
+}
+function renderRouteProfile() {
+  const panel=$('routeProfile');
+  if(!panel) return;
+  if(!res.length){ panel.classList.remove('show'); return; }
+  panel.classList.add('show');
+  $('rpTitle').textContent=currentRouteDisplayName();
+  const analysed=res.filter(r=>r.irap);
+  const idx=analysed.length?Math.round(analysed.reduce((a,r)=>a+riskScore(r.irap),0)/analysed.length*100):null;
+  const tech=Math.round(res.reduce((a,r)=>a+technicalScoreForPoint(r),0)/Math.max(1,res.length));
+  const ev=evidenceSummary();
+  $('rpRisk').textContent=idx==null?'—':idx;
+  $('rpRiskScale').style.display=idx==null?'none':'';
+  $('rpRiskBar').style.width=(idx||0)+'%';
+  $('rpRiskNote').textContent=idx==null?'Run road analysis to calculate infrastructure indicators.':riskIndexLabel(idx)+' — average flagged infrastructure indicators across '+analysed.length+' coded observation'+(analysed.length===1?'':'s')+'.';
+  $('rpTech').textContent=tech;
+  $('rpTechBar').style.width=tech+'%';
+  $('rpTechNote').textContent=technicalLabel(tech)+' — based on measured route curvature, separate from infrastructure risk indicators.';
+  $('rpConfidence').textContent=ev.label;
+  $('rpConfidenceNote').textContent=ev.coded+' of '+res.length+' points coded; confidence describes evidence completeness, not prediction certainty.';
+  const pct=n=>Math.round(n/res.length*100);
+  $('rpEvidence').innerHTML='<span>'+pct(ev.field)+'% field verified</span><span>'+pct(ev.street)+'% Street View</span><span>'+pct(ev.unverified)+'% unverified</span>';
+  $('rpState').textContent=analysed.length===res.length?'Assessment complete':analysed.length?'Assessment partial':'Evidence collected';
+  const segs=buildRouteSegments().slice(0,5);
+  $('rpSegments').innerHTML=segs.length?segs.map((sg,i)=>{
+    const score=sg.idx==null?sg.tech:Math.round(sg.idx*.65+sg.tech*.35);
+    const label=sg.idx==null?'Complexity':riskIndexLabel(sg.idx);
+    const detail=(sg.factors.length?sg.factors.join(' · '):technicalLabel(sg.tech)+' geometry')+(sg.evidence?' · field evidence':'');
+    return '<div class="segment-row"><div class="segment-km">KM '+sg.startKm.toFixed(1)+'–'+sg.endKm.toFixed(1)+'</div><div class="segment-main"><b>'+(i===0?'Highest-priority segment':label+' segment')+'</b><small>'+detail+'</small></div><div class="segment-score">'+score+'<small>priority</small></div></div>';
+  }).join(''):'<div class="rp-empty">No segment data available yet.</div>';
+  const factors=indicatorCounts(res).slice(0,6);
+  $('rpFactors').innerHTML=factors.map(([name,count])=>'<span class="rp-factor">'+name+' · '+count+'</span>').join('');
+  $('rpFactorsEmpty').style.display=factors.length?'none':'';
+}
+
+// Shows whichever of altitude/3D speed/accelerometer intensity a point actually has -
+// altitude comes from Google Elevation (any route), the other two only exist where
+// GoPro telemetry captured them during a video import.
+// "2018-10" -> "Oct 2018"; just a year with no month stays as-is; missing entirely
+// returns null so callers can skip it.
+function formatSVDate(dateStr) {
+  if (!dateStr) return null;
+  const m = dateStr.match(/^(\d{4})-(\d{2})$/);
+  if (!m) return dateStr; // year-only, or an unexpected format - show as given
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return months[parseInt(m[2], 10) - 1] + ' ' + m[1];
+}
+
+function renderTelemetryLine(idx) {
+  const r = res[idx];
+  const slot = $('tel' + idx);
+  if (!r || !slot) return;
+  const parts = [];
+  if (r.altitude != null) parts.push(Math.round(r.altitude) + 'm elevation');
+  if (r.speed3dKmh != null) parts.push(Math.round(r.speed3dKmh) + ' km/h (3D)');
+  // Only relevant for Street-View-only points - a field-captured point was verified in
+  // person regardless of what year Google's own photo happens to be from.
+  if (r.streetViewDate && !r.imageSource) {
+    const label = formatSVDate(r.streetViewDate);
+    const yearMatch = r.streetViewDate.match(/^(\d{4})/);
+    const age = yearMatch ? (new Date().getFullYear() - parseInt(yearMatch[1], 10)) : 0;
+    const stale = age >= 3;
+    parts.push('<span' + (stale ? ' style="color:var(--er)"' : '') + '>Street View: ' + label + (stale ? ' (dated)' : '') + '</span>');
+  }
+  slot.innerHTML = parts.join(' \u00b7 ');
+}
+
 async function aiAn(url) {
   const ak = $('akey').value.trim();
   if (!ak) throw new Error('Enter your Anthropic API key first');
@@ -949,7 +2036,14 @@ async function aiAn(url) {
   const raw = await r.text();
   if (!r.ok) {
     let msg = 'HTTP ' + r.status;
-    try { const e = JSON.parse(raw); msg = e.error || e.message || JSON.stringify(e); } catch {}
+    try {
+      const e = JSON.parse(raw);
+      // Anthropic's error shape nests the message: {"error":{"type":"...","message":"..."}}
+      // - grabbing e.error directly (when it's an object, not a string) produced
+      // "[object Object]" instead of the real text.
+      if (e.error && typeof e.error === 'object') msg = e.error.message || JSON.stringify(e.error);
+      else msg = e.error || e.message || JSON.stringify(e);
+    } catch {}
     throw new Error(msg);
   }
   let d;
@@ -973,7 +2067,7 @@ function rIRAP(panel, a) {
   panel.classList.add('open');
 }
 
-async function ac(btn, url, idx) {
+async function ac(btn, url, idx, skipSave) {
   btn.textContent = 'Analysing...';
   btn.classList.add('loading');
   btn.disabled = true;
@@ -988,6 +2082,11 @@ async function ac(btn, url, idx) {
     btn.disabled = false;
     log('km ' + (res[idx] && res[idx].km ? res[idx].km.toFixed(2) : idx) + ' coded', 'ok');
     applyFilter();
+    // Coding a single card via its own button used to only update what's on screen -
+    // it never actually reached the database until some other action (Pull Risk,
+    // Pull Images, Field Media) happened to trigger a save afterward. skipSave is set
+    // when this runs inside Pull Risk's own loop, which already saves once at the end.
+    if (!skipSave) saveCurrentRoute();
   } catch (e) {
     const msg = (e && e.message) ? e.message : String(e);
     p.innerHTML = '<div style="font-size:11px;color:var(--er);padding:4px">' + msg + '</div>';
@@ -1088,10 +2187,11 @@ function attachDronePhotoToPoint(idx, dataUrl) {
   const card = $('grid').querySelector('[data-res-idx="' + idx + '"]');
   if (!card) return;
   card.dataset.url = dataUrl;
-  card.innerHTML = '<img src="' + dataUrl + '" alt="km ' + pt.km.toFixed(2) + ' (drone)" loading="lazy"/><div class="cb"><span class="ckm">km ' + pt.km.toFixed(2) + ' &middot; drone photo</span><div class="cc">' + pt.lat.toFixed(6) + ', ' + pt.lon.toFixed(6) + '</div><div class="cc" id="curve' + idx + '"></div><div class="cc" id="cell' + idx + '"></div><div class="cc" id="addr' + idx + '"></div><button class="ab" data-idx="' + idx + '">Code iRAP attributes</button></div><div class="ip" id="ip' + idx + '"></div><div id="vld' + idx + '"></div>';
+  card.innerHTML = '<img src="' + dataUrl + '" alt="km ' + pt.km.toFixed(2) + ' (drone)" loading="lazy"/><div class="cb"><span class="ckm">km ' + pt.km.toFixed(2) + ' &middot; drone photo</span><div class="cc">' + pt.lat.toFixed(6) + ', ' + pt.lon.toFixed(6) + '</div><div class="cc" id="curve' + idx + '"></div><div class="cc" id="tel' + idx + '"></div><div class="cc" id="cell' + idx + '"></div><div class="cc" id="addr' + idx + '"></div><button class="ab" data-idx="' + idx + '">Code iRAP attributes</button></div><div class="ip" id="ip' + idx + '"></div><div id="vld' + idx + '"></div>';
   card.querySelector('.ab').addEventListener('click', function () {
     ac(this, dataUrl, idx);
   });
+  renderTelemetryLine(idx);
 }
 
 // ---- DJI video: parse the companion .SRT telemetry file ----
@@ -1120,11 +2220,52 @@ function parseDjiSrt(text) {
 }
 
 // ---- GoPro video: parse embedded GPMF telemetry (no sidecar file needed) ----
+// progress/cancellationToken are real, documented gpmf-extract options that were
+// previously unused - large files can genuinely take a long time to process in a
+// browser (a known limitation of the library itself, not something specific to this
+// app), so this at least makes that visible and interruptible instead of a single
+// static status line with no way to tell whether it's working or stuck.
+let currentImportCancelToken = null;
+
+function cancelVideoImport() {
+  if (currentImportCancelToken) currentImportCancelToken.cancelled = true;
+  log('Cancelling extraction...', 'wn');
+}
+
 async function getGoProTelemetryPoints(file) {
   if (typeof window.gpmfExtract !== 'function' || typeof window.goproTelemetry !== 'function') {
     throw new Error('GoPro telemetry parser did not load - check /gopro-telemetry.bundle.js is deployed alongside urbris.py');
   }
-  const extracted = await window.gpmfExtract(file, { browserMode: true });
+  currentImportCancelToken = { cancelled: false };
+  $('videoImportProgress').style.display = '';
+  $('videoImportProgressBar').style.width = '0%';
+  let extracted;
+  try {
+    extracted = await window.gpmfExtract(file, {
+      browserMode: true,
+      cancellationToken: currentImportCancelToken,
+      progress: pct => {
+        // gpmf-extract passes progress already scaled 0-100, not a 0-1 fraction -
+        // multiplying by 100 again produced exactly this bug (24% became "2400%").
+        // Handling both conventions here and clamping to 100 either way, so a future
+        // library version reporting the other convention can't silently repeat this.
+        const raw = pct || 0;
+        const p = Math.min(100, Math.round(raw > 1 ? raw : raw * 100));
+        $('videoImportProgressBar').style.width = p + '%';
+        $('videoImportStatus').textContent = 'Extracting telemetry... ' + p + '%';
+      }
+    });
+  } finally {
+    $('videoImportProgress').style.display = 'none';
+    currentImportCancelToken = null;
+  }
+  // Extraction (above) is only half the work - this second step turns the raw
+  // extracted buffer into structured telemetry, and on a large file this can itself
+  // take real time with no progress API of its own to report against. Without a
+  // status line here, the progress bar disappearing (implying "done") followed by
+  // nothing happening looks exactly like a freeze rather than a second, silent stage
+  // still genuinely running.
+  $('videoImportStatus').textContent = 'Extraction complete - processing telemetry data into a route...';
   // Don't filter by a specific stream preset here - pull everything back and search
   // for whatever GPS stream is actually present. Filtering by name turned out to be
   // unreliable across camera generations (GPS5 vs GPS9); if this still comes back
@@ -1140,11 +2281,15 @@ async function getGoProTelemetryPoints(file) {
     foundStreamsByDevice.push(devKey + ': ' + (streamKeys.length ? streamKeys.join(', ') : '(no streams)'));
     const gpsKey = streamKeys.find(k => /GPS/i.test(k));
     const gps = gpsKey ? streams[gpsKey] : null;
-    if (!gps || !gps.samples) continue;
-    for (const s of gps.samples) {
-      if (!s.value) continue;
-      // Lat/lon are always the first two values in both GPS5 and GPS9's format.
-      points.push({ timeSec: (s.cts || 0) / 1000, lat: s.value[0], lon: s.value[1] });
+    if (gps && gps.samples) {
+      for (const s of gps.samples) {
+        if (!s.value) continue;
+        // GPS5 and GPS9 both share the same field order for the values we care about:
+        // [lat, lon, altitude, 2D speed, 3D speed, ...]. 3D speed accounts for elevation
+        // change, so it reads slightly higher than 2D speed on any hill - the more
+        // honest number for anything safety-related on rural roads.
+        points.push({ timeSec: (s.cts || 0) / 1000, lat: s.value[0], lon: s.value[1], altitude: s.value[2], speed3d: s.value[4] });
+      }
     }
   }
   if (!points.length) {
@@ -1279,6 +2424,7 @@ async function handleFieldMedia(files) {
   if (tooFar) msg += ' - ' + tooFar + " photo(s) didn't land within " + DRONE_MATCH_RADIUS_M + 'm of any point';
   $('droneStatus').textContent = msg;
   log(msg, (filled || validated) ? 'ok' : 'wn');
+  if (filled || validated) saveCurrentRoute();
 }
 
 $('dronePhotos').addEventListener('change', e => {
@@ -1370,6 +2516,36 @@ async function fetchAddresses() {
 
 let cellChecked = false;
 
+// Street View's own capture date, free to check, separate from the image itself -
+// only worth checking for points still relying on Street View, since a field-captured
+// point was verified in person regardless of what year Google's photo happens to be.
+async function fetchStreetViewDates(gk) {
+  const targets = res.map((r, i) => ({ r, i })).filter(x => x.r.hasCoverage && !x.r.imageSource);
+  if (!targets.length) return;
+  try {
+    const locations = targets.map(x => x.r.lat.toFixed(6) + ',' + x.r.lon.toFixed(6));
+    const resp = await fetch('/streetviewdates', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ locations, gkey: gk })
+    });
+    const d = await resp.json();
+    const dates = d.dates || [];
+    let staleCount = 0;
+    targets.forEach((x, j) => {
+      const date = dates[j];
+      if (!date) return;
+      res[x.i].streetViewDate = date;
+      renderTelemetryLine(x.i);
+      const yearMatch = date.match(/^(\d{4})/);
+      if (yearMatch && (new Date().getFullYear() - parseInt(yearMatch[1], 10)) >= 3) staleCount++;
+    });
+    log('Street View dates checked - ' + staleCount + ' point(s) dated 3+ years old', staleCount > 0 ? 'wn' : 'ok');
+  } catch (e) {
+    log('Could not check Street View dates: ' + e.message, 'wn');
+  }
+}
+
 async function fetchCellCoverage() {
   if (!res.length) return;
   try {
@@ -1412,6 +2588,8 @@ async function fetchCellCoverage() {
   }
 }
 
+let wxRawData = null, wxSample = null, wxForecastDays = 0, wxBaseDepMs = 0;
+
 async function fetchAndRenderWeather() {
   const withCoords = res.filter(r => r.lat != null && r.lon != null);
   if (!withCoords.length) return;
@@ -1422,7 +2600,10 @@ async function fetchAndRenderWeather() {
   const depMs = Date.now();
   const maxEtaMs = depMs + (sample[sample.length - 1].etaSec || 0) * 1000;
   const diffDays = Math.max(0, Math.ceil((maxEtaMs - Date.now()) / 86400000));
-  const forecastDays = Math.max(2, Math.min(16, diffDays + 2));
+  // Fetched a bit wider than the route itself needs, specifically so the departure
+  // slider (below) can scrub forward without triggering a re-fetch on every drag -
+  // only re-fetches if someone pushes the slider past this cached window.
+  const forecastDays = Math.max(2, Math.min(16, diffDays + 3));
   if (diffDays > 14) {
     log('Route is too long for hourly forecast data (max ~16 days ahead) - showing the closest available.', 'wn');
   }
@@ -1430,30 +2611,81 @@ async function fetchAndRenderWeather() {
   try {
     log('Fetching weather along route (based on actual road speed limits)...', '');
     const data = await fetchWeather(sample, forecastDays);
-    let warn = false;
-    wxData = sample.map((pt, i) => {
-      const d = data[i];
-      const etaMs = depMs + (pt.etaSec || 0) * 1000;
-      const idx = findHourlyIdx(d.hourly.time, etaMs);
-      const [emoji, label] = wmoDesc(d.hourly.weather_code[idx], d.hourly.is_day[idx]);
-      const temp = Math.round(d.hourly.temperature_2m[idx]);
-      const wind = Math.round(d.hourly.wind_speed_10m[idx]);
-      const gusts = Math.round(d.hourly.wind_gusts_10m[idx]);
-      const precip = d.hourly.precipitation_probability[idx];
-      const risky = (precip != null && precip >= 50) || gusts >= 40;
-      if (risky) warn = true;
-      const etaLabel = new Date(etaMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      return { km: pt.km, etaMs, etaLabel, emoji, label, temp, wind, gusts, precip, risky };
-    });
-    $('wxstrip').innerHTML = wxData.map(w =>
-      '<div class="wxcard' + (w.risky ? ' wxwarn' : '') + '"><div class="wxkm">km ' + w.km.toFixed(1) + ' &middot; ETA ' + w.etaLabel + '</div><div class="wxe">' + w.emoji + '</div><div class="wxt">' + w.temp + '&deg;C</div><div class="wxl">' + w.label + '</div><div class="wxd">Wind ' + w.wind + ' (gust ' + w.gusts + ') km/h</div>' + (w.precip != null ? '<div class="wxd">Rain chance: ' + w.precip + '%</div>' : '') + '</div>'
-    ).join('');
-    $('wxbar').style.display = '';
-    $('wxwarnmsg').style.display = warn ? '' : 'none';
-    log('Weather loaded' + (warn ? ' - rain/wind flagged along the route' : ''), warn ? 'wn' : 'ok');
+    wxRawData = data; wxSample = sample; wxForecastDays = forecastDays; wxBaseDepMs = depMs;
+    $('depSlider').max = Math.max(0, forecastDays * 24 - 6); // stay a few hours inside the fetched window
+    $('depSlider').value = 0;
+    $('depSliderWrap').style.display = '';
+    renderWeatherForDeparture(depMs);
+    log('Weather loaded', '');
   } catch (e) {
     log('Weather fetch failed: ' + e.message, 'er');
   }
+}
+
+// Rebuilds the weather strip for any departure time using the already-fetched hourly
+// data - no network call, so dragging the slider feels instant.
+function renderWeatherForDeparture(depMs) {
+  if (!wxRawData || !wxSample) return;
+  let warn = false;
+  wxData = wxSample.map((pt, i) => {
+    const d = wxRawData[i];
+    const etaMs = depMs + (pt.etaSec || 0) * 1000;
+    const idx = findHourlyIdx(d.hourly.time, etaMs);
+    const [emoji, label] = wmoDesc(d.hourly.weather_code[idx], d.hourly.is_day[idx]);
+    const temp = Math.round(d.hourly.temperature_2m[idx]);
+    const wind = Math.round(d.hourly.wind_speed_10m[idx]);
+    const gusts = Math.round(d.hourly.wind_gusts_10m[idx]);
+    const precip = d.hourly.precipitation_probability[idx];
+    const risky = (precip != null && precip >= 50) || gusts >= 40;
+    if (risky) warn = true;
+    const etaLabel = new Date(etaMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return { km: pt.km, etaMs, etaLabel, emoji, label, temp, wind, gusts, precip, risky };
+  });
+  $('wxstrip').innerHTML = wxData.map(w =>
+    '<div class="wxcard' + (w.risky ? ' wxwarn' : '') + '"><div class="wxkm">km ' + w.km.toFixed(1) + ' &middot; ETA ' + w.etaLabel + '</div><div class="wxe">' + w.emoji + '</div><div class="wxt">' + w.temp + '&deg;C</div><div class="wxl">' + w.label + '</div><div class="wxd">Wind ' + w.wind + ' (gust ' + w.gusts + ') km/h</div>' + (w.precip != null ? '<div class="wxd">Rain chance: ' + w.precip + '%</div>' : '') + '</div>'
+  ).join('');
+  $('wxbar').style.display = '';
+  $('wxwarnmsg').style.display = warn ? '' : 'none';
+}
+
+function onDepartureSliderChange() {
+  const hoursOffset = parseInt($('depSlider').value, 10) || 0;
+  const depMs = Date.now() + hoursOffset * 3600000;
+  const d = new Date(depMs);
+  $('depSliderLabel').textContent = hoursOffset === 0 ? 'Leaving now' : 'Leaving ' + d.toLocaleDateString([], { weekday: 'short' }) + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  renderWeatherForDeparture(depMs);
+  fetchPredictedTraffic(depMs);
+}
+
+// Google's Directions API can return a traffic-adjusted duration for a specific future
+// departure time - not a visual map layer (that only shows current conditions), but a
+// real predicted number: how much longer this route is expected to take given typical
+// traffic patterns at that time of day.
+let trafficPredictDebounce = null;
+function fetchPredictedTraffic(depMs) {
+  if (!rp.length || !window.google || !google.maps) return;
+  clearTimeout(trafficPredictDebounce);
+  trafficPredictDebounce = setTimeout(() => {
+    const ds = new google.maps.DirectionsService();
+    const origin = rp[0], dest = rp[rp.length - 1];
+    ds.route({
+      origin: { lat: origin.lat, lng: origin.lon },
+      destination: { lat: dest.lat, lng: dest.lon },
+      travelMode: google.maps.TravelMode.DRIVING,
+      drivingOptions: { departureTime: new Date(Math.max(depMs, Date.now())), trafficModel: 'bestguess' }
+    }, (result, status) => {
+      const el = $('trafficPredict');
+      if (status !== 'OK' || !result.routes[0] || !result.routes[0].legs[0]) { el.textContent = ''; return; }
+      const leg = result.routes[0].legs[0];
+      if (!leg.duration_in_traffic) { el.textContent = ''; return; }
+      const normalMin = Math.round(leg.duration.value / 60);
+      const trafficMin = Math.round(leg.duration_in_traffic.value / 60);
+      const deltaMin = trafficMin - normalMin;
+      el.textContent = deltaMin > 2
+        ? 'Predicted traffic at this departure time: about +' + deltaMin + ' min beyond typical.'
+        : 'Predicted traffic at this departure time: close to typical, no significant delay expected.';
+    });
+  }, 400); // debounced - avoid firing a Directions request on every single slider tick
 }
 
 function metersPerDeg(lat) {
@@ -1581,13 +2813,20 @@ $('run').addEventListener('click', async () => {
   const speeds = await fetchSpeedLimits(pts, gk);
   let cumEtaSec = 0;
   pts[0].etaSec = 0;
+  pts[0].speedKmh = speeds[0] || null;
   for (let i = 1; i < pts.length; i++) {
     const segKm = pts[i].distKm - pts[i - 1].distKm;
     const spKmh = speeds[i - 1] || 60;
     cumEtaSec += (segKm / spKmh) * 3600;
     pts[i].etaSec = cumEtaSec;
+    pts[i].speedKmh = speeds[i] || null;
   }
   log('Speed limits checked - ETA now based on actual road speed', 'ok');
+
+  $('pl').textContent = 'Checking elevation...';
+  const elevations = await fetchElevations(pts, gk);
+  pts.forEach((p, i) => { p.altitude = elevations[i]; });
+  log('Elevation checked for ' + pts.length + ' point(s)', 'ok');
 
   const iv = 100;
   denseCurve = buildDenseCurvature(rp);
@@ -1605,13 +2844,13 @@ $('run').addEventListener('click', async () => {
     card.dataset.resIdx = i;
 
     if (!ok) {
-      card.innerHTML = '<div class="nc">No Street View coverage</div><div class="cb"><span class="ckm">km ' + pt.distKm.toFixed(2) + '</span><div class="cc">' + pt.lat.toFixed(6) + ', ' + pt.lon.toFixed(6) + '</div><div class="cc" id="curve' + i + '"></div><div class="cc" id="cell' + i + '"></div><div class="cc" id="addr' + i + '"></div></div>';
-      res.push({ km: pt.distKm, lat: pt.lat, lon: pt.lon, heading: pt.heading, imageUrl: '', hasCoverage: false, etaSec: pt.etaSec || 0 });
+      card.innerHTML = '<div class="nc">No Street View coverage</div><div class="cb"><span class="ckm">km ' + pt.distKm.toFixed(2) + '</span><div class="cc">' + pt.lat.toFixed(6) + ', ' + pt.lon.toFixed(6) + '</div><div class="cc" id="curve' + i + '"></div><div class="cc" id="tel' + i + '"></div><div class="cc" id="cell' + i + '"></div><div class="cc" id="addr' + i + '"></div></div>';
+      res.push({ km: pt.distKm, lat: pt.lat, lon: pt.lon, heading: pt.heading, imageUrl: '', hasCoverage: false, etaSec: pt.etaSec || 0, altitude: pt.altitude, speedLimitKmh: pt.speedKmh });
     } else {
       const url = svurl(gk, pt.lat, pt.lon, pt.heading);
       card.dataset.url = url;
-      card.innerHTML = '<img src="' + url + '" alt="km ' + pt.distKm.toFixed(2) + '" loading="lazy"/><div class="cb"><span class="ckm">km ' + pt.distKm.toFixed(2) + '</span><div class="cc">' + pt.lat.toFixed(6) + ', ' + pt.lon.toFixed(6) + '</div><div class="cc" id="curve' + i + '"></div><div class="cc" id="cell' + i + '"></div><div class="cc" id="addr' + i + '"></div><button class="ab" data-idx="' + i + '">Code iRAP attributes</button></div><div class="ip" id="ip' + i + '"></div><div id="vld' + i + '"></div>';
-      res.push({ km: pt.distKm, lat: pt.lat, lon: pt.lon, heading: pt.heading, imageUrl: url, hasCoverage: true, etaSec: pt.etaSec || 0 });
+      card.innerHTML = '<img src="' + url + '" alt="km ' + pt.distKm.toFixed(2) + '" loading="lazy"/><div class="cb"><span class="ckm">km ' + pt.distKm.toFixed(2) + '</span><div class="cc">' + pt.lat.toFixed(6) + ', ' + pt.lon.toFixed(6) + '</div><div class="cc" id="curve' + i + '"></div><div class="cc" id="tel' + i + '"></div><div class="cc" id="cell' + i + '"></div><div class="cc" id="addr' + i + '"></div><button class="ab" data-idx="' + i + '">Code iRAP attributes</button></div><div class="ip" id="ip' + i + '"></div><div id="vld' + i + '"></div>';
+      res.push({ km: pt.distKm, lat: pt.lat, lon: pt.lon, heading: pt.heading, imageUrl: url, hasCoverage: true, etaSec: pt.etaSec || 0, altitude: pt.altitude, speedLimitKmh: pt.speedKmh });
     }
     $('grid').appendChild(card);
     $('pf').style.width = Math.round((i+1)/tot*100) + '%';
@@ -1651,6 +2890,10 @@ $('run').addEventListener('click', async () => {
           const cardBtn = $('grid').querySelector('[data-res-idx="' + best + '"] .ab');
           if (cardBtn) { cardBtn.textContent = 'Re-analyse'; cardBtn.classList.add('done'); }
         }
+        if (old.speed3dKmh != null) res[best].speed3dKmh = old.speed3dKmh;
+        if (old.altitude != null) res[best].altitude = old.altitude; // video-derived altitude takes precedence over the fresh Elevation API lookup for this point
+        if (old.etaSec != null) res[best].etaSec = old.etaSec; // video's real elapsed time, more accurate than a speed-limit estimate
+        renderTelemetryLine(best);
         restoredFills++;
       }
       if (old.validationImage) {
@@ -1681,6 +2924,7 @@ $('run').addEventListener('click', async () => {
     const risky = r.curveClass === 'Sharp curve' || r.curveClass === 'Hairpin';
     slot.innerHTML = 'Measured: ' + (isFinite(r.curveRadius) ? Math.round(r.curveRadius) + 'm radius' : '\u221e') + ' &middot; <span style="color:' + (risky ? 'var(--er)' : 'var(--mu)') + '">' + r.curveClass + '</span>';
   });
+  res.forEach((r, i) => renderTelemetryLine(i));
 
   $('xw').style.display = '';
   const c = res.filter(r => r.hasCoverage).length;
@@ -1690,6 +2934,7 @@ $('run').addEventListener('click', async () => {
   fetchAndRenderWeather();
   fetchCellCoverage();
   fetchAddresses();
+  fetchStreetViewDates(gk);
 
   $('pw').style.display = 'none';
   $('run').disabled = false;
@@ -1697,6 +2942,8 @@ $('run').addEventListener('click', async () => {
   $('riskBtn').style.display = '';
   $('riskBtn').disabled = false;
   $('riskBtn').textContent = 'Pull Risk';
+  setRouteNextStep('risk');
+  renderRouteProfile();
   saveCurrentRoute();
 });
 
@@ -1718,7 +2965,7 @@ async function pullRisk() {
   for (let j = 0; j < coveredIdxs.length; j++) {
     const i = coveredIdxs[j];
     const cardBtn = $('grid').querySelector('[data-res-idx="' + i + '"] .ab');
-    if (cardBtn) await ac(cardBtn, res[i].imageUrl, i);
+    if (cardBtn) await ac(cardBtn, res[i].imageUrl, i, true);
     await new Promise(r => setTimeout(r, 400));
     $('pf').style.width = Math.round((j+1)/coveredIdxs.length*100) + '%';
     $('pp').textContent = Math.round((j+1)/coveredIdxs.length*100) + '%';
@@ -1728,6 +2975,8 @@ async function pullRisk() {
   $('pw').style.display = 'none';
   btn.disabled = false;
   btn.textContent = 'Re-run risk analysis';
+  renderRouteProfile();
+  sv('profile');
   saveCurrentRoute();
 }
 
@@ -1735,40 +2984,150 @@ function sv(v) {
   $('vg').style.display = v === 'grid' ? '' : 'none';
   $('vm').style.display = v === 'map' ? '' : 'none';
   $('vbr').style.display = v === 'brief' ? '' : 'none';
+  $('routeProfile').style.display = v === 'profile' ? '' : 'none';
   $('bg').className = 'vb' + (v === 'grid' ? ' on' : '');
+  $('bp').className = 'vb' + (v === 'profile' ? ' on' : '');
   $('bm').className = 'vb' + (v === 'map' ? ' on' : '');
   $('bbt').className = 'vb' + (v === 'brief' ? ' on' : '');
-  if (v === 'map') drawMap($('gkey').value.trim());
+  // Paint by Ride reuses this same map container - if the user switches to a normal
+  // route's map view, Paint by Ride is no longer what's on screen, so its own
+  // "currently active" tracking (used to decide whether a delete should refresh it)
+  // needs to clear here too.
+  if (v === 'map') { paintByRideActive = false; drawMap($('gkey').value.trim()); }
   if (v === 'brief') renderBriefingTab();
+  if (v === 'profile') renderRouteProfile();
 }
 
 // ---- Saved routes (server-side storage, so extraction/analysis never has to re-run) ----
+
+let paintPolys = [];
+let paintByRideActive = false;
+
+// Pulls every saved route and draws it on one map, colored by how each stretch was
+// actually verified - blue where a real camera (GoPro/DJI/drone) captured it, green
+// where it's Street View only. Unpainted means nowhere verified at all. Deliberately
+// keyed off imageSource (a real capture), not just hasCoverage - Street View existing
+// already isn't an achievement, since that data was there before you showed up.
+async function showPaintByRide() {
+  const gk = $('gkey').value.trim();
+  if (!gk) { log('Enter your Google Maps key first', 'er'); return; }
+  paintByRideActive = true;
+  const btn = $('paintBtn');
+  btn.disabled = true;
+  btn.textContent = 'Loading routes...';
+  $('paintStatus').textContent = 'Fetching saved routes...';
+
+  $('empty').style.display = 'none';
+  $('rw').style.display = '';
+  $('vg').style.display = 'none';
+  $('vbr').style.display = 'none';
+  $('vm').style.display = '';
+  $('bg').className = 'vb';
+  $('bm').className = 'vb on';
+  $('bbt').className = 'vb';
+  $('drawBar').style.display = 'none';
+  $('rt').textContent = 'Paint by Ride - field-verified coverage';
+
+  ensureMaps(gk, async () => {
+    initScanMap();
+    google.maps.event.clearListeners(gmap, 'click');
+    paintPolys.forEach(p => p.setMap(null));
+    paintPolys = [];
+
+    try {
+      const listResp = await fetch('/routes/list', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+      const listData = await listResp.json();
+      const routes = listData.routes || [];
+      if (!routes.length) {
+        $('paintStatus').textContent = 'No saved routes yet - run a route first.';
+        btn.disabled = false; btn.textContent = 'Show painted map';
+        return;
+      }
+
+      $('paintStatus').textContent = 'Loading ' + routes.length + ' route(s)...';
+      const bounds = new google.maps.LatLngBounds();
+      let verifiedKm = 0, streetViewKm = 0, totalKm = 0;
+
+      for (const r of routes) {
+        const resp = await fetch('/routes/load', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: r.id }) });
+        const entry = await resp.json();
+        const pts = entry.data && entry.data.res;
+        if (!pts || pts.length < 2) continue;
+
+        for (let i = 0; i < pts.length - 1; i++) {
+          const a = pts[i], b = pts[i + 1];
+          const segKm = hav(a, b) / 1000;
+          totalKm += segKm;
+          let color = null;
+          if (a.imageSource) { color = '#4a90e2'; verifiedKm += segKm; } // blue - captured on camera
+          else if (a.hasCoverage) { color = '#3a7d5c'; streetViewKm += segKm; } // green - Street View only
+          if (!color) continue; // no coverage at all - leave unpainted
+          const poly = new google.maps.Polyline({
+            path: [{ lat: a.lat, lng: a.lon }, { lat: b.lat, lng: b.lon }],
+            strokeColor: color, strokeWeight: 5, strokeOpacity: 0.9, map: gmap
+          });
+          paintPolys.push(poly);
+          bounds.extend({ lat: a.lat, lng: a.lon });
+          bounds.extend({ lat: b.lat, lng: b.lon });
+        }
+      }
+
+      if (paintPolys.length) gmap.fitBounds(bounds);
+      const pct = totalKm ? Math.round((verifiedKm / totalKm) * 100) : 0;
+      const noCoverageKm = Math.max(0, totalKm - verifiedKm - streetViewKm);
+      let statusText = verifiedKm.toFixed(1) + ' km field-verified, ' + streetViewKm.toFixed(1) + ' km Street View only';
+      if (noCoverageKm > 0.05) statusText += ', ' + noCoverageKm.toFixed(1) + ' km with no coverage at all';
+      statusText += ', across ' + routes.length + ' route(s) - ' + pct + '% personally captured.';
+      $('paintStatus').textContent = statusText;
+      log('Paint by Ride: ' + pct + '% of covered distance is field-verified' + (noCoverageKm > 0.05 ? ', ' + noCoverageKm.toFixed(1) + 'km has no coverage at all' : ''), 'ok');
+    } catch (e) {
+      $('paintStatus').textContent = 'Failed to load routes: ' + e.message;
+      log('Paint by Ride failed: ' + e.message, 'er');
+    }
+    btn.disabled = false;
+    btn.textContent = 'Show painted map';
+  });
+}
+
+let allSavedRoutes = [];
+
+function renderSavedListItems(routes) {
+  const list = $('savedList');
+  list.innerHTML = '';
+  if (!routes.length) {
+    list.innerHTML = '<div class="sr-empty">' + (allSavedRoutes.length ? 'No routes match your search' : 'No saved routes yet') + '</div>';
+    return;
+  }
+  routes.forEach(r => {
+    const km = (r.meta && r.meta.totalKm) ? r.meta.totalKm.toFixed(1) + ' km' : '';
+    const dt = r.savedAt ? new Date(r.savedAt).toLocaleDateString() : '';
+    const gaps = (r.meta && r.meta.cellGaps) ? r.meta.cellGaps + ' dead zone' + (r.meta.cellGaps > 1 ? 's' : '') : '';
+    const div = document.createElement('div');
+    div.className = 'sr-item';
+    div.innerHTML = '<div class="sr-main"><div class="sr-name"></div><div class="sr-meta"></div></div>'
+      + '<button class="sr-rename" title="Rename">&#9998;</button><button class="sr-del" title="Delete">&times;</button>';
+    div.querySelector('.sr-name').textContent = r.name;
+    div.querySelector('.sr-meta').textContent = [km, gaps, dt].filter(Boolean).join(' \u00b7 ');
+    div.querySelector('.sr-main').addEventListener('click', () => loadSavedRoute(r.id));
+    div.querySelector('.sr-rename').addEventListener('click', e => { e.stopPropagation(); renameSavedRoute(r.id, r.name); });
+    div.querySelector('.sr-del').addEventListener('click', e => { e.stopPropagation(); deleteSavedRoute(r.id); });
+    list.appendChild(div);
+  });
+}
+
+function filterSavedList() {
+  const q = $('savedSearch').value.trim().toLowerCase();
+  const filtered = q ? allSavedRoutes.filter(r => r.name.toLowerCase().includes(q)) : allSavedRoutes;
+  renderSavedListItems(filtered);
+}
 
 async function refreshSavedList() {
   const list = $('savedList');
   try {
     const resp = await fetch('/routes/list', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
     const data = await resp.json();
-    list.innerHTML = '';
-    if (!data.routes || !data.routes.length) {
-      list.innerHTML = '<div class="sr-empty">No saved routes yet</div>';
-      return;
-    }
-    data.routes.forEach(r => {
-      const km = (r.meta && r.meta.totalKm) ? r.meta.totalKm.toFixed(1) + ' km' : '';
-      const dt = r.savedAt ? new Date(r.savedAt).toLocaleDateString() : '';
-      const gaps = (r.meta && r.meta.cellGaps) ? r.meta.cellGaps + ' dead zone' + (r.meta.cellGaps > 1 ? 's' : '') : '';
-      const div = document.createElement('div');
-      div.className = 'sr-item';
-      div.innerHTML = '<div class="sr-main"><div class="sr-name"></div><div class="sr-meta"></div></div>'
-        + '<button class="sr-rename" title="Rename">&#9998;</button><button class="sr-del" title="Delete">&times;</button>';
-      div.querySelector('.sr-name').textContent = r.name;
-      div.querySelector('.sr-meta').textContent = [km, gaps, dt].filter(Boolean).join(' \u00b7 ');
-      div.querySelector('.sr-main').addEventListener('click', () => loadSavedRoute(r.id));
-      div.querySelector('.sr-rename').addEventListener('click', e => { e.stopPropagation(); renameSavedRoute(r.id, r.name); });
-      div.querySelector('.sr-del').addEventListener('click', e => { e.stopPropagation(); deleteSavedRoute(r.id); });
-      list.appendChild(div);
-    });
+    allSavedRoutes = data.routes || [];
+    filterSavedList(); // re-applies whatever's currently in the search box, if anything
   } catch (e) {
     list.innerHTML = '<div class="sr-empty">Couldn\'t load saved routes</div>';
   }
@@ -1817,11 +3176,108 @@ async function saveCurrentRoute() {
   try {
     const resp = await fetch('/routes/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
     const out = await resp.json();
+    if (!resp.ok) {
+      // A failed request still returns parseable JSON (an {error: ...} body), which
+      // was previously being treated as a success and logged as "Saved as undefined" -
+      // masking every real save failure behind a message that looked fine.
+      log('Auto-save failed: ' + (out.error || ('HTTP ' + resp.status)), 'er');
+      return;
+    }
     currentSavedRouteId = out.id;
     log('Saved as "' + out.name + '"', 'ok');
     refreshSavedList();
+    refreshCompletionStats();
   } catch (e) {
     log('Auto-save failed: ' + e.message, 'er');
+  }
+}
+
+// Shared by the persistent sidebar tracker and Paint by Ride's own summary line -
+// sums total drawn km and camera-verified km across every saved route. Verified is
+// keyed off imageSource (a real capture), same as Paint by Ride's blue/green split,
+// not just hasCoverage - Street View existing already isn't an achievement.
+async function computeCoverageTotals() {
+  const listResp = await fetch('/routes/list', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+  const listData = await listResp.json();
+  const routes = listData.routes || [];
+  let totalKm = 0, verifiedKm = 0;
+  for (const r of routes) {
+    const resp = await fetch('/routes/load', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: r.id }) });
+    const entry = await resp.json();
+    const pts = entry.data && entry.data.res;
+    if (!pts || pts.length < 2) continue;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const segKm = hav(pts[i], pts[i + 1]) / 1000;
+      totalKm += segKm;
+      if (pts[i].imageSource) verifiedKm += segKm;
+    }
+  }
+  return { totalKm, verifiedKm, routeCount: routes.length };
+}
+
+async function refreshCompletionStats() {
+  const el = $('completionStats');
+  if (!el) return;
+  try {
+    const { totalKm, verifiedKm, routeCount } = await computeCoverageTotals();
+    if (!routeCount) { el.innerHTML = '<div class="hint">No routes drawn yet.</div>'; return; }
+    const pct = totalKm ? Math.round((verifiedKm / totalKm) * 100) : 0;
+    el.innerHTML = '<div style="font-size:11px;color:var(--mu);margin-bottom:4px">' + verifiedKm.toFixed(1) + ' / ' + totalKm.toFixed(1) + ' km validated (' + pct + '%)</div>'
+      + '<div style="background:var(--sf2);border-radius:20px;height:8px;overflow:hidden"><div style="background:#4a90e2;height:100%;width:' + pct + '%;transition:width .3s"></div></div>';
+  } catch (e) {
+    el.innerHTML = '<div class="hint">Couldn\'t load progress.</div>';
+  }
+}
+
+async function askAboutRoutes() {
+  const q = $('routeChatInput').value.trim();
+  if (!q) return;
+  const ak = $('akey').value.trim();
+  if (!ak) { log('Enter your Anthropic API key first', 'er'); return; }
+  const answerEl = $('routeChatAnswer');
+  answerEl.innerHTML = '<div class="hint">Thinking...</div>';
+  try {
+    const listResp = await fetch('/routes/list', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    const listData = await listResp.json();
+    const routes = listData.routes || [];
+    if (!routes.length) {
+      answerEl.innerHTML = '<div class="hint">No saved routes yet to ask about.</div>';
+      return;
+    }
+    // Lightweight summary only - name, distance, hazard/gap counts, verification status,
+    // date - not full point/image data. Same fields Paint by Ride and Completion already
+    // use, just handed to Claude as readable text instead of drawn on a map.
+    const context = routes.map(r => {
+      const m = r.meta || {};
+      const dt = r.savedAt ? new Date(r.savedAt).toLocaleDateString() : 'unknown date';
+      return '- "' + r.name + '": ' + (m.totalKm != null ? m.totalKm.toFixed(1) + 'km' : 'distance unknown')
+        + ', ' + (m.points || '?') + ' points'
+        + (m.highRisk ? ', ' + m.highRisk + ' high-risk point(s)' : ', no high-risk points flagged')
+        + (m.cellGaps ? ', ' + m.cellGaps + ' cell coverage gap(s)' : ', no cell gaps')
+        + ', saved ' + dt;
+    }).join('\n');
+
+    const resp = await fetch('/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question: q, context, akey: ak })
+    });
+    const raw = await resp.text();
+    if (!resp.ok) {
+      let msg = 'HTTP ' + resp.status;
+      try {
+        const e = JSON.parse(raw);
+        if (e.error && typeof e.error === 'object') msg = e.error.message || JSON.stringify(e.error);
+        else msg = e.error || e.message || JSON.stringify(e);
+      } catch {}
+      throw new Error(msg);
+    }
+    const d = JSON.parse(raw);
+    const text = (d.content && d.content[0] && d.content[0].text) || '';
+    answerEl.innerHTML = '<div style="background:var(--sf2);border-radius:8px;padding:10px;font-size:12.5px;line-height:1.6;white-space:pre-wrap">' + (text || 'No answer returned.') + '</div>';
+    log('Answered: "' + q + '"', 'ok');
+  } catch (e) {
+    answerEl.innerHTML = '<div class="hint" style="color:var(--er)">Couldn\'t get an answer: ' + e.message + '</div>';
   }
 }
 
@@ -1845,6 +3301,15 @@ async function loadSavedRoute(id) {
       }
     });
     rebuildViewFromRes();
+    // rp (the raw route path) was never reconstructed on load - only res (the per-point
+    // card data) was, which meant Send to Phone silently had nothing to work with even
+    // if it had been shown. Rebuilding it from res's own lat/lon fixes both at once.
+    rp = res.map(r => ({ lat: r.lat, lon: r.lon }));
+    $('sendPhone').style.display = rp.length ? '' : 'none';
+    $('legsBtn').style.display = rp.length ? '' : 'none';
+    $('conditionsBtn').style.display = rp.length ? '' : 'none';
+    $('gpxBtn').style.display = rp.length ? '' : 'none';
+    $('gpxLinkBtn').style.display = rp.length ? '' : 'none';
     currentSavedRouteId = id;
     $('riskBtn').style.display = '';
     $('riskBtn').disabled = false;
@@ -1870,11 +3335,11 @@ function rebuildViewFromRes() {
     card.className = 'card';
     card.dataset.resIdx = i;
     if (!pt.hasCoverage) {
-      card.innerHTML = '<div class="nc">No Street View coverage</div><div class="cb"><span class="ckm">km ' + pt.km.toFixed(2) + '</span><div class="cc">' + pt.lat.toFixed(6) + ', ' + pt.lon.toFixed(6) + '</div><div class="cc" id="curve' + i + '"></div><div class="cc" id="cell' + i + '"></div><div class="cc" id="addr' + i + '"></div></div>';
+      card.innerHTML = '<div class="nc">No Street View coverage</div><div class="cb"><span class="ckm">km ' + pt.km.toFixed(2) + '</span><div class="cc">' + pt.lat.toFixed(6) + ', ' + pt.lon.toFixed(6) + '</div><div class="cc" id="curve' + i + '"></div><div class="cc" id="tel' + i + '"></div><div class="cc" id="cell' + i + '"></div><div class="cc" id="addr' + i + '"></div></div>';
     } else {
       card.dataset.url = pt.imageUrl;
       const abLabel = pt.irap ? 'Re-analyse' : 'Code iRAP attributes';
-      card.innerHTML = '<img src="' + pt.imageUrl + '" alt="km ' + pt.km.toFixed(2) + '" loading="lazy"/><div class="cb"><span class="ckm">km ' + pt.km.toFixed(2) + '</span><div class="cc">' + pt.lat.toFixed(6) + ', ' + pt.lon.toFixed(6) + '</div><div class="cc" id="curve' + i + '"></div><div class="cc" id="cell' + i + '"></div><div class="cc" id="addr' + i + '"></div><button class="ab' + (pt.irap ? ' done' : '') + '" data-idx="' + i + '">' + abLabel + '</button></div><div class="ip" id="ip' + i + '"></div><div id="vld' + i + '"></div>';
+      card.innerHTML = '<img src="' + pt.imageUrl + '" alt="km ' + pt.km.toFixed(2) + '" loading="lazy"/><div class="cb"><span class="ckm">km ' + pt.km.toFixed(2) + '</span><div class="cc">' + pt.lat.toFixed(6) + ', ' + pt.lon.toFixed(6) + '</div><div class="cc" id="curve' + i + '"></div><div class="cc" id="tel' + i + '"></div><div class="cc" id="cell' + i + '"></div><div class="cc" id="addr' + i + '"></div><button class="ab' + (pt.irap ? ' done' : '') + '" data-idx="' + i + '">' + abLabel + '</button></div><div class="ip" id="ip' + i + '"></div><div id="vld' + i + '"></div>';
     }
     $('grid').appendChild(card);
   });
@@ -1906,10 +3371,12 @@ function rebuildViewFromRes() {
       if (ipSlot) rIRAP(ipSlot, r.irap);
     }
     if (r.validationImage) renderValidationBlock(i);
+    renderTelemetryLine(i);
   });
   const c = res.filter(r => r.hasCoverage).length;
   $('cs').textContent = c + '/' + res.length + ' covered (' + Math.round(c / res.length * 100) + '%)';
   $('rt').textContent = 'Route frames - ' + res.length + ' points (loaded from saved route)';
+  renderRouteProfile();
   applyFilter();
   sv('grid');
 }
@@ -1929,7 +3396,17 @@ async function deleteSavedRoute(id) {
   if (!confirm('Delete this saved route? This can\'t be undone.')) return;
   try {
     await fetch('/routes/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) });
+    // If you delete the route currently loaded in this session, clear the tracked id -
+    // otherwise the next auto-save (after Pull Images/Risk/Field Media) would upsert
+    // with the same id and silently bring the deleted route back.
+    if (currentSavedRouteId === id) currentSavedRouteId = null;
     refreshSavedList();
+    refreshCompletionStats();
+    // Paint by Ride draws a static snapshot the moment it's shown - a delete doesn't
+    // otherwise touch it, so the deleted route's paint would keep sitting on the map
+    // until the next unrelated click on "Show painted map". If it's actually what's
+    // on screen right now, refresh it for real instead of leaving stale lines visible.
+    if (paintByRideActive) showPaintByRide();
   } catch (e) {
     log('Delete failed: ' + e.message, 'er');
   }
@@ -1957,28 +3434,81 @@ function lightPollutionLayer() {
   });
 }
 
+// Converts a standard slippy-map tile coordinate into the lat/lon bounding box a WMS
+// GetMap request needs. Standard Web Mercator tile math - every mapping library uses
+// some form of this.
+function tileToLatLonBBox(x, y, zoom) {
+  const n = Math.pow(2, zoom);
+  const lonMin = x / n * 360 - 180;
+  const lonMax = (x + 1) / n * 360 - 180;
+  const toLat = (yTile) => {
+    const rad = Math.atan(Math.sinh(Math.PI * (1 - 2 * yTile / n)));
+    return rad * 180 / Math.PI;
+  };
+  const latMax = toLat(y);
+  const latMin = toLat(y + 1);
+  return { latMin, lonMin, latMax, lonMax };
+}
+
+// Live weather radar from Environment and Climate Change Canada's MSC GeoMet service -
+// genuinely observed precipitation, not a forecast, updated roughly every 10 minutes.
+// Confirmed keyless/open access. WMS 1.3.0 with EPSG:4326 uses reversed axis order
+// (lat,lon,lat,lon) in BBOX - easy to get backwards and get a garbled or blank tile.
+function radarLayer() {
+  return new google.maps.ImageMapType({
+    getTileUrl: function (coord, zoom) {
+      if (zoom > 10 || coord.y < 0 || coord.y >= Math.pow(2, zoom)) return null;
+      const n = Math.pow(2, zoom);
+      let x = coord.x % n; if (x < 0) x += n;
+      const b = tileToLatLonBBox(x, coord.y, zoom);
+      const bbox = b.latMin + ',' + b.lonMin + ',' + b.latMax + ',' + b.lonMax;
+      return 'https://geo.weather.gc.ca/geomet?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap'
+        + '&LAYERS=RADAR_1KM_RRAI&CRS=EPSG:4326&BBOX=' + bbox
+        + '&WIDTH=256&HEIGHT=256&FORMAT=image/png';
+    },
+    tileSize: new google.maps.Size(256, 256),
+    maxZoom: 10, minZoom: 0,
+    name: 'Weather Radar', opacity: 0.7
+  });
+}
+
 const LP_MAX_ZOOM = 7; // above this, tile seams become obtrusive and the wide-view aesthetic isn't the point anyway
+
+let radarLayerObj = null;
 
 function toggleLightPollution() {
   if (!gmap) return;
-  updateLightPollutionVisibility();
-  if (!gmap._lpZoomListenerAdded) {
-    gmap.addListener('zoom_changed', updateLightPollutionVisibility);
-    gmap._lpZoomListenerAdded = true;
+  updateOverlays();
+  if (!gmap._overlayZoomListenerAdded) {
+    gmap.addListener('zoom_changed', updateOverlays);
+    gmap._overlayZoomListenerAdded = true;
   }
 }
 
-function updateLightPollutionVisibility() {
+function toggleRadar() {
   if (!gmap) return;
-  const wantOn = $('lp').checked && gmap.getZoom() <= LP_MAX_ZOOM;
+  updateOverlays();
+}
+
+// Manages every overlayMapType together, not per-layer - .clear() (the only reliable
+// way found to evict stale tiles, confirmed earlier with light pollution) wipes every
+// overlay at once, so toggling one independently would silently wipe the other if
+// each layer tried to manage itself separately.
+function updateOverlays() {
+  if (!gmap) return;
+  const wantLP = $('lp').checked && gmap.getZoom() <= LP_MAX_ZOOM;
+  const wantRadar = !!($('radar') && $('radar').checked);
   if (!lpLayer) lpLayer = lightPollutionLayer();
-  const idx = gmap.overlayMapTypes.getArray().indexOf(lpLayer);
-  const isOn = idx !== -1;
-  if (wantOn === isOn) return; // already in the right state, nothing to do
+  if (!radarLayerObj) radarLayerObj = radarLayer();
+  const current = gmap.overlayMapTypes.getArray();
+  const isLPOn = current.indexOf(lpLayer) !== -1;
+  const isRadarOn = current.indexOf(radarLayerObj) !== -1;
+  if (wantLP === isLPOn && wantRadar === isRadarOn) return; // already correct, nothing to do
   // .clear() reliably evicts already-rendered tiles; removeAt() on its own was
-  // observed leaving stale light-pollution tiles visible after switching off.
+  // observed leaving stale tiles visible after switching a layer off.
   gmap.overlayMapTypes.clear();
-  if (wantOn) gmap.overlayMapTypes.push(lpLayer);
+  if (wantLP) gmap.overlayMapTypes.push(lpLayer);
+  if (wantRadar) gmap.overlayMapTypes.push(radarLayerObj);
 }
 
 // Fully detaches and reattaches the traffic layer, forcing Google to issue completely
@@ -2028,10 +3558,10 @@ function toggleTraffic() {
 // rather than zoom-conditional.
 function mapStyles(showLabels) {
   const s = [
-    { elementType: 'geometry', stylers: [{ color: '#1a1a2e' }] },
-    { elementType: 'labels.text.fill', stylers: [{ color: '#8a8a9a' }] },
-    { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#2d2d44' }] },
-    { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0d1b2a' }] },
+    { elementType: 'geometry', stylers: [{ color: '#0e1012' }] },
+    { elementType: 'labels.text.fill', stylers: [{ color: '#888680' }] },
+    { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#1f2124' }] },
+    { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#08090a' }] },
     { featureType: 'poi', stylers: [{ visibility: 'off' }] },
     { featureType: 'administrative.land_parcel', stylers: [{ visibility: 'off' }] },
     { featureType: 'administrative', elementType: 'geometry', stylers: [{ visibility: 'off' }] }
@@ -2057,6 +3587,8 @@ function iMap() {
     });
     $('lp').addEventListener('change', toggleLightPollution);
     if ($('lp').checked) toggleLightPollution();
+    $('radar').addEventListener('change', toggleRadar);
+    if ($('radar').checked) toggleRadar();
     $('traffic').addEventListener('change', toggleTraffic);
     if ($('traffic').checked) toggleTraffic();
   }
@@ -2166,9 +3698,13 @@ function iMap() {
       if (r.irap) { fill = riskColor(riskScore(r.irap)); stroke = fill; }
       else { fill = '#5a5f66'; stroke = '#3a3d42'; } // covered, not yet analysed
     }
+    // Camera-verified (GoPro/DJI/drone) points get a blue outline layered on top,
+    // matching Paint by Ride's blue-for-verified - keeps the risk-score fill visible
+    // where it exists, rather than replacing it and losing that information.
+    const verified = !!r.imageSource;
     const m = new google.maps.Marker({
       position: { lat: r.lat, lng: r.lon }, map: gmap,
-      icon: { path: google.maps.SymbolPath.CIRCLE, scale: 6, fillColor: fill, fillOpacity: ($('traffic').checked ? 0.55 : 1), strokeColor: stroke, strokeWeight: 1.5 }
+      icon: { path: google.maps.SymbolPath.CIRCLE, scale: 6, fillColor: fill, fillOpacity: ($('traffic').checked ? 0.55 : 1), strokeColor: verified ? '#4a90e2' : stroke, strokeWeight: verified ? 3 : 1.5 }
     });
     if (r.hasCoverage && r.imageUrl) {
       m.addListener('mouseover', () => {
@@ -2241,10 +3777,10 @@ function buildBriefingData() {
   if (analysed.length) {
     if (highRisk.length) {
       const worst = highRisk[0];
-      overview += 'Road conditions average ' + Math.round(avgRisk * 100) + '% risk across the ' + analysed.length + ' coded sections. Showing hazards at ' + Math.round(riskThreshold * 100) + '% risk or higher (' + highRisk.length + ' point' + (highRisk.length > 1 ? 's' : '') + ') - the most significant is around km ' + worst.r.km.toFixed(1) + ' (' + (totalKm - worst.r.km).toFixed(1) + ' km from the end) at ' + Math.round(worst.sc * 100) + '% risk' + (worst.r.irap.notes ? ' (' + worst.r.irap.notes + ')' : '') + '.';
+      overview += 'Road conditions average ' + Math.round(avgRisk * 100) + ' Road Risk Index across the ' + analysed.length + ' coded sections. Showing hazards at ' + Math.round(riskThreshold * 100) + ' index or higher (' + highRisk.length + ' point' + (highRisk.length > 1 ? 's' : '') + ') - the most significant is around km ' + worst.r.km.toFixed(1) + ' (' + (totalKm - worst.r.km).toFixed(1) + ' km from the end) at ' + Math.round(worst.sc * 100) + ' index' + (worst.r.irap.notes ? ' (' + worst.r.irap.notes + ')' : '') + '.';
       if (flaggedWx.length) overview += ' Treat that stretch with extra caution given the weather flagged nearby.';
     } else {
-      overview += 'Road conditions across the ' + analysed.length + ' coded sections average a low ' + Math.round(avgRisk * 100) + '% risk, with nothing at or above the ' + Math.round(riskThreshold * 100) + '% risk filter currently set.';
+      overview += 'Road conditions across the ' + analysed.length + ' coded sections average a low ' + Math.round(avgRisk * 100) + ' Road Risk Index, with nothing at or above the ' + Math.round(riskThreshold * 100) + ' index filter currently set.';
     }
   } else {
     overview += 'No sections have been iRAP-coded yet, so this briefing reflects weather only - run the analysis for road-hazard detail.';
@@ -2609,5 +4145,65 @@ function generateBookPage() {
 
 $('bb').addEventListener('click', generateBriefing);
 </script>
-</body>
+<script>
+const WORKSPACE_MODE_META = {
+  routes:  { title: 'Routes',  desc: 'Build, draw or import the road you want to understand.' },
+  analyze: { title: 'Analyze', desc: 'Turn route observations into risk, conditions and usable decisions.' },
+  field:   { title: 'Field',   desc: 'Verify the road yourself and close gaps in the baseline.' },
+  library: { title: 'Library', desc: 'Return to saved routes, progress and cross-route intelligence.' }
+};
+function setRouteNextStep(stage) {
+  const card = document.getElementById('routeNextStep');
+  if (!card) return;
+  const title = document.getElementById('routeNextTitle');
+  const copy = document.getElementById('routeNextCopy');
+  const label = document.getElementById('routeNextBtnLabel');
+  const analyzeTab = document.querySelector('.mode-tab[data-mode="analyze"]');
+  if (!stage) { card.classList.remove('visible'); if (analyzeTab) analyzeTab.classList.remove('attention'); return; }
+  card.dataset.stage = stage;
+  card.classList.add('visible');
+  if (analyzeTab) analyzeTab.classList.add('attention');
+  if (stage === 'images') {
+    title.textContent = 'Continue to analysis';
+    copy.textContent = 'Route confirmed. Collect Street View observations next, then UrbRis can code road risk.';
+    label.textContent = 'Pull Images';
+  } else {
+    title.textContent = 'Road imagery ready';
+    copy.textContent = 'Observations are collected. Continue into road-risk coding.';
+    label.textContent = 'Pull Risk';
+  }
+}
+function continueRouteWorkflow() {
+  const card = document.getElementById('routeNextStep');
+  const stage = card && card.dataset.stage || 'images';
+  setWorkspaceMode('analyze');
+  const target = stage === 'risk' ? document.getElementById('riskBtn') : document.getElementById('run');
+  if (target) {
+    target.scrollIntoView({behavior:'smooth',block:'center'});
+    target.animate([{boxShadow:'0 0 0 0 rgba(221,106,50,0)'},{boxShadow:'0 0 0 5px rgba(221,106,50,.22)'},{boxShadow:'0 0 0 0 rgba(221,106,50,0)'}],{duration:900});
+    if (!target.disabled) setTimeout(() => target.click(), 180);
+  }
+}
+function setWorkspaceMode(mode) {
+  if (!WORKSPACE_MODE_META[mode]) return;
+  document.querySelectorAll('.mode-tab').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+  document.querySelectorAll('.mode-panel').forEach(p => p.classList.toggle('active', p.dataset.modePanel === mode));
+  const meta = WORKSPACE_MODE_META[mode];
+  const t = document.getElementById('modeContextTitle');
+  const d = document.getElementById('modeContextDesc');
+  if (t) t.textContent = meta.title;
+  if (d) d.textContent = meta.desc;
+  document.body.dataset.workspaceMode = mode;
+  localStorage.setItem('urbris_workspaceMode', mode);
+  // Route creation and field verification are map-first workflows. Keep the route
+  // spatially visible when moving into those modes, without touching analysis state.
+  if ((mode === 'routes' || mode === 'field') && typeof sv === 'function' && typeof gmap !== 'undefined' && gmap) {
+    try { sv('map'); } catch (_) {}
+  }
+}
+window.addEventListener('load', () => {
+  const savedMode = localStorage.getItem('urbris_workspaceMode');
+  setWorkspaceMode(WORKSPACE_MODE_META[savedMode] ? savedMode : 'routes');
+});
+</script></body>
 </html>
