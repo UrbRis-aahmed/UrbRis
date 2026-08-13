@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import json, urllib.request, urllib.error, urllib.parse, webbrowser, os, sys, csv, math, uuid, base64
+import json, urllib.request, urllib.error, urllib.parse, webbrowser, os, sys, csv, math, uuid, base64, re
 from datetime import datetime, timezone
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from concurrent.futures import ThreadPoolExecutor
@@ -133,25 +133,35 @@ def fetch_overpass(query):
 
 class H(BaseHTTPRequestHandler):
     def _parse_multipart(self, body_bytes, content_type):
-        # A well-known technique using the email module, since cgi.FieldStorage
-        # (the old easy way to do this) is deprecated and removed entirely in
-        # Python 3.13+.
-        import email
-        header = ("Content-Type: " + content_type + "\r\nMIME-Version: 1.0\r\n\r\n").encode()
-        msg = email.message_from_bytes(header + body_bytes)
+        # Direct byte-boundary splitting instead of the email module. The email
+        # module builds an internal MIME tree and applies text-oriented transfer-
+        # encoding handling even to binary parts - for a request full of JPEG images
+        # this can genuinely use many times the raw body size in memory, which is
+        # very likely what actually caused the free-tier 512MB OOM at 244 points
+        # (the raw request itself was only ~6MB), not the upload concurrency.
+        m = re.search(rb'boundary=([^;\r\n]+)', content_type.encode())
+        if not m:
+            return {}, {}
+        boundary = b'--' + m.group(1).strip(b'"')
         fields, files = {}, {}
-        if msg.is_multipart():
-            for part in msg.get_payload():
-                cd = part.get("Content-Disposition", "")
-                if "name=" not in cd:
-                    continue
-                name = cd.split('name="')[1].split('"')[0]
-                filename = cd.split('filename="')[1].split('"')[0] if 'filename="' in cd else None
-                payload = part.get_payload(decode=True)
-                if filename:
-                    files[name] = payload
-                else:
-                    fields[name] = payload.decode("utf-8", "ignore") if isinstance(payload, bytes) else payload
+        for part in body_bytes.split(boundary):
+            part = part.strip(b'\r\n')
+            if not part or part == b'--':
+                continue
+            if b'\r\n\r\n' not in part:
+                continue
+            header_block, content = part.split(b'\r\n\r\n', 1)
+            content = content[:-2] if content.endswith(b'\r\n') else content  # trailing CRLF before next boundary
+            headers = header_block.decode('utf-8', 'ignore')
+            name_m = re.search(r'name="([^"]+)"', headers)
+            if not name_m:
+                continue
+            name = name_m.group(1)
+            filename_m = re.search(r'filename="([^"]+)"', headers)
+            if filename_m:
+                files[name] = content
+            else:
+                fields[name] = content.decode("utf-8", "ignore")
         return fields, files
 
     def _snap_points_serverside(self, points, gkey):
@@ -217,32 +227,51 @@ class H(BaseHTTPRequestHandler):
                     pass  # snapping is a nice-to-have here - fall back to raw GPS points
 
             rid = uuid.uuid4().hex[:12]
-            res = []
-            km = 0.0
-            upload_failures = 0
+
+            # km/order still computed sequentially first (each depends on the point
+            # before it), but the actual uploads - the genuinely slow part - run
+            # concurrently. Sequential uploads worked fine for 42 points; a 244-point
+            # ride doing 244 uploads one at a time was very likely long enough to hit
+            # Render's own gateway timeout before the response could even be sent.
+            km_running = 0.0
             for i, p in enumerate(pts):
                 if i > 0:
-                    km += haversine_km(pts[i - 1]["lat"], pts[i - 1]["lon"], p["lat"], p["lon"])
+                    km_running += haversine_km(pts[i - 1]["lat"], pts[i - 1]["lon"], p["lat"], p["lon"])
+                p["_km"] = round(km_running, 4)
+
+            def upload_one(item):
+                i, p = item
                 img_file = p.get("image_file")
                 img_bytes = files.get(img_file) if img_file else None
-                image_url = ""
-                if img_bytes:
-                    # Each image is its own small, independent upload - this is the
-                    # actual fix for the timeout: no single write ever grows with ride
-                    # length, since the database row below only ever stores this short
-                    # URL, never the image bytes themselves.
-                    try:
-                        image_url = self._upload_to_storage(
-                            "route-images", rid + "/" + ("pt_%04d.jpg" % i), img_bytes, "image/jpeg"
-                        )
-                    except Exception:
+                if not img_bytes:
+                    return i, ""
+                try:
+                    return i, self._upload_to_storage(
+                        "route-images", rid + "/" + ("pt_%04d.jpg" % i), img_bytes, "image/jpeg"
+                    )
+                except Exception:
+                    return i, None  # None = attempted but failed, distinct from "no image"
+
+            urls_by_index = {}
+            upload_failures = 0
+            with ThreadPoolExecutor(max_workers=5) as pool:
+                for i, url in pool.map(upload_one, enumerate(pts)):
+                    if url is None:
                         upload_failures += 1
+                        urls_by_index[i] = ""
+                    else:
+                        urls_by_index[i] = url
+
+            res = []
+            for i, p in enumerate(pts):
+                image_url = urls_by_index.get(i, "")
                 res.append({
-                    "km": round(km, 4), "lat": p["lat"], "lon": p["lon"],
+                    "km": p["_km"], "lat": p["lat"], "lon": p["lon"],
                     "heading": p.get("heading", 0), "imageUrl": image_url,
                     "hasCoverage": bool(image_url), "imageSource": "local-desktop-extract" if image_url else None,
                     "etaSec": 0
                 })
+            km = res[-1]["km"] if res else 0.0
 
             saved_at = now_iso()
             row = {
