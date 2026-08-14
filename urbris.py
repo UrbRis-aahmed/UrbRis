@@ -193,14 +193,14 @@ function havM(lat1, lon1, lat2, lon2) {
 let animSegments = [];
 let animFrameId = null;
 
-// Flattens every route into one ranked list of segments, ordered by distance from
-// an anchor point - for now, the first point of the first route (easy to swap for
-// a real fixed landmark's lat/lon later, same shape either way).
+// Each segment gets a 0-1 "progress" value based on its position along its OWN
+// route, not distance from any external point - every route reveals from its own
+// real starting point simultaneously, following the actual path order (like
+// watching each ride happen), not a circular bloom from one shared anchor.
 function buildAnimSegments(routes) {
-  const anchor = (routes[0] && routes[0][0]) ? routes[0][0] : null;
-  if (!anchor) return [];
   const segs = [];
   routes.forEach(pts => {
+    const routeSegs = [];
     for (let i = 0; i < pts.length - 1; i++) {
       const a = pts[i], b = pts[i + 1];
       if (a.lat == null || b.lat == null) continue;
@@ -212,24 +212,31 @@ function buildAnimSegments(routes) {
       } else {
         color = a.imageSource ? '#5b6470' : '#3a3d42';
       }
-      segs.push({ a, b, color, dist: havM(anchor.lat, anchor.lon, a.lat, a.lon) });
+      routeSegs.push({ a, b, color });
     }
+    routeSegs.forEach((s, idx) => {
+      s.progress = routeSegs.length > 1 ? idx / (routeSegs.length - 1) : 0;
+    });
+    segs.push(...routeSegs);
   });
-  segs.sort((x, y) => x.dist - y.dist);
   return segs;
 }
 
-// One continuous 30s breathing cycle - 15s growing outward from the anchor (nearest
-// segments first), 15s retracting back toward it (farthest segments removed first,
-// so the visible edge always shrinks inward, not a random flicker).
+// One continuous 30s breathing cycle - 15s growing (each route unfolding from its
+// own start), 15s retracting back the same way, then loops.
 const GROW_MS = 15000, RETRACT_MS = 15000;
 function runBreathingCycle(routes, fitBoundsOnce) {
   animSegments = buildAnimSegments(routes);
   polylines.forEach(p => p.setMap(null));
-  polylines = animSegments.map(s => new google.maps.Polyline({
-    path: [{ lat: s.a.lat, lng: s.a.lon }, { lat: s.b.lat, lng: s.b.lon }],
-    strokeColor: s.color, strokeWeight: 4, strokeOpacity: 0.9, map: null
-  }));
+  polylines = animSegments.map(s => {
+    const poly = new google.maps.Polyline({
+      path: [{ lat: s.a.lat, lng: s.a.lon }, { lat: s.b.lat, lng: s.b.lon }],
+      strokeColor: s.color, strokeWeight: 4, strokeOpacity: 0.9, map: null
+    });
+    poly._visible = false; // tracked explicitly so tick() only touches lines whose
+                            // state actually changes, not all of them every frame
+    return poly;
+  });
 
   if (fitBoundsOnce && animSegments.length) {
     const bounds = new google.maps.LatLngBounds();
@@ -240,20 +247,25 @@ function runBreathingCycle(routes, fitBoundsOnce) {
     map.fitBounds(bounds);
   }
 
-  const total = animSegments.length;
   const cycleStart = performance.now();
   if (animFrameId) cancelAnimationFrame(animFrameId);
 
   function tick(now) {
     const elapsed = (now - cycleStart) % (GROW_MS + RETRACT_MS);
-    let visibleCount;
-    if (elapsed < GROW_MS) {
-      visibleCount = Math.round((elapsed / GROW_MS) * total);
-    } else {
-      const retractElapsed = elapsed - GROW_MS;
-      visibleCount = Math.round(total - (retractElapsed / RETRACT_MS) * total);
+    const progressFrac = elapsed < GROW_MS
+      ? elapsed / GROW_MS
+      : 1 - (elapsed - GROW_MS) / RETRACT_MS;
+
+    // Only calls setMap on a line when its visibility genuinely flips - the actual
+    // fix for the jank, since the old version touched every single polyline on
+    // every single frame regardless of whether anything about it had changed.
+    for (let i = 0; i < polylines.length; i++) {
+      const shouldShow = animSegments[i].progress <= progressFrac;
+      if (shouldShow !== polylines[i]._visible) {
+        polylines[i].setMap(shouldShow ? map : null);
+        polylines[i]._visible = shouldShow;
+      }
     }
-    polylines.forEach((poly, i) => poly.setMap(i < visibleCount ? map : null));
     animFrameId = requestAnimationFrame(tick);
   }
   animFrameId = requestAnimationFrame(tick);
