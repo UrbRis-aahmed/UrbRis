@@ -3100,10 +3100,24 @@ async function showPaintByRide() {
           const a = pts[i], b = pts[i + 1];
           const segKm = hav(a, b) / 1000;
           totalKm += segKm;
-          let color = null;
-          if (a.imageSource) { color = '#4a90e2'; verifiedKm += segKm; } // blue - captured on camera
-          else if (a.hasCoverage) { color = '#3a7d5c'; streetViewKm += segKm; } // green - Street View only
-          if (!color) continue; // no coverage at all - leave unpainted
+          const hasCov = a.imageSource || a.hasCoverage;
+          if (!hasCov) continue; // no coverage at all - leave unpainted, same as before
+          if (a.imageSource) verifiedKm += segKm; else streetViewKm += segKm;
+
+          let color;
+          if (a.irap && b.irap) {
+            // Same gradient as the main risk map, not a separate visual language -
+            // verification still shows through as saturation, exactly like there.
+            const sc = (riskScore(a.irap) + riskScore(b.irap)) / 2;
+            const verified = !!(a.imageSource && b.imageSource);
+            color = riskColor(sc, verified);
+          } else {
+            // Covered but not yet risk-scored - a real, different state from "no
+            // coverage at all", so it stays visually distinct rather than either
+            // invented risk or an unpainted gap that looks the same as no coverage.
+            color = a.imageSource ? '#5b6470' : '#3a3d42';
+          }
+
           const poly = new google.maps.Polyline({
             path: [{ lat: a.lat, lng: a.lon }, { lat: b.lat, lng: b.lon }],
             strokeColor: color, strokeWeight: 5, strokeOpacity: 0.9, map: gmap
