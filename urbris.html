@@ -656,6 +656,19 @@ function brng(a, b) {
   return (Math.atan2(Math.sin(d)*Math.cos(lb), Math.cos(la)*Math.sin(lb) - Math.sin(la)*Math.cos(lb)*Math.cos(d)) * 180 / Math.PI + 360) % 360;
 }
 
+// Offsets a point a small fixed distance perpendicular to the bearing between two
+// points - used to draw risk and validation as two distinct parallel gradient lines
+// instead of one hiding the other when drawn on the same path.
+function offsetPerp(pt, bearingDeg, meters) {
+  const R = 6371000;
+  const perpRad = (bearingDeg + 90) * Math.PI / 180;
+  const lat1 = pt.lat * Math.PI / 180, lon1 = pt.lon * Math.PI / 180;
+  const dByR = meters / R;
+  const lat2 = Math.asin(Math.sin(lat1) * Math.cos(dByR) + Math.cos(lat1) * Math.sin(dByR) * Math.cos(perpRad));
+  const lon2 = lon1 + Math.atan2(Math.sin(perpRad) * Math.sin(dByR) * Math.cos(lat1), Math.cos(dByR) - Math.sin(lat1) * Math.sin(lat2));
+  return { lat: lat2 * 180 / Math.PI, lng: lon2 * 180 / Math.PI };
+}
+
 function samp(pts, iv) {
   const out = []; let acc = 0, last = 0;
   for (let i = 1; i < pts.length; i++) {
@@ -3613,6 +3626,25 @@ function iMap() {
     }
   }
 
+  // Validation line - same blue-for-camera-verified/green-for-Street-View coloring
+  // already proven in Paint by Ride, drawn as its own offset parallel line rather
+  // than baked into a per-point marker, so it reads as a continuous gradient
+  // alongside risk instead of a separate visual language.
+  const VALIDATION_OFFSET_M = 4;
+  for (let i = 0; i < res.length - 1; i++) {
+    const a = res[i], b = res[i+1];
+    let color = null;
+    if (a.imageSource) color = '#4a90e2';
+    else if (a.hasCoverage) color = '#3a7d5c';
+    if (!color) continue;
+    const brg = brng(a, b);
+    const aOff = offsetPerp({ lat: a.lat, lon: a.lon }, brg, VALIDATION_OFFSET_M);
+    const bOff = offsetPerp({ lat: b.lat, lon: b.lon }, brg, VALIDATION_OFFSET_M);
+    gs.push(new google.maps.Polyline({
+      path: [aOff, bOff], strokeColor: color, strokeOpacity: .9, strokeWeight: 5, map: gmap
+    }));
+  }
+
   const info = new google.maps.InfoWindow(), bounds = new google.maps.LatLngBounds();
   const hoverInfo = new google.maps.InfoWindow({ disableAutoPan: true });
   let curInfoIdx = null;
@@ -3636,8 +3668,9 @@ function iMap() {
       btn.remove();
       const mk = gm[idx];
       if (mk) {
-        const c = riskColor(riskScore(a));
-        mk.setIcon({ path: google.maps.SymbolPath.CIRCLE, scale: 6, fillColor: c, fillOpacity: 1, strokeColor: c, strokeWeight: 1.5 });
+        // Risk is now shown via the gradient line, not a per-point bubble - marker
+        // stays invisible, just a hover/click target.
+        mk.setIcon({ path: google.maps.SymbolPath.CIRCLE, scale: 6, fillOpacity: 0, strokeOpacity: 0 });
       }
       log('km ' + r.km.toFixed(2) + ' coded', 'ok');
     } catch (e) {
@@ -3695,18 +3728,12 @@ function iMap() {
 
   res.forEach((r, idx) => {
     bounds.extend({ lat: r.lat, lng: r.lon });
-    let fill = '#f09595', stroke = '#a32d2d'; // no coverage
-    if (r.hasCoverage) {
-      if (r.irap) { fill = riskColor(riskScore(r.irap)); stroke = fill; }
-      else { fill = '#5a5f66'; stroke = '#3a3d42'; } // covered, not yet analysed
-    }
-    // Camera-verified (GoPro/DJI/drone) points get a blue outline layered on top,
-    // matching Paint by Ride's blue-for-verified - keeps the risk-score fill visible
-    // where it exists, rather than replacing it and losing that information.
-    const verified = !!r.imageSource;
+    // Risk (fill) and validation (outline) used to be encoded into this marker's
+    // bubble styling - both now render as continuous gradient lines instead, so
+    // this stays an invisible hover/click target rather than a visible dot.
     const m = new google.maps.Marker({
       position: { lat: r.lat, lng: r.lon }, map: gmap,
-      icon: { path: google.maps.SymbolPath.CIRCLE, scale: 6, fillColor: fill, fillOpacity: ($('traffic').checked ? 0.55 : 1), strokeColor: verified ? '#4a90e2' : stroke, strokeWeight: verified ? 3 : 1.5 }
+      icon: { path: google.maps.SymbolPath.CIRCLE, scale: 6, fillOpacity: 0, strokeOpacity: 0 }
     });
     if (r.hasCoverage && r.imageUrl) {
       m.addListener('mouseover', () => {
