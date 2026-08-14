@@ -1886,9 +1886,36 @@ function riskScore(irap) {
 }
 
 // 0 = low risk (green) -> 1 = high risk (red)
-function riskColor(score) {
-  const hue = Math.round(120 - 120 * Math.max(0, Math.min(1, score)));
-  return 'hsl(' + hue + ',72%,50%)';
+// Real viridis colormap stops (perceptually uniform, readable under the most common
+// forms of colorblindness) - replaces the old green-to-red HSL scale, which is close
+// to the worst possible choice for red-green colorblindness specifically, on an app
+// whose whole purpose is flagging real road danger.
+const VIRIDIS_STOPS = [
+  [0.00, 68, 1, 84], [0.13, 72, 40, 120], [0.25, 62, 74, 137], [0.38, 49, 104, 142],
+  [0.50, 38, 130, 142], [0.63, 31, 158, 137], [0.75, 53, 183, 121], [0.88, 109, 205, 89],
+  [1.00, 253, 231, 37]
+];
+function viridisRGB(score) {
+  const s = Math.max(0, Math.min(1, score));
+  for (let i = 0; i < VIRIDIS_STOPS.length - 1; i++) {
+    const [t0, r0, g0, b0] = VIRIDIS_STOPS[i], [t1, r1, g1, b1] = VIRIDIS_STOPS[i + 1];
+    if (s >= t0 && s <= t1) {
+      const f = (s - t0) / (t1 - t0);
+      return [Math.round(r0 + f * (r1 - r0)), Math.round(g0 + f * (g1 - g0)), Math.round(b0 + f * (b1 - b0))];
+    }
+  }
+  return VIRIDIS_STOPS[VIRIDIS_STOPS.length - 1].slice(1);
+}
+// verified=true (default, keeps the two text-color call sites unchanged) gives full
+// saturated color. verified=false desaturates toward gray - confidence in the score
+// is now readable directly from the color itself, not a separate line.
+function riskColor(score, verified) {
+  const [r, g, b] = viridisRGB(score);
+  if (verified === false) {
+    const gray = (r + g + b) / 3, mix = 0.55;
+    return 'rgb(' + Math.round(r + (gray - r) * mix) + ',' + Math.round(g + (gray - g) * mix) + ',' + Math.round(b + (gray - b) * mix) + ')';
+  }
+  return 'rgb(' + r + ',' + g + ',' + b + ')';
 }
 
 
@@ -3609,35 +3636,20 @@ function iMap() {
   // Base route line (muted) underneath the risk-gradient overlay
   gp = new google.maps.Polyline({ path: res.map(r => ({ lat: r.lat, lng: r.lon })), strokeColor: '#3a3d42', strokeOpacity: .6, strokeWeight: 3, map: gmap });
 
-  // Colour each segment between analysed points by their averaged risk score
+  // One gradient line, not two: viridis color encodes risk severity, and
+  // verification status (was a separate offset line) now desaturates the same
+  // color instead - the line itself tells you both "how risky" and "how much to
+  // trust that score", rather than splitting those into two visual channels.
   for (let i = 0; i < res.length - 1; i++) {
     const a = res[i], b = res[i+1];
     if (a.irap && b.irap) {
       const sc = (riskScore(a.irap) + riskScore(b.irap)) / 2;
+      const verified = !!(a.imageSource && b.imageSource);
       gs.push(new google.maps.Polyline({
         path: [{ lat: a.lat, lng: a.lon }, { lat: b.lat, lng: b.lon }],
-        strokeColor: riskColor(sc), strokeOpacity: .9, strokeWeight: 5, map: gmap
+        strokeColor: riskColor(sc, verified), strokeOpacity: .9, strokeWeight: 5, map: gmap
       }));
     }
-  }
-
-  // Validation line - same blue-for-camera-verified/green-for-Street-View coloring
-  // already proven in Paint by Ride, drawn as its own offset parallel line rather
-  // than baked into a per-point marker, so it reads as a continuous gradient
-  // alongside risk instead of a separate visual language.
-  const VALIDATION_OFFSET_M = 4;
-  for (let i = 0; i < res.length - 1; i++) {
-    const a = res[i], b = res[i+1];
-    let color = null;
-    if (a.imageSource) color = '#4a90e2';
-    else if (a.hasCoverage) color = '#3a7d5c';
-    if (!color) continue;
-    const brg = brng(a, b);
-    const aOff = offsetPerp({ lat: a.lat, lon: a.lon }, brg, VALIDATION_OFFSET_M);
-    const bOff = offsetPerp({ lat: b.lat, lon: b.lon }, brg, VALIDATION_OFFSET_M);
-    gs.push(new google.maps.Polyline({
-      path: [aOff, bOff], strokeColor: color, strokeOpacity: .9, strokeWeight: 5, map: gmap
-    }));
   }
 
   const info = new google.maps.InfoWindow(), bounds = new google.maps.LatLngBounds();
