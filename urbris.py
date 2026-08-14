@@ -228,7 +228,10 @@ function initMap() {
       { featureType: 'administrative.country', elementType: 'labels', stylers: [{ visibility: 'off' }] },
       { featureType: 'administrative.province', elementType: 'labels', stylers: [{ visibility: 'off' }] },
       { featureType: 'administrative.locality', elementType: 'labels', stylers: [{ visibility: 'off' }] },
-      { featureType: 'water', elementType: 'labels', stylers: [{ visibility: 'off' }] }
+      { featureType: 'water', elementType: 'labels', stylers: [{ visibility: 'off' }] },
+      { featureType: 'road.highway', elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
+      { featureType: 'road.highway', elementType: 'labels.text', stylers: [{ visibility: 'off' }] },
+      { featureType: 'road.arterial', elementType: 'labels.icon', stylers: [{ visibility: 'off' }] }
     ]
   });
   drawRoutes(ROUTES, true);
