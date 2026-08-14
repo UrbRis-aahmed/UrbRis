@@ -227,7 +227,9 @@ function buildAnimSegments(routes) {
 // Chosen over 4-7-8 deliberately: that pattern's asymmetry is what makes it feel
 // like a small effort, which is the point for active anxiety relief - not what you
 // want in something meant to be pleasant to glance at passively for hours.
-const PHASE_MS = 15000; // one "count" of the 4-4-4-4 ratio, scaled to a real duration
+const PHASE_MS = 4000; // the actual, literal 4-second count used in real box
+                        // breathing practice - this can genuinely be followed
+                        // along with as an exercise, not just watched ambiently
 const GROW_MS = PHASE_MS, HOLD_FULL_MS = PHASE_MS, RETRACT_MS = PHASE_MS, HOLD_EMPTY_MS = PHASE_MS;
 const CYCLE_MS = GROW_MS + HOLD_FULL_MS + RETRACT_MS + HOLD_EMPTY_MS;
 
