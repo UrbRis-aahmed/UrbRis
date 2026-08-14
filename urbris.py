@@ -121,12 +121,22 @@ def render_public_log_page(gkey, total_km, all_routes_pts):
   #overlay .title { font-size:18px; color:#9a9da4; letter-spacing:0.06em; text-transform:uppercase; margin-bottom:6px; }
   #overlay .km { font-size:64px; font-weight:600; line-height:1; }
   #overlay .km span { font-size:28px; font-weight:400; color:#9a9da4; margin-left:8px; }
+  /* Same dark panel treatment as the km overlay, mirrored to the opposite corner. */
+  #clockOverlay {
+    position:fixed; top:32px; right:32px; z-index:10;
+    background:rgba(14,15,17,0.72); backdrop-filter:blur(6px);
+    border:1px solid rgba(255,255,255,0.08); border-radius:50%;
+    width:140px; height:140px;
+  }
 </style></head>
 <body>
 <div id="map"></div>
 <div id="overlay">
   <div class="title">UrbRis Road Log</div>
   <div class="km" id="kmStat">""" + f"{total_km:.1f}" + """<span>km verified</span></div>
+</div>
+<div id="clockOverlay">
+  <svg id="clockSvg" viewBox="0 0 140 140" width="140" height="140"></svg>
 </div>
 <script>
 let ROUTES = """ + data_json + """;
@@ -210,6 +220,41 @@ function pollForUpdates() {
   }).catch(() => {});
 }
 
+// Analog clock, drawn fresh every second - simple SVG geometry, no external
+// dependency, styled to match the same dark panels used elsewhere on this page.
+const CLOCK_R = 70, CLOCK_CX = 70, CLOCK_CY = 70;
+function handPoint(angleDeg, length) {
+  const rad = (angleDeg - 90) * Math.PI / 180;
+  return [CLOCK_CX + Math.cos(rad) * length, CLOCK_CY + Math.sin(rad) * length];
+}
+function drawClock() {
+  const now = new Date();
+  const h = now.getHours() % 12, m = now.getMinutes(), s = now.getSeconds();
+  const hAngle = h * 30 + m * 0.5;
+  const mAngle = m * 6 + s * 0.1;
+  const sAngle = s * 6;
+
+  let ticks = '';
+  for (let i = 0; i < 12; i++) {
+    const a = i * 30;
+    const [x1, y1] = handPoint(a, CLOCK_R - 10);
+    const [x2, y2] = handPoint(a, CLOCK_R - 4);
+    ticks += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#9a9da4" stroke-width="2"/>`;
+  }
+  const [hx, hy] = handPoint(hAngle, 36);
+  const [mx, my] = handPoint(mAngle, 52);
+  const [sx, sy] = handPoint(sAngle, 58);
+
+  document.getElementById('clockSvg').innerHTML = `
+    <circle cx="${CLOCK_CX}" cy="${CLOCK_CY}" r="${CLOCK_R - 3}" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="2"/>
+    ${ticks}
+    <line x1="${CLOCK_CX}" y1="${CLOCK_CY}" x2="${hx}" y2="${hy}" stroke="#e8e8ec" stroke-width="4" stroke-linecap="round"/>
+    <line x1="${CLOCK_CX}" y1="${CLOCK_CY}" x2="${mx}" y2="${my}" stroke="#e8e8ec" stroke-width="3" stroke-linecap="round"/>
+    <line x1="${CLOCK_CX}" y1="${CLOCK_CY}" x2="${sx}" y2="${sy}" stroke="#5b9dd9" stroke-width="1.5" stroke-linecap="round"/>
+    <circle cx="${CLOCK_CX}" cy="${CLOCK_CY}" r="3.5" fill="#e8e8ec"/>
+  `;
+}
+
 function initMap() {
   map = new google.maps.Map(document.getElementById('map'), {
     zoom: 10, center: { lat: 43.25, lng: -79.87 },
@@ -239,6 +284,8 @@ function initMap() {
   });
   drawRoutes(ROUTES, true);
   setInterval(pollForUpdates, POLL_MS);
+  drawClock();
+  setInterval(drawClock, 1000);
 }
 </script>
 <script async src="https://maps.googleapis.com/maps/api/js?key=""" + gkey + """&callback=initMap"></script>
