@@ -233,7 +233,8 @@ function initMap() {
       { featureType: 'road.highway', elementType: 'labels.text', stylers: [{ visibility: 'off' }] },
       { featureType: 'road.arterial', elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
       { featureType: 'road', elementType: 'labels', stylers: [{ visibility: 'off' }] },
-      { featureType: 'administrative.neighborhood', elementType: 'labels', stylers: [{ visibility: 'off' }] }
+      { featureType: 'administrative.neighborhood', elementType: 'labels', stylers: [{ visibility: 'off' }] },
+      { featureType: 'transit', stylers: [{ visibility: 'off' }] }
     ]
   });
   drawRoutes(ROUTES, true);
