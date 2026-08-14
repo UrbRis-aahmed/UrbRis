@@ -156,11 +156,22 @@ function riskColor(score, verified) {
 function initMap() {
   const map = new google.maps.Map(document.getElementById('map'), {
     zoom: 10, center: { lat: 43.25, lng: -79.87 },
-    styles: [{ elementType: 'geometry', stylers: [{ color: '#1a1b1e' }] },
-             { elementType: 'labels.text.fill', stylers: [{ color: '#7a7d84' }] },
-             { elementType: 'labels.text.stroke', stylers: [{ color: '#0e0f11' }] },
-             { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#2a2c30' }] },
-             { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0a1620' }] }]
+    // Exact same style array as the main app's mapStyles(false) - not a rough
+    // approximation, the real thing, so this page genuinely looks like part of
+    // the same product instead of a similar-but-different dark theme.
+    styles: [
+      { elementType: 'geometry', stylers: [{ color: '#0e1012' }] },
+      { elementType: 'labels.text.fill', stylers: [{ color: '#888680' }] },
+      { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#1f2124' }] },
+      { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#08090a' }] },
+      { featureType: 'poi', stylers: [{ visibility: 'off' }] },
+      { featureType: 'administrative.land_parcel', stylers: [{ visibility: 'off' }] },
+      { featureType: 'administrative', elementType: 'geometry', stylers: [{ visibility: 'off' }] },
+      { featureType: 'administrative.country', elementType: 'labels', stylers: [{ visibility: 'off' }] },
+      { featureType: 'administrative.province', elementType: 'labels', stylers: [{ visibility: 'off' }] },
+      { featureType: 'administrative.locality', elementType: 'labels', stylers: [{ visibility: 'off' }] },
+      { featureType: 'water', elementType: 'labels', stylers: [{ visibility: 'off' }] }
+    ]
   });
   const bounds = new google.maps.LatLngBounds();
   ROUTES.forEach(pts => {
