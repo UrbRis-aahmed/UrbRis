@@ -182,6 +182,83 @@ function riskColor(score, verified) {
   return 'rgb(' + r + ',' + g + ',' + b + ')';
 }
 
+function havM(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const p1 = lat1 * Math.PI / 180, p2 = lat2 * Math.PI / 180;
+  const dp = (lat2 - lat1) * Math.PI / 180, dl = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dp / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
+let animSegments = [];
+let animFrameId = null;
+
+// Flattens every route into one ranked list of segments, ordered by distance from
+// an anchor point - for now, the first point of the first route (easy to swap for
+// a real fixed landmark's lat/lon later, same shape either way).
+function buildAnimSegments(routes) {
+  const anchor = (routes[0] && routes[0][0]) ? routes[0][0] : null;
+  if (!anchor) return [];
+  const segs = [];
+  routes.forEach(pts => {
+    for (let i = 0; i < pts.length - 1; i++) {
+      const a = pts[i], b = pts[i + 1];
+      if (a.lat == null || b.lat == null) continue;
+      const hasCov = a.imageSource || a.hasCoverage;
+      if (!hasCov) continue;
+      let color;
+      if (a.irap && b.irap) {
+        color = riskColor((riskScore(a.irap) + riskScore(b.irap)) / 2, !!(a.imageSource && b.imageSource));
+      } else {
+        color = a.imageSource ? '#5b6470' : '#3a3d42';
+      }
+      segs.push({ a, b, color, dist: havM(anchor.lat, anchor.lon, a.lat, a.lon) });
+    }
+  });
+  segs.sort((x, y) => x.dist - y.dist);
+  return segs;
+}
+
+// One continuous 30s breathing cycle - 15s growing outward from the anchor (nearest
+// segments first), 15s retracting back toward it (farthest segments removed first,
+// so the visible edge always shrinks inward, not a random flicker).
+const GROW_MS = 15000, RETRACT_MS = 15000;
+function runBreathingCycle(routes, fitBoundsOnce) {
+  animSegments = buildAnimSegments(routes);
+  polylines.forEach(p => p.setMap(null));
+  polylines = animSegments.map(s => new google.maps.Polyline({
+    path: [{ lat: s.a.lat, lng: s.a.lon }, { lat: s.b.lat, lng: s.b.lon }],
+    strokeColor: s.color, strokeWeight: 4, strokeOpacity: 0.9, map: null
+  }));
+
+  if (fitBoundsOnce && animSegments.length) {
+    const bounds = new google.maps.LatLngBounds();
+    animSegments.forEach(s => {
+      bounds.extend({ lat: s.a.lat, lng: s.a.lon });
+      bounds.extend({ lat: s.b.lat, lng: s.b.lon });
+    });
+    map.fitBounds(bounds);
+  }
+
+  const total = animSegments.length;
+  const cycleStart = performance.now();
+  if (animFrameId) cancelAnimationFrame(animFrameId);
+
+  function tick(now) {
+    const elapsed = (now - cycleStart) % (GROW_MS + RETRACT_MS);
+    let visibleCount;
+    if (elapsed < GROW_MS) {
+      visibleCount = Math.round((elapsed / GROW_MS) * total);
+    } else {
+      const retractElapsed = elapsed - GROW_MS;
+      visibleCount = Math.round(total - (retractElapsed / RETRACT_MS) * total);
+    }
+    polylines.forEach((poly, i) => poly.setMap(i < visibleCount ? map : null));
+    animFrameId = requestAnimationFrame(tick);
+  }
+  animFrameId = requestAnimationFrame(tick);
+}
+
 function drawRoutes(routes, fitBounds) {
   polylines.forEach(p => p.setMap(null));
   polylines = [];
@@ -216,7 +293,7 @@ function pollForUpdates() {
   fetch('/log-data').then(r => r.json()).then(d => {
     if (d.error) return;
     document.getElementById('kmStat').innerHTML = d.total_km.toFixed(1) + '<span>km verified</span>';
-    drawRoutes(d.routes, false);
+    runBreathingCycle(d.routes, false);
   }).catch(() => {});
 }
 
@@ -282,7 +359,7 @@ function initMap() {
       { featureType: 'transit', stylers: [{ visibility: 'off' }] }
     ]
   });
-  drawRoutes(ROUTES, true);
+  runBreathingCycle(ROUTES, true);
   setInterval(pollForUpdates, POLL_MS);
   drawClock();
   setInterval(drawClock, 1000);
