@@ -3557,15 +3557,10 @@ function toggleTraffic() {
   // an earlier version also reduced brightness, which was dark enough to make light
   // pollution effectively invisible underneath it.
   $('gmap').style.filter = on ? 'saturate(55%)' : '';
-  // Route point markers sit in the overlay pane above the traffic tile layer (Google
-  // always renders markers above map tiles, so they can't be pushed behind it) - fading
-  // them out when traffic is on lets the congestion colors show through underneath instead
-  // of being fully painted over, especially where points are closely spaced.
-  const opacity = on ? 0.55 : 1;
-  gm.forEach(m => {
-    const icon = m.getIcon();
-    if (icon) { icon.fillOpacity = opacity; m.setIcon(icon); }
-  });
+  // Route point markers are invisible hit-targets now (risk/validation moved to the
+  // gradient lines), so there's nothing left here to fade for traffic - this used to
+  // adjust marker opacity when traffic toggled, which was silently undoing that fix
+  // every time traffic loaded (on by default), since it ran after marker creation.
 }
 
 // Shared base style for every map instance in the app. Google's styling has no
