@@ -222,9 +222,15 @@ function buildAnimSegments(routes) {
   return segs;
 }
 
-// One continuous 30s breathing cycle - 15s growing (each route unfolding from its
-// own start), 15s retracting back the same way, then loops.
-const GROW_MS = 15000, RETRACT_MS = 15000;
+// Box breathing timing (4-4-4-4, scaled up) - inhale/hold/exhale/hold, all equal,
+// mapped onto four real visual states rather than a plain grow/retract oscillation.
+// Chosen over 4-7-8 deliberately: that pattern's asymmetry is what makes it feel
+// like a small effort, which is the point for active anxiety relief - not what you
+// want in something meant to be pleasant to glance at passively for hours.
+const PHASE_MS = 15000; // one "count" of the 4-4-4-4 ratio, scaled to a real duration
+const GROW_MS = PHASE_MS, HOLD_FULL_MS = PHASE_MS, RETRACT_MS = PHASE_MS, HOLD_EMPTY_MS = PHASE_MS;
+const CYCLE_MS = GROW_MS + HOLD_FULL_MS + RETRACT_MS + HOLD_EMPTY_MS;
+
 function runBreathingCycle(routes, fitBoundsOnce) {
   animSegments = buildAnimSegments(routes);
   polylines.forEach(p => p.setMap(null));
@@ -251,10 +257,17 @@ function runBreathingCycle(routes, fitBoundsOnce) {
   if (animFrameId) cancelAnimationFrame(animFrameId);
 
   function tick(now) {
-    const elapsed = (now - cycleStart) % (GROW_MS + RETRACT_MS);
-    const progressFrac = elapsed < GROW_MS
-      ? elapsed / GROW_MS
-      : 1 - (elapsed - GROW_MS) / RETRACT_MS;
+    const elapsed = (now - cycleStart) % CYCLE_MS;
+    let progressFrac;
+    if (elapsed < GROW_MS) {
+      progressFrac = elapsed / GROW_MS; // inhale - growing outward
+    } else if (elapsed < GROW_MS + HOLD_FULL_MS) {
+      progressFrac = 1; // hold - full coverage, held steady
+    } else if (elapsed < GROW_MS + HOLD_FULL_MS + RETRACT_MS) {
+      progressFrac = 1 - (elapsed - GROW_MS - HOLD_FULL_MS) / RETRACT_MS; // exhale
+    } else {
+      progressFrac = 0; // hold - empty, held steady
+    }
 
     // Only calls setMap on a line when its visibility genuinely flips - the actual
     // fix for the jank, since the old version touched every single polyline on
