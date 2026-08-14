@@ -81,6 +81,114 @@ def haversine_km(lat1, lon1, lat2, lon2):
     a = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
     return 2 * R * math.asin(math.sqrt(a))
 
+def render_public_log_page(gkey, total_km, all_routes_pts):
+    # Only the fields actually needed to draw the map ship to the client - not full
+    # route objects (images, addresses, etc.), keeping this page lightweight.
+    slim_routes = []
+    for pts in all_routes_pts:
+        slim_routes.append([
+            {"lat": p.get("lat"), "lon": p.get("lon"), "irap": p.get("irap"),
+             "imageSource": p.get("imageSource"), "hasCoverage": p.get("hasCoverage")}
+            for p in pts
+        ])
+    data_json = json.dumps(slim_routes)
+
+    return """<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>UrbRis - Road Log</title>
+<style>
+  body { margin:0; background:#0e0f11; color:#e8e8ec; font-family:-apple-system,Segoe UI,sans-serif; }
+  header { padding:20px 24px; border-bottom:.5px solid #2a2c30; }
+  h1 { margin:0 0 4px; font-size:20px; }
+  .stat { font-size:15px; color:#9a9da4; }
+  .stat b { color:#e8e8ec; font-size:20px; }
+  #map { width:100%; height:calc(100vh - 92px); }
+</style></head>
+<body>
+<header>
+  <h1>UrbRis Road Log</h1>
+  <div class="stat"><b>""" + f"{total_km:.1f}" + """</b> km field-verified and analyzed</div>
+</header>
+<div id="map"></div>
+<script>
+const ROUTES = """ + data_json + """;
+
+const RF = {
+  road_surface: ['unpaved', 'mixed'], road_condition: ['poor', 'very poor'],
+  delineation: ['poor', 'none'], safety_barrier: ['none', 'damaged'],
+  shoulder_type: ['none'], roadside_distance: ['0-1m', '1-5m'],
+  curvature: ['sharp'], street_lighting: ['no']
+};
+function riskScore(irap) {
+  const keys = Object.keys(RF);
+  let hit = 0;
+  keys.forEach(k => {
+    const v = irap[k];
+    if (v != null && RF[k].some(f => String(v).toLowerCase().includes(f))) hit++;
+  });
+  return hit / keys.length;
+}
+const VIRIDIS_STOPS = [
+  [0.00, 68, 1, 84], [0.13, 72, 40, 120], [0.25, 62, 74, 137], [0.38, 49, 104, 142],
+  [0.50, 38, 130, 142], [0.63, 31, 158, 137], [0.75, 53, 183, 121], [0.88, 109, 205, 89],
+  [1.00, 253, 231, 37]
+];
+function viridisRGB(score) {
+  const s = Math.max(0, Math.min(1, score));
+  for (let i = 0; i < VIRIDIS_STOPS.length - 1; i++) {
+    const [t0, r0, g0, b0] = VIRIDIS_STOPS[i], [t1, r1, g1, b1] = VIRIDIS_STOPS[i + 1];
+    if (s >= t0 && s <= t1) {
+      const f = (s - t0) / (t1 - t0);
+      return [Math.round(r0 + f * (r1 - r0)), Math.round(g0 + f * (g1 - g0)), Math.round(b0 + f * (b1 - b0))];
+    }
+  }
+  return VIRIDIS_STOPS[VIRIDIS_STOPS.length - 1].slice(1);
+}
+function riskColor(score, verified) {
+  const [r, g, b] = viridisRGB(score);
+  if (verified === false) {
+    const gray = (r + g + b) / 3, mix = 0.55;
+    return 'rgb(' + Math.round(r + (gray - r) * mix) + ',' + Math.round(g + (gray - g) * mix) + ',' + Math.round(b + (gray - b) * mix) + ')';
+  }
+  return 'rgb(' + r + ',' + g + ',' + b + ')';
+}
+
+function initMap() {
+  const map = new google.maps.Map(document.getElementById('map'), {
+    zoom: 10, center: { lat: 43.25, lng: -79.87 },
+    styles: [{ elementType: 'geometry', stylers: [{ color: '#1a1b1e' }] },
+             { elementType: 'labels.text.fill', stylers: [{ color: '#7a7d84' }] },
+             { elementType: 'labels.text.stroke', stylers: [{ color: '#0e0f11' }] },
+             { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#2a2c30' }] },
+             { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0a1620' }] }]
+  });
+  const bounds = new google.maps.LatLngBounds();
+  ROUTES.forEach(pts => {
+    for (let i = 0; i < pts.length - 1; i++) {
+      const a = pts[i], b = pts[i + 1];
+      if (a.lat == null || b.lat == null) continue;
+      const hasCov = a.imageSource || a.hasCoverage;
+      let color;
+      if (!hasCov) continue;
+      if (a.irap && b.irap) {
+        color = riskColor((riskScore(a.irap) + riskScore(b.irap)) / 2, !!(a.imageSource && b.imageSource));
+      } else {
+        color = a.imageSource ? '#5b6470' : '#3a3d42';
+      }
+      new google.maps.Polyline({
+        path: [{ lat: a.lat, lng: a.lon }, { lat: b.lat, lng: b.lon }],
+        strokeColor: color, strokeWeight: 4, strokeOpacity: 0.9, map: map
+      });
+      bounds.extend({ lat: a.lat, lng: a.lon });
+      bounds.extend({ lat: b.lat, lng: b.lon });
+    }
+  });
+  if (!bounds.isEmpty()) map.fitBounds(bounds);
+}
+</script>
+<script async src="https://maps.googleapis.com/maps/api/js?key=""" + gkey + """&callback=initMap"></script>
+</body></html>"""
+
 def nearest_tower_km(lat, lon):
     if not TOWER_GRID:
         return None
@@ -326,7 +434,44 @@ class H(BaseHTTPRequestHandler):
                 self.send_response(404)
                 self.end_headers()
             return
-        if self.path.startswith("/gpx/"):
+        if self.path == "/log":
+            gkey = os.environ.get("GOOGLE_MAPS_PUBLIC_KEY", "")
+            if not gkey:
+                self.send_response(500)
+                self.send_header("Content-Type", "text/plain")
+                self.end_headers()
+                self.wfile.write(b"GOOGLE_MAPS_PUBLIC_KEY not set on the server - this is a separate, "
+                                  b"domain-restricted key for the public log page, not the personal key "
+                                  b"used in the main app.")
+                return
+            if not supabase_configured():
+                self.send_response(500)
+                self.end_headers()
+                return
+            try:
+                rows = supabase_request("GET", "routes?select=data")
+            except Exception as e:
+                self.send_response(500)
+                self.send_header("Content-Type", "text/plain")
+                self.end_headers()
+                self.wfile.write(("Could not load routes: " + str(e)).encode())
+                return
+
+            all_pts = []
+            total_km = 0.0
+            for row in rows:
+                pts = ((row.get("data") or {}).get("res")) or []
+                if len(pts) < 2:
+                    continue
+                all_pts.append(pts)
+                total_km += pts[-1].get("km", 0) - pts[0].get("km", 0)
+
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html")
+            self.end_headers()
+            self.wfile.write(render_public_log_page(gkey, total_km, all_pts).encode())
+            return
+
             # A stable, live URL for one saved route's GPX - unlike the client-side
             # download, Scenic's own servers can actually fetch this directly, which is
             # what their documented "import GPX from a provided URL" method requires.
