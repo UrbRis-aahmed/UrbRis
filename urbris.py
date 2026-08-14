@@ -81,37 +81,56 @@ def haversine_km(lat1, lon1, lat2, lon2):
     a = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
     return 2 * R * math.asin(math.sqrt(a))
 
-def render_public_log_page(gkey, total_km, all_routes_pts):
-    # Only the fields actually needed to draw the map ship to the client - not full
-    # route objects (images, addresses, etc.), keeping this page lightweight.
-    slim_routes = []
-    for pts in all_routes_pts:
-        slim_routes.append([
+def fetch_log_data():
+    rows = supabase_request("GET", "routes?select=data")
+    all_pts = []
+    total_km = 0.0
+    for row in rows:
+        pts = ((row.get("data") or {}).get("res")) or []
+        if len(pts) < 2:
+            continue
+        # Only the fields actually needed to draw the map - not full route objects
+        # (images, addresses, etc.), keeping every /log-data poll lightweight.
+        slim = [
             {"lat": p.get("lat"), "lon": p.get("lon"), "irap": p.get("irap"),
              "imageSource": p.get("imageSource"), "hasCoverage": p.get("hasCoverage")}
             for p in pts
-        ])
-    data_json = json.dumps(slim_routes)
+        ]
+        all_pts.append(slim)
+        total_km += pts[-1].get("km", 0) - pts[0].get("km", 0)
+    return total_km, all_pts
+
+def render_public_log_page(gkey, total_km, all_routes_pts):
+    data_json = json.dumps(all_routes_pts)
 
     return """<!DOCTYPE html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>UrbRis - Road Log</title>
 <style>
-  body { margin:0; background:#0e0f11; color:#e8e8ec; font-family:-apple-system,Segoe UI,sans-serif; }
-  header { padding:20px 24px; border-bottom:.5px solid #2a2c30; }
-  h1 { margin:0 0 4px; font-size:20px; }
-  .stat { font-size:15px; color:#9a9da4; }
-  .stat b { color:#e8e8ec; font-size:20px; }
-  #map { width:100%; height:calc(100vh - 92px); }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { width:100%; height:100%; background:#0e0f11; overflow:hidden; font-family:-apple-system,Segoe UI,sans-serif; }
+  #map { width:100vw; height:100vh; }
+  /* Floating overlay, not a header - the map fills the entire screen underneath it,
+     built for a TV/billboard running unattended, not a page someone scrolls. */
+  #overlay {
+    position:fixed; top:32px; left:32px; z-index:10;
+    background:rgba(14,15,17,0.72); backdrop-filter:blur(6px);
+    border:1px solid rgba(255,255,255,0.08); border-radius:16px;
+    padding:24px 32px; color:#e8e8ec;
+  }
+  #overlay .title { font-size:18px; color:#9a9da4; letter-spacing:0.06em; text-transform:uppercase; margin-bottom:6px; }
+  #overlay .km { font-size:64px; font-weight:600; line-height:1; }
+  #overlay .km span { font-size:28px; font-weight:400; color:#9a9da4; margin-left:8px; }
 </style></head>
 <body>
-<header>
-  <h1>UrbRis Road Log</h1>
-  <div class="stat"><b>""" + f"{total_km:.1f}" + """</b> km field-verified and analyzed</div>
-</header>
 <div id="map"></div>
+<div id="overlay">
+  <div class="title">UrbRis Road Log</div>
+  <div class="km" id="kmStat">""" + f"{total_km:.1f}" + """<span>km verified</span></div>
+</div>
 <script>
-const ROUTES = """ + data_json + """;
+let ROUTES = """ + data_json + """;
+let map, polylines = [];
 
 const RF = {
   road_surface: ['unpaved', 'mixed'], road_condition: ['poor', 'very poor'],
@@ -153,12 +172,51 @@ function riskColor(score, verified) {
   return 'rgb(' + r + ',' + g + ',' + b + ')';
 }
 
+function drawRoutes(routes, fitBounds) {
+  polylines.forEach(p => p.setMap(null));
+  polylines = [];
+  const bounds = new google.maps.LatLngBounds();
+  routes.forEach(pts => {
+    for (let i = 0; i < pts.length - 1; i++) {
+      const a = pts[i], b = pts[i + 1];
+      if (a.lat == null || b.lat == null) continue;
+      const hasCov = a.imageSource || a.hasCoverage;
+      if (!hasCov) continue;
+      let color;
+      if (a.irap && b.irap) {
+        color = riskColor((riskScore(a.irap) + riskScore(b.irap)) / 2, !!(a.imageSource && b.imageSource));
+      } else {
+        color = a.imageSource ? '#5b6470' : '#3a3d42';
+      }
+      polylines.push(new google.maps.Polyline({
+        path: [{ lat: a.lat, lng: a.lon }, { lat: b.lat, lng: b.lon }],
+        strokeColor: color, strokeWeight: 4, strokeOpacity: 0.9, map: map
+      }));
+      bounds.extend({ lat: a.lat, lng: a.lon });
+      bounds.extend({ lat: b.lat, lng: b.lon });
+    }
+  });
+  if (fitBounds && !bounds.isEmpty()) map.fitBounds(bounds);
+}
+
+// Polls for fresh data periodically instead of a full page reload - meant to run
+// unattended on a screen for hours, so no flash/flicker every refresh cycle.
+const POLL_MS = 5 * 60 * 1000;
+function pollForUpdates() {
+  fetch('/log-data').then(r => r.json()).then(d => {
+    if (d.error) return;
+    document.getElementById('kmStat').innerHTML = d.total_km.toFixed(1) + '<span>km verified</span>';
+    drawRoutes(d.routes, false);
+  }).catch(() => {});
+}
+
 function initMap() {
-  const map = new google.maps.Map(document.getElementById('map'), {
+  map = new google.maps.Map(document.getElementById('map'), {
     zoom: 10, center: { lat: 43.25, lng: -79.87 },
-    // Exact same style array as the main app's mapStyles(false) - not a rough
-    // approximation, the real thing, so this page genuinely looks like part of
-    // the same product instead of a similar-but-different dark theme.
+    disableDefaultUI: true, // no zoom/pan controls, gesture handling, etc. - nothing
+                             // to click on a TV with no mouse, just an ambient display
+    gestureHandling: 'none', keyboardShortcuts: false,
+    // Exact same style array as the main app's mapStyles(false).
     styles: [
       { elementType: 'geometry', stylers: [{ color: '#0e1012' }] },
       { elementType: 'labels.text.fill', stylers: [{ color: '#888680' }] },
@@ -173,28 +231,8 @@ function initMap() {
       { featureType: 'water', elementType: 'labels', stylers: [{ visibility: 'off' }] }
     ]
   });
-  const bounds = new google.maps.LatLngBounds();
-  ROUTES.forEach(pts => {
-    for (let i = 0; i < pts.length - 1; i++) {
-      const a = pts[i], b = pts[i + 1];
-      if (a.lat == null || b.lat == null) continue;
-      const hasCov = a.imageSource || a.hasCoverage;
-      let color;
-      if (!hasCov) continue;
-      if (a.irap && b.irap) {
-        color = riskColor((riskScore(a.irap) + riskScore(b.irap)) / 2, !!(a.imageSource && b.imageSource));
-      } else {
-        color = a.imageSource ? '#5b6470' : '#3a3d42';
-      }
-      new google.maps.Polyline({
-        path: [{ lat: a.lat, lng: a.lon }, { lat: b.lat, lng: b.lon }],
-        strokeColor: color, strokeWeight: 4, strokeOpacity: 0.9, map: map
-      });
-      bounds.extend({ lat: a.lat, lng: a.lon });
-      bounds.extend({ lat: b.lat, lng: b.lon });
-    }
-  });
-  if (!bounds.isEmpty()) map.fitBounds(bounds);
+  drawRoutes(ROUTES, true);
+  setInterval(pollForUpdates, POLL_MS);
 }
 </script>
 <script async src="https://maps.googleapis.com/maps/api/js?key=""" + gkey + """&callback=initMap"></script>
@@ -445,6 +483,20 @@ class H(BaseHTTPRequestHandler):
                 self.send_response(404)
                 self.end_headers()
             return
+        if self.path == "/log-data":
+            # Polled periodically by the /log page itself so it can refresh live
+            # without a jarring full-page reload - the actual point of "running live
+            # on a TV," not something meant to be visited directly.
+            if not supabase_configured():
+                self._json({"error": "Supabase not configured"}, code=500)
+                return
+            try:
+                total_km, all_pts = fetch_log_data()
+                self._json({"total_km": total_km, "routes": all_pts})
+            except Exception as e:
+                self._json({"error": "Could not load routes: " + str(e)}, code=500)
+            return
+
         if self.path == "/log":
             gkey = os.environ.get("GOOGLE_MAPS_PUBLIC_KEY", "")
             if not gkey:
@@ -460,22 +512,13 @@ class H(BaseHTTPRequestHandler):
                 self.end_headers()
                 return
             try:
-                rows = supabase_request("GET", "routes?select=data")
+                total_km, all_pts = fetch_log_data()
             except Exception as e:
                 self.send_response(500)
                 self.send_header("Content-Type", "text/plain")
                 self.end_headers()
                 self.wfile.write(("Could not load routes: " + str(e)).encode())
                 return
-
-            all_pts = []
-            total_km = 0.0
-            for row in rows:
-                pts = ((row.get("data") or {}).get("res")) or []
-                if len(pts) < 2:
-                    continue
-                all_pts.append(pts)
-                total_km += pts[-1].get("km", 0) - pts[0].get("km", 0)
 
             self.send_response(200)
             self.send_header("Content-Type", "text/html")
