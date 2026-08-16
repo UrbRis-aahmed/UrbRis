@@ -129,7 +129,7 @@ def fetch_overpass_roads(lat, lon, radius_m):
         "https://overpass-api.de/api/interpreter",
         data=("data=" + urllib.parse.quote(query)).encode(),
         headers={"Content-Type": "application/x-www-form-urlencoded",
-                 "Accept": "application/json",
+                 "Accept": "*/*",
                  "User-Agent": "Mozilla/5.0 (compatible; UrbRis/1.0; +https://urbris.com)"}
     )
     with urllib.request.urlopen(req, timeout=60) as r:
