@@ -441,6 +441,14 @@ body[data-workspace-mode="library"] .main{background:radial-gradient(circle at 7
 <div class="or" style="margin-top:8px"><label>Area (sq km)</label><input id="scanArea" max="50" min="1" step="1" style="width:60px" type="number" value="10"/></div>
 <button class="btn" id="scanBtn" onclick="startScan()" style="margin-top:8px">Scan area for gaps</button>
 </div><div>
+<div class="sl">Compare route safety</div>
+<div class="hint">Ask Google for route options between two points, then score each against everything already coded across saved routes - not a fresh Pull Risk run, just what's already known. Coverage varies by road, so treat gaps as "not yet known," not "safe."</div>
+<div class="or" style="margin-top:8px"><label>From</label><input id="safeFrom" placeholder="Address or place" style="flex:1" type="text"/></div>
+<div class="or" style="margin-top:6px"><label>To</label><input id="safeTo" placeholder="Address or place" style="flex:1" type="text"/></div>
+<button class="btn" id="compareBtn" onclick="compareRouteSafety()" style="margin-top:8px">Compare routes</button>
+<div class="hint" id="safeStatus" style="margin-top:6px"></div>
+<div id="safeResults" style="margin-top:8px"></div>
+</div><div>
 <div class="sl">Field verification</div>
 <div class="hint">Drop photos or video from a drone/GoPro flight - matched to the nearest point by GPS automatically. Fills points marked "No Street View coverage", and attaches as a separate validation image on points that already have coverage, so you can compare what was actually seen against the Street View baseline.</div>
 <div class="dz" style="margin-top:8px">
@@ -1184,8 +1192,123 @@ async function snapDrawnRoute(points, gk) {
   return out;
 }
 
+// Tier 1 of "safest route": ask Google for route alternatives, then score each
+// against points already iRAP-coded across every saved route (not a fresh Pull Risk
+// run - purely a lookup against existing coding). Coverage is reported honestly:
+// a route with little matching coded data gets flagged as insufficiently known
+// rather than silently scored as if it were safe.
+let codedPointsCache = null;
+async function fetchCodedPoints() {
+  if (codedPointsCache) return codedPointsCache;
+  const r = await fetch('/routes/coded-points', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+  const out = await r.json();
+  if (!r.ok || out.error) throw new Error(out.error || ('HTTP ' + r.status));
+  codedPointsCache = out.points || [];
+  return codedPointsCache;
+}
+
+function resamplePath(latLngPath, iv) {
+  const pts = latLngPath.map(p => ({ lat: p.lat(), lon: p.lng() }));
+  return samp(pts, iv);
+}
+
+// Nearest coded point within toleranceM, or null. Linear scan - fine at the scale
+// of a single saved-routes database; a spatial grid would be the next step if this
+// ever needs to run against a much larger shared network.
+function nearestCodedPoint(pt, codedPoints, toleranceM) {
+  let best = null, bestD = toleranceM;
+  for (const cp of codedPoints) {
+    const d = hav(pt, cp);
+    if (d <= bestD) { bestD = d; best = cp; }
+  }
+  return best;
+}
+
+function scoreRouteAgainstCoding(latLngPath, codedPoints) {
+  const sampled = resamplePath(latLngPath, 100);
+  let matched = 0, riskSum = 0;
+  for (const pt of sampled) {
+    const cp = nearestCodedPoint(pt, codedPoints, 40);
+    if (cp) { matched++; riskSum += riskScore(cp.irap); }
+  }
+  const total = sampled.length || 1;
+  return {
+    coverage: matched / total,
+    avgRisk: matched ? riskSum / matched : null,
+    matched, total
+  };
+}
+
+async function compareRouteSafety() {
+  const from = $('safeFrom').value.trim(), to = $('safeTo').value.trim();
+  if (!from || !to) { log('Enter both a "From" and "To" location', 'er'); return; }
+  const btn = $('compareBtn');
+  btn.disabled = true;
+  btn.textContent = 'Comparing...';
+  $('safeStatus').textContent = 'Fetching route options and known coding...';
+  $('safeResults').innerHTML = '';
+  try {
+    const [codedPoints, dirResult] = await Promise.all([
+      fetchCodedPoints(),
+      new Promise((resolve, reject) => {
+        new google.maps.DirectionsService().route({
+          origin: from, destination: to,
+          travelMode: google.maps.TravelMode.DRIVING,
+          provideRouteAlternatives: true
+        }, (res, status) => {
+          if (status === 'OK') resolve(res);
+          else reject(new Error('Directions failed: ' + status));
+        });
+      })
+    ]);
+
+    const scored = dirResult.routes.map((route, i) => {
+      const legs = route.legs || [];
+      const distM = legs.reduce((s, l) => s + (l.distance ? l.distance.value : 0), 0);
+      const durS = legs.reduce((s, l) => s + (l.duration ? l.duration.value : 0), 0);
+      const { coverage, avgRisk, matched, total } = scoreRouteAgainstCoding(route.overview_path, codedPoints);
+      return { i, route, distM, durS, coverage, avgRisk, matched, total };
+    });
+
+    // Only routes with meaningful coverage are eligible to be called "safest" -
+    // low coverage means "not yet known", not "assumed safe".
+    const COVERAGE_THRESHOLD = 0.25;
+    const eligible = scored.filter(s => s.coverage >= COVERAGE_THRESHOLD);
+    const safestIdx = eligible.length ? eligible.reduce((a, b) => a.avgRisk <= b.avgRisk ? a : b).i : null;
+
+    $('safeStatus').textContent = dirResult.routes.length + ' route option(s) found - ' +
+      (eligible.length ? 'scored against ' + codedPoints.length + ' coded point(s) on file' : 'none have enough coded coverage to score confidently yet');
+
+    $('safeResults').innerHTML = scored.map(s => {
+      const km = (s.distM / 1000).toFixed(1);
+      const mins = Math.round(s.durS / 60);
+      const isSafest = s.i === safestIdx;
+      const covPct = Math.round(s.coverage * 100);
+      let riskLine;
+      if (s.coverage < COVERAGE_THRESHOLD) {
+        riskLine = '<span style="color:var(--mu)">Only ' + covPct + '% of this route has coded data - not enough to score</span>';
+      } else {
+        riskLine = '<span style="color:' + riskColor(s.avgRisk, true) + '">Risk score: ' + Math.round(s.avgRisk * 100) + '/100</span> · ' + covPct + '% coverage (' + s.matched + '/' + s.total + ' points)';
+      }
+      return '<div style="border:1px solid var(--b);border-radius:8px;padding:10px;margin-top:6px' + (isSafest ? ';border-color:#3a7d5c' : '') + '">'
+        + '<div style="display:flex;justify-content:space-between;font-size:12px">'
+        + '<strong>' + (s.route.summary || ('Route ' + (s.i + 1))) + '</strong>'
+        + (isSafest ? '<span style="color:#3a7d5c;font-weight:600">Safest known</span>' : '')
+        + '</div>'
+        + '<div style="font-size:11.5px;color:var(--mu);margin-top:2px">' + km + ' km · ' + mins + ' min</div>'
+        + '<div style="font-size:11.5px;margin-top:4px">' + riskLine + '</div>'
+        + '</div>';
+    }).join('');
+  } catch (e) {
+    $('safeStatus').textContent = '';
+    log('Route comparison failed: ' + e.message, 'er');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Compare routes';
+  }
+}
+
 async function routeThroughPoints(points, gk) {
-  // Directions API allows origin + up to 25 waypoints + destination per request.
   // Chunk into overlapping segments so longer drawn routes still work.
   const CHUNK = 23;
   const chunks = [];

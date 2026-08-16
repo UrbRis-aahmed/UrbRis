@@ -930,6 +930,27 @@ class H(BaseHTTPRequestHandler):
             except Exception as e:
                 self._json({"error": "Save failed: " + str(e)}, code=500)
             return
+        if self.path == "/routes/coded-points":
+            # Feeds Tier 1 of "safest route" comparison: every already-iRAP-coded point
+            # across every saved route, stripped down to just lat/lon/irap (no image
+            # data) so the client can spatially match Google's route alternatives
+            # against real coded risk without pulling full route payloads.
+            if not supabase_configured():
+                self._json({"error": "Supabase not configured - set SUPABASE_URL and SUPABASE_KEY on the server"}, code=500)
+                return
+            try:
+                rows = supabase_request("GET", "routes?select=data") or []
+                points = []
+                for row in rows:
+                    for p in (row.get("data") or {}).get("res") or []:
+                        if p.get("irap") and p.get("lat") is not None and p.get("lon") is not None:
+                            points.append({"lat": p["lat"], "lon": p["lon"], "irap": p["irap"]})
+                self._json({"points": points})
+            except urllib.error.HTTPError as e:
+                self._json({"error": "Supabase fetch failed: " + e.read().decode("utf-8", "ignore")}, code=e.code)
+            except Exception as e:
+                self._json({"error": "Fetch failed: " + str(e)}, code=500)
+            return
         if self.path == "/routes/list":
             if not supabase_configured():
                 self._json({"error": "Supabase not configured - set SUPABASE_URL and SUPABASE_KEY on the server"}, code=500)
