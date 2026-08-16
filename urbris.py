@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import json, urllib.request, urllib.error, urllib.parse, webbrowser, os, sys, csv, math, uuid, base64, re, time
+import json, urllib.request, urllib.error, urllib.parse, webbrowser, os, sys, csv, math, uuid, base64, re, time, threading
 from datetime import datetime, timezone
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from concurrent.futures import ThreadPoolExecutor
@@ -1089,12 +1089,7 @@ class H(BaseHTTPRequestHandler):
                 self._json({"error": "Missing akey or batchId"}, code=400)
                 return
             try:
-                req = urllib.request.Request(
-                    "https://api.anthropic.com/v1/messages/batches/" + urllib.parse.quote(batch_id),
-                    headers={"x-api-key": akey, "anthropic-version": "2023-06-01"}
-                )
-                with urllib.request.urlopen(req) as r:
-                    batch = json.loads(r.read())
+                batch = anthropic_batch_status(batch_id, akey)
                 self._json({
                     "processingStatus": batch.get("processing_status"),
                     "requestCounts": batch.get("request_counts"),
@@ -1115,43 +1110,11 @@ class H(BaseHTTPRequestHandler):
                 self._json({"error": "Missing akey or batchId"}, code=400)
                 return
             try:
-                status_req = urllib.request.Request(
-                    "https://api.anthropic.com/v1/messages/batches/" + urllib.parse.quote(batch_id),
-                    headers={"x-api-key": akey, "anthropic-version": "2023-06-01"}
-                )
-                with urllib.request.urlopen(status_req) as r:
-                    batch = json.loads(r.read())
+                batch = anthropic_batch_status(batch_id, akey)
                 if batch.get("processing_status") != "ended" or not batch.get("results_url"):
                     self._json({"error": "Batch not ready yet", "processingStatus": batch.get("processing_status")}, code=409)
                     return
-                results_req = urllib.request.Request(
-                    batch["results_url"],
-                    headers={"x-api-key": akey, "anthropic-version": "2023-06-01"}
-                )
-                with urllib.request.urlopen(results_req) as r:
-                    raw_lines = r.read().decode("utf-8").strip().split("\n")
-                results = {}
-                for line in raw_lines:
-                    if not line.strip():
-                        continue
-                    row = json.loads(line)
-                    cid = row.get("custom_id")
-                    result = row.get("result", {})
-                    if result.get("type") == "succeeded":
-                        msg = result.get("message", {})
-                        text = ""
-                        for block in msg.get("content", []):
-                            if block.get("type") == "text":
-                                text = block.get("text", "")
-                                break
-                        clean = re.sub(r"```json|```", "", text).strip()
-                        try:
-                            results[cid] = {"irap": json.loads(clean)}
-                        except Exception:
-                            results[cid] = {"error": "Could not parse iRAP JSON: " + clean[:150]}
-                    else:
-                        err = result.get("error", {})
-                        results[cid] = {"error": err.get("message") or result.get("type") or "Batch item failed"}
+                results = anthropic_batch_results(batch, akey)
                 self._json({"results": results, "requestCounts": batch.get("request_counts")})
             except urllib.error.HTTPError as e:
                 self._json({"error": "Fetching batch results failed: " + e.read().decode("utf-8", "ignore")}, code=e.code)
@@ -1320,8 +1283,130 @@ class H(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(json.dumps({"error": str(e)}).encode())
 
+def anthropic_batch_status(batch_id, akey):
+    req = urllib.request.Request(
+        "https://api.anthropic.com/v1/messages/batches/" + urllib.parse.quote(batch_id),
+        headers={"x-api-key": akey, "anthropic-version": "2023-06-01"}
+    )
+    with urllib.request.urlopen(req) as r:
+        return json.loads(r.read())
+
+def anthropic_batch_results(batch, akey):
+    # batch is the dict already fetched by anthropic_batch_status - caller checks
+    # processing_status == "ended" and results_url is set before calling this.
+    results_req = urllib.request.Request(
+        batch["results_url"],
+        headers={"x-api-key": akey, "anthropic-version": "2023-06-01"}
+    )
+    with urllib.request.urlopen(results_req) as r:
+        raw_lines = r.read().decode("utf-8").strip().split("\n")
+    results = {}
+    for line in raw_lines:
+        if not line.strip():
+            continue
+        row = json.loads(line)
+        cid = row.get("custom_id")
+        result = row.get("result", {})
+        if result.get("type") == "succeeded":
+            msg = result.get("message", {})
+            text = ""
+            for block in msg.get("content", []):
+                if block.get("type") == "text":
+                    text = block.get("text", "")
+                    break
+            clean = re.sub(r"```json|```", "", text).strip()
+            try:
+                results[cid] = {"irap": json.loads(clean)}
+            except Exception:
+                results[cid] = {"error": "Could not parse iRAP JSON: " + clean[:150]}
+        else:
+            err = result.get("error", {})
+            results[cid] = {"error": err.get("message") or result.get("type") or "Batch item failed"}
+    return results
+
+def send_whatsapp(body):
+    sid = os.environ.get("TWILIO_ACCOUNT_SID", "")
+    token = os.environ.get("TWILIO_AUTH_TOKEN", "")
+    from_num = os.environ.get("TWILIO_WHATSAPP_FROM", "")  # e.g. "whatsapp:+14155238886"
+    to_num = os.environ.get("TWILIO_WHATSAPP_TO", "")      # e.g. "whatsapp:+15551234567"
+    if not (sid and token and from_num and to_num):
+        print("  [batch-poller] Twilio env vars not set - skipping WhatsApp notification")
+        return
+    payload = urllib.parse.urlencode({"From": from_num, "To": to_num, "Body": body}).encode()
+    req = urllib.request.Request(
+        "https://api.twilio.com/2010-04-01/Accounts/" + sid + "/Messages.json",
+        data=payload, method="POST"
+    )
+    auth = base64.b64encode((sid + ":" + token).encode()).decode()
+    req.add_header("Authorization", "Basic " + auth)
+    try:
+        with urllib.request.urlopen(req) as r:
+            r.read()
+        print("  [batch-poller] WhatsApp notification sent")
+    except urllib.error.HTTPError as e:
+        print("  [batch-poller] Twilio send failed:", e.code, e.read().decode("utf-8", "ignore")[:200])
+    except Exception as e:
+        print("  [batch-poller] Twilio send failed:", e)
+
+def poll_pending_batches_once():
+    if not supabase_configured():
+        return
+    akey = os.environ.get("ANTHROPIC_API_KEY", "")
+    if not akey:
+        return  # background notifications are opt-in via this env var - silently no-op without it
+    try:
+        rows = supabase_request("GET", "routes?select=id,name,data") or []
+    except Exception as e:
+        print("  [batch-poller] could not list routes:", e)
+        return
+    for row in rows:
+        rdata = row.get("data") or {}
+        pb = rdata.get("pendingBatch")
+        if not pb or not pb.get("id"):
+            continue
+        try:
+            batch = anthropic_batch_status(pb["id"], akey)
+            if batch.get("processing_status") != "ended" or not batch.get("results_url"):
+                continue
+            results = anthropic_batch_results(batch, akey)
+            res_list = rdata.get("res") or []
+            coded, failed = 0, 0
+            for cid, entry in results.items():
+                try:
+                    idx = int(cid)
+                except (TypeError, ValueError):
+                    continue
+                if 0 <= idx < len(res_list) and entry.get("irap"):
+                    res_list[idx]["irap"] = entry["irap"]
+                    coded += 1
+                else:
+                    failed += 1
+            rdata["res"] = res_list
+            rdata["pendingBatch"] = None
+            supabase_request(
+                "PATCH", "routes?id=eq." + urllib.parse.quote(row["id"]),
+                body={"data": rdata, "updated_at": now_iso()}
+            )
+            name = row.get("name") or row["id"]
+            print(f"  [batch-poller] applied batch results for '{name}': {coded} coded, {failed} failed")
+            send_whatsapp(
+                "UrbRis: risk analysis batch done for \"" + name + "\" - "
+                + str(coded) + "/" + str(coded + failed) + " points coded. Open the app to review."
+            )
+        except Exception as e:
+            print("  [batch-poller] error processing route", row.get("id"), ":", e)
+
+def poll_pending_batches_loop():
+    while True:
+        time.sleep(180)  # 3 minutes - batches rarely finish faster than this anyway
+        try:
+            poll_pending_batches_once()
+        except Exception as e:
+            print("  [batch-poller] loop error:", e)
+
 if __name__ == "__main__":
     load_towers()
+    threading.Thread(target=poll_pending_batches_loop, daemon=True).start()
     port = int(os.environ.get("PORT", 8000))
     host = "0.0.0.0" if os.environ.get("PORT") else "localhost"
     print(f"\n  Urbris running at http://{host}:{port}")
