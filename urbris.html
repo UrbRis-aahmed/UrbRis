@@ -1198,6 +1198,9 @@ async function snapDrawnRoute(points, gk) {
 // a route with little matching coded data gets flagged as insufficiently known
 // rather than silently scored as if it were safe.
 let codedPointsCache = null;
+let lastComparedRoutes = []; // caches the raw DirectionsResult route objects (with real
+// overview_path) from the last compareRouteSafety() call, so "Code this route" can pull
+// full road geometry without re-requesting Directions.
 async function fetchCodedPoints() {
   if (codedPointsCache) return codedPointsCache;
   const r = await fetch('/routes/coded-points', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
@@ -1269,6 +1272,7 @@ async function compareRouteSafety() {
       const { coverage, avgRisk, matched, total } = scoreRouteAgainstCoding(route.overview_path, codedPoints);
       return { i, route, distM, durS, coverage, avgRisk, matched, total };
     });
+    lastComparedRoutes = scored.map(s => s.route);
 
     // Only routes with meaningful coverage are eligible to be called "safest" -
     // low coverage means "not yet known", not "assumed safe".
@@ -1284,7 +1288,7 @@ async function compareRouteSafety() {
       const mins = Math.round(s.durS / 60);
       const isSafest = s.i === safestIdx;
       const covPct = Math.round(s.coverage * 100);
-      let riskLine;
+      let riskLine, actionBtn = '<button class="xb" onclick="codeCandidateRoute(' + s.i + ')" style="font-size:10.5px;padding:4px 8px;margin-top:6px">Code this route now (real coding, uses API credits)</button>';
       if (s.coverage < COVERAGE_THRESHOLD) {
         riskLine = '<span style="color:var(--mu)">Only ' + covPct + '% of this route has coded data - not enough to score</span>';
       } else {
@@ -1297,6 +1301,8 @@ async function compareRouteSafety() {
         + '</div>'
         + '<div style="font-size:11.5px;color:var(--mu);margin-top:2px">' + km + ' km · ' + mins + ' min</div>'
         + '<div style="font-size:11.5px;margin-top:4px">' + riskLine + '</div>'
+        + actionBtn
+        + '<div id="codeStatus-' + s.i + '" style="font-size:10.5px;color:var(--mu);margin-top:4px"></div>'
         + '</div>';
     }).join('');
   } catch (e) {
@@ -1305,6 +1311,57 @@ async function compareRouteSafety() {
   } finally {
     btn.disabled = false;
     btn.textContent = 'Compare routes';
+  }
+}
+
+// Turns a Directions candidate route into a real saved route and runs it through the
+// actual pipeline (Pull Images, then Pull Risk in whatever mode - live/batch - is
+// currently selected) instead of only scoring against whatever's already coded. This
+// is the "go get a real answer" escape hatch from Tier 1's coverage limits - it costs
+// real API credits (Street View + Claude), same as running Pull Risk on any other route.
+async function codeCandidateRoute(i) {
+  const route = lastComparedRoutes[i];
+  const statusEl = $('codeStatus-' + i);
+  if (!route) { log('That route option is no longer available - re-run Compare routes', 'er'); return; }
+  const gk = $('gkey').value.trim();
+  if (!gk) { log('Enter your Google Maps API key first', 'er'); if (statusEl) statusEl.textContent = 'Needs a Google Maps API key'; return; }
+
+  if (statusEl) statusEl.textContent = 'Setting up route...';
+  try {
+    // overview_path is already real road geometry from Google's own routing, unlike a
+    // hand-drawn stroke - no Roads API snapping needed, straight into rp.
+    rp = route.overview_path.map(p => ({ lat: p.lat(), lon: p.lng() }));
+    ust(); // builds sp from rp
+    const from = $('safeFrom').value.trim(), to = $('safeTo').value.trim();
+    $('fn').textContent = '+ ' + from + ' \u2192 ' + to + ' (' + (route.summary || ('option ' + (i + 1))) + ')';
+    $('sendPhone').style.display = '';
+    $('legsBtn').style.display = '';
+    $('conditionsBtn').style.display = '';
+    $('gpxBtn').style.display = '';
+    $('gpxLinkBtn').style.display = '';
+    $('rt').textContent = 'Route confirmed - ready for road observations';
+    $('xw').style.display = '';
+    currentSavedRouteId = null; // force a new saved route rather than overwriting whatever was open
+    res = sp.map(pt => ({ km: pt.distKm, lat: pt.lat, lon: pt.lon, heading: pt.heading, imageUrl: '', hasCoverage: false, etaSec: 0 }));
+    rebuildViewFromRes();
+    sv('map');
+    saveCurrentRoute();
+
+    if (statusEl) statusEl.textContent = 'Pulling Street View images...';
+    log('Coding candidate route "' + (route.summary || i) + '" - pulling images...', '');
+    await pullImagesFlow();
+
+    const ak = $('akey').value.trim();
+    if (!ak) { if (statusEl) statusEl.textContent = 'Images pulled - enter your Anthropic API key, then click Pull Risk to finish coding'; return; }
+    if (statusEl) statusEl.textContent = $('riskModeBatch').checked ? 'Submitting batch risk analysis...' : 'Running risk analysis...';
+    await pullRisk();
+    codedPointsCache = null; // this route's new points should count next time coverage is checked
+    if (statusEl) statusEl.textContent = $('riskModeBatch').checked
+      ? 'Batch submitted - check the risk panel above for status, then re-run Compare routes'
+      : 'Coded - re-run Compare routes to see the real score';
+  } catch (e) {
+    if (statusEl) statusEl.textContent = '';
+    log('Coding this route failed: ' + e.message, 'er');
   }
 }
 
@@ -3055,7 +3112,7 @@ function applyFilter() {
 }
 $('rf').addEventListener('input', applyFilter);
 
-$('run').addEventListener('click', async () => {
+async function pullImagesFlow() {
   const gk = $('gkey').value.trim();
   if (!gk) { log('Enter Google API key', 'er'); return; }
   if (!sp.length) { log('No route loaded', 'er'); return; }
@@ -3217,7 +3274,8 @@ $('run').addEventListener('click', async () => {
   setRouteNextStep('risk');
   renderRouteProfile();
   saveCurrentRoute();
-});
+}
+$('run').addEventListener('click', pullImagesFlow);
 
 async function pullRisk() {
   const ak = $('akey').value.trim();
