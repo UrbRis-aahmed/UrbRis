@@ -1324,14 +1324,7 @@ def anthropic_batch_results(batch, akey):
             results[cid] = {"error": err.get("message") or result.get("type") or "Batch item failed"}
     return results
 
-def send_whatsapp(body):
-    sid = os.environ.get("TWILIO_ACCOUNT_SID", "")
-    token = os.environ.get("TWILIO_AUTH_TOKEN", "")
-    from_num = os.environ.get("TWILIO_WHATSAPP_FROM", "")  # e.g. "whatsapp:+14155238886"
-    to_num = os.environ.get("TWILIO_WHATSAPP_TO", "")      # e.g. "whatsapp:+15551234567"
-    if not (sid and token and from_num and to_num):
-        print("  [batch-poller] Twilio env vars not set - skipping WhatsApp notification")
-        return
+def _twilio_send(sid, token, from_num, to_num, body, label):
     payload = urllib.parse.urlencode({"From": from_num, "To": to_num, "Body": body}).encode()
     req = urllib.request.Request(
         "https://api.twilio.com/2010-04-01/Accounts/" + sid + "/Messages.json",
@@ -1342,11 +1335,30 @@ def send_whatsapp(body):
     try:
         with urllib.request.urlopen(req) as r:
             r.read()
-        print("  [batch-poller] WhatsApp notification sent")
+        print("  [batch-poller] " + label + " notification sent")
     except urllib.error.HTTPError as e:
-        print("  [batch-poller] Twilio send failed:", e.code, e.read().decode("utf-8", "ignore")[:200])
+        print("  [batch-poller] Twilio " + label + " send failed:", e.code, e.read().decode("utf-8", "ignore")[:200])
     except Exception as e:
-        print("  [batch-poller] Twilio send failed:", e)
+        print("  [batch-poller] Twilio " + label + " send failed:", e)
+
+def send_notifications(body):
+    # Sends via whichever channel(s) have their env vars set - SMS and WhatsApp
+    # can both be configured at once, or just one, or neither (silent no-op).
+    sid = os.environ.get("TWILIO_ACCOUNT_SID", "")
+    token = os.environ.get("TWILIO_AUTH_TOKEN", "")
+    if not (sid and token):
+        print("  [batch-poller] TWILIO_ACCOUNT_SID/AUTH_TOKEN not set - skipping notifications")
+        return
+    sms_from = os.environ.get("TWILIO_SMS_FROM", "")   # e.g. "+15557654321" (a Twilio number)
+    sms_to = os.environ.get("TWILIO_SMS_TO", "")        # e.g. "+15551234567" (your phone)
+    if sms_from and sms_to:
+        _twilio_send(sid, token, sms_from, sms_to, body, "SMS")
+    wa_from = os.environ.get("TWILIO_WHATSAPP_FROM", "")  # e.g. "whatsapp:+14155238886"
+    wa_to = os.environ.get("TWILIO_WHATSAPP_TO", "")      # e.g. "whatsapp:+15551234567"
+    if wa_from and wa_to:
+        _twilio_send(sid, token, wa_from, wa_to, body, "WhatsApp")
+    if not (sms_from and sms_to) and not (wa_from and wa_to):
+        print("  [batch-poller] no TWILIO_SMS_* or TWILIO_WHATSAPP_* pair set - skipping notifications")
 
 def poll_pending_batches_once():
     if not supabase_configured():
@@ -1389,7 +1401,7 @@ def poll_pending_batches_once():
             )
             name = row.get("name") or row["id"]
             print(f"  [batch-poller] applied batch results for '{name}': {coded} coded, {failed} failed")
-            send_whatsapp(
+            send_notifications(
                 "UrbRis: risk analysis batch done for \"" + name + "\" - "
                 + str(coded) + "/" + str(coded + failed) + " points coded. Open the app to review."
             )
