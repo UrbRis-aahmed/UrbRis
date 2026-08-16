@@ -412,8 +412,8 @@ body[data-workspace-mode="library"] .main{background:radial-gradient(circle at 7
 <div class="hint" style="margin-top:4px">Live observed precipitation (ECCC), not a forecast - updates roughly every 10 min.</div>
 </div><button class="btn" disabled="" id="run">Draw a route first</button><button class="btn" disabled="" id="riskBtn" onclick="pullRisk()" style="margin-top:8px;display:none">Pull Risk</button>
 <div id="riskModeRow" style="display:none;margin-top:6px;font-size:11px;color:var(--mu)">
-  <label style="cursor:pointer;margin-right:10px"><input checked="" id="riskModeLive" name="riskMode" style="width:auto;cursor:pointer;vertical-align:middle" type="radio" value="live"/> Live</label>
-  <label style="cursor:pointer" title="Same model, same iRAP coding - submitted as one Anthropic batch job instead of live calls. Roughly half the cost; results land within a few minutes to 24h."><input id="riskModeBatch" name="riskMode" style="width:auto;cursor:pointer;vertical-align:middle" type="radio" value="batch"/> Batch (~50% cheaper, async)</label>
+  <label style="cursor:pointer;margin-right:10px"><input id="riskModeLive" name="riskMode" style="width:auto;cursor:pointer;vertical-align:middle" type="radio" value="live"/> Live</label>
+  <label style="cursor:pointer" title="Same model, same iRAP coding - submitted as one Anthropic batch job instead of live calls. Roughly half the cost; results land within a few minutes to 24h."><input checked="" id="riskModeBatch" name="riskMode" style="width:auto;cursor:pointer;vertical-align:middle" type="radio" value="batch"/> Batch (~50% cheaper, async)</label>
 </div>
 <div id="pw" style="display:none">
 <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--mu);margin-bottom:4px"><span id="pl">Extracting</span><span id="pp">0%</span></div>
