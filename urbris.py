@@ -490,6 +490,10 @@ function initMap() {
       { featureType: 'poi', stylers: [{ visibility: 'off' }] },
       { featureType: 'administrative.land_parcel', stylers: [{ visibility: 'off' }] },
       { featureType: 'administrative', elementType: 'geometry', stylers: [{ visibility: 'off' }] },
+      // Base 'administrative' labels-off catches subtypes not explicitly listed below
+      // (e.g. Indian reserves, which Google doesn't file under country/province/
+      // locality/neighborhood) - the specific rules stay as belt-and-suspenders.
+      { featureType: 'administrative', elementType: 'labels', stylers: [{ visibility: 'off' }] },
       { featureType: 'administrative.country', elementType: 'labels', stylers: [{ visibility: 'off' }] },
       { featureType: 'administrative.province', elementType: 'labels', stylers: [{ visibility: 'off' }] },
       { featureType: 'administrative.locality', elementType: 'labels', stylers: [{ visibility: 'off' }] },

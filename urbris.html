@@ -3707,6 +3707,9 @@ function mapStyles(showLabels) {
     { featureType: 'administrative', elementType: 'geometry', stylers: [{ visibility: 'off' }] }
   ];
   if (!showLabels) {
+    // Base 'administrative' labels-off catches subtypes not explicitly listed below
+    // (e.g. Indian reserves, which Google doesn't file under country/province/locality).
+    s.push({ featureType: 'administrative', elementType: 'labels', stylers: [{ visibility: 'off' }] });
     s.push({ featureType: 'administrative.country', elementType: 'labels', stylers: [{ visibility: 'off' }] });
     s.push({ featureType: 'administrative.province', elementType: 'labels', stylers: [{ visibility: 'off' }] });
     s.push({ featureType: 'administrative.locality', elementType: 'labels', stylers: [{ visibility: 'off' }] });
