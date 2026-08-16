@@ -410,9 +410,19 @@ body[data-workspace-mode="library"] .main{background:radial-gradient(circle at 7
 <div style="margin-top:4px"><a href="#" onclick="refreshTraffic(); return false;" style="font-size:11px;color:var(--ac2)">Force-refresh traffic tiles</a></div>
 <div class="or" style="margin-top:8px"><label>Weather radar</label><input id="radar" style="width:auto;cursor:pointer" type="checkbox"/></div>
 <div class="hint" style="margin-top:4px">Live observed precipitation (ECCC), not a forecast - updates roughly every 10 min.</div>
-</div><button class="btn" disabled="" id="run">Draw a route first</button><button class="btn" disabled="" id="riskBtn" onclick="pullRisk()" style="margin-top:8px;display:none">Pull Risk</button><div id="pw" style="display:none">
+</div><button class="btn" disabled="" id="run">Draw a route first</button><button class="btn" disabled="" id="riskBtn" onclick="pullRisk()" style="margin-top:8px;display:none">Pull Risk</button>
+<div id="riskModeRow" style="display:none;margin-top:6px;font-size:11px;color:var(--mu)">
+  <label style="cursor:pointer;margin-right:10px"><input checked="" id="riskModeLive" name="riskMode" style="width:auto;cursor:pointer;vertical-align:middle" type="radio" value="live"/> Live</label>
+  <label style="cursor:pointer" title="Same model, same iRAP coding - submitted as one Anthropic batch job instead of live calls. Roughly half the cost; results land within a few minutes to 24h."><input id="riskModeBatch" name="riskMode" style="width:auto;cursor:pointer;vertical-align:middle" type="radio" value="batch"/> Batch (~50% cheaper, async)</label>
+</div>
+<div id="pw" style="display:none">
 <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--mu);margin-bottom:4px"><span id="pl">Extracting</span><span id="pp">0%</span></div>
 <div class="pb"><div class="pf" id="pf"></div></div>
+</div>
+<div id="batchPanel" style="display:none;margin-top:8px;padding:10px;border-radius:8px;background:var(--sf2);font-size:11.5px;color:var(--mu)">
+  <div id="batchStatusLine" style="margin-bottom:6px">Batch submitted</div>
+  <button class="xb" id="batchCheckBtn" onclick="checkBatchStatus()" style="font-size:11px;padding:6px 10px">Check status</button>
+  <button class="xb" id="batchResultsBtn" onclick="fetchBatchResults()" style="font-size:11px;padding:6px 10px;margin-left:6px;display:none">Get results</button>
 </div><details id="logWrap"><summary>Activity log</summary><div class="log" id="log"></div></details><div id="xw" style="display:none">
 <button class="xb" id="xb">Export CSV with iRAP</button>
 <button class="xb" id="bb" style="margin-top:8px">Print ride briefing</button>
@@ -536,6 +546,12 @@ const SUBSCRIBE_URL = 'https://buttondown.email/YOUR-USERNAME';
 
 const $ = id => document.getElementById(id);
 let rp = [], sp = [], res = [], gmap = null, gm = [], gp = null, gs = [], lpLayer = null, trafficLayer = null, wxData = [], denseCurve = null, densePts = null;
+// Batch mode for Pull Risk: null when no batch in flight, otherwise
+// { id, idxs: [res-indices submitted], submittedAt }. Persisted into the saved
+// route's data so it survives a reload while Anthropic is still processing it.
+let pendingBatch = null, batchPollTimer = null;
+function showRiskBtn() { $('riskBtn').style.display = ''; $('riskModeRow').style.display = ''; }
+function hideRiskBtn() { $('riskBtn').style.display = 'none'; $('riskModeRow').style.display = 'none'; }
 let drawMode = false, drawPts = [], drawPoly = null, drawMarkers = [];
 
 window.addEventListener('load', () => {
@@ -986,6 +1002,8 @@ function startDraw() {
   // old grid cards, map markers, and export buttons linger from the last route while
   // a fresh one is being drawn on top.
   res = []; rp = []; sp = [];
+  pendingBatch = null;
+  updateBatchPanelFromState();
   $('grid').innerHTML = '';
   gm.forEach(m => m.setMap(null)); gm = [];
   if (gp) { gp.setMap(null); gp = null; }
@@ -993,7 +1011,7 @@ function startDraw() {
   $('sw').style.display = 'none';
   $('run').disabled = true;
   $('run').textContent = 'Draw a route first';
-  $('riskBtn').style.display = 'none';
+  hideRiskBtn();
   const dtb = $('drawToolBtn');
   if (dtb) { dtb.textContent = 'Pan/zoom mode - tap to draw'; dtb.classList.remove('on'); }
   $('sendPhone').style.display = 'none';
@@ -1722,7 +1740,7 @@ async function buildRouteFromVideoAndTelemetry(file, telemetry, sourceLabel, dis
 
       $('run').disabled = false;
       $('run').textContent = 'Pull Images (Street View, optional)';
-      $('riskBtn').style.display = '';
+      showRiskBtn();
       $('riskBtn').disabled = false;
       $('riskBtn').textContent = 'Pull Risk';
       setRouteNextStep('risk');
@@ -3070,7 +3088,7 @@ $('run').addEventListener('click', async () => {
   $('pw').style.display = 'none';
   $('run').disabled = false;
   $('run').textContent = 'Re-run images';
-  $('riskBtn').style.display = '';
+  showRiskBtn();
   $('riskBtn').disabled = false;
   $('riskBtn').textContent = 'Pull Risk';
   setRouteNextStep('risk');
@@ -3084,6 +3102,8 @@ async function pullRisk() {
   if (!res.length) { log('Pull images first', 'er'); return; }
   const coveredIdxs = res.map((r, i) => r.hasCoverage ? i : -1).filter(i => i >= 0);
   if (!coveredIdxs.length) { log('No covered points to analyse - fill some gaps with field media first', 'wn'); return; }
+
+  if ($('riskModeBatch').checked) { await pullRiskBatch(coveredIdxs, ak); return; }
 
   const btn = $('riskBtn');
   btn.disabled = true;
@@ -3109,6 +3129,120 @@ async function pullRisk() {
   renderRouteProfile();
   sv('profile');
   saveCurrentRoute();
+}
+
+// Same model, same PROMPT, same iRAP schema as live pullRisk() - the only difference
+// is one Anthropic Message Batch instead of one live call per point (roughly half the
+// token cost). Deliberately not swapped to a cheaper model: this feeds a safety index,
+// so batch coding needs to match live coding, not just be cheap.
+async function pullRiskBatch(coveredIdxs, ak) {
+  const items = coveredIdxs.map(i => {
+    const url = res[i].imageUrl;
+    if (url.startsWith('data:')) {
+      const m = url.match(/^data:([^;]+);base64,([\s\S]*)$/);
+      return { idx: i, imageBase64: m ? m[2] : '', mediaType: m ? m[1] : 'image/jpeg' };
+    }
+    return { idx: i, imageUrl: url };
+  });
+
+  const btn = $('riskBtn');
+  btn.disabled = true;
+  btn.textContent = 'Submitting batch...';
+  try {
+    const r = await fetch('/batch-submit', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ akey: ak, items, prompt: PROMPT })
+    });
+    const out = await r.json();
+    if (!r.ok || out.error) throw new Error(out.error || ('HTTP ' + r.status));
+    pendingBatch = { id: out.batchId, idxs: coveredIdxs, submittedAt: new Date().toISOString() };
+    log('Batch submitted: ' + out.submitted + ' point(s)' + (out.failed ? ', ' + out.failed + ' image(s) failed to fetch' : '') + ' - usually done in minutes, up to 24h', 'ok');
+    saveCurrentRoute();
+    updateBatchPanelFromState();
+    startBatchPolling();
+  } catch (e) {
+    log('Batch submit failed: ' + e.message, 'er');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Pull Risk';
+  }
+}
+
+function startBatchPolling() {
+  if (batchPollTimer) clearInterval(batchPollTimer);
+  if (!pendingBatch) return;
+  batchPollTimer = setInterval(checkBatchStatus, 30000);
+}
+
+async function checkBatchStatus() {
+  if (!pendingBatch) return;
+  const ak = $('akey').value.trim();
+  if (!ak) { log('Enter your Anthropic API key first', 'er'); return; }
+  try {
+    const r = await fetch('/batch-status', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ akey: ak, batchId: pendingBatch.id })
+    });
+    const out = await r.json();
+    if (!r.ok || out.error) throw new Error(out.error || ('HTTP ' + r.status));
+    const c = out.requestCounts || {};
+    const done = out.processingStatus === 'ended';
+    $('batchStatusLine').textContent = done
+      ? 'Batch complete - ' + (c.succeeded || 0) + ' succeeded' + (c.errored ? ', ' + c.errored + ' errored' : '') + '. Ready to apply results.'
+      : 'Processing... ' + (c.succeeded || 0) + ' done, ' + (c.processing || 0) + ' remaining';
+    $('batchResultsBtn').style.display = done ? '' : 'none';
+    if (done && batchPollTimer) { clearInterval(batchPollTimer); batchPollTimer = null; }
+  } catch (e) {
+    log('Batch status check failed: ' + e.message, 'er');
+  }
+}
+
+async function fetchBatchResults() {
+  if (!pendingBatch) return;
+  const ak = $('akey').value.trim();
+  if (!ak) { log('Enter your Anthropic API key first', 'er'); return; }
+  $('batchResultsBtn').disabled = true;
+  $('batchResultsBtn').textContent = 'Applying...';
+  try {
+    const r = await fetch('/batch-results', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ akey: ak, batchId: pendingBatch.id })
+    });
+    const out = await r.json();
+    if (!r.ok || out.error) throw new Error(out.error || ('HTTP ' + r.status));
+    let coded = 0, failed = 0;
+    for (const [cid, entry] of Object.entries(out.results || {})) {
+      const idx = parseInt(cid, 10);
+      if (!res[idx]) continue;
+      if (entry.irap) { res[idx].irap = entry.irap; coded++; }
+      else failed++;
+    }
+    log('Batch results applied - ' + coded + ' point(s) coded' + (failed ? ', ' + failed + ' failed' : ''), 'ok');
+    if (batchPollTimer) { clearInterval(batchPollTimer); batchPollTimer = null; }
+    pendingBatch = null;
+    updateBatchPanelFromState();
+    rebuildViewFromRes();
+    renderRouteProfile();
+    saveCurrentRoute();
+  } catch (e) {
+    log('Fetching batch results failed: ' + e.message, 'er');
+  } finally {
+    $('batchResultsBtn').disabled = false;
+    $('batchResultsBtn').textContent = 'Get results';
+  }
+}
+
+function updateBatchPanelFromState() {
+  if (!pendingBatch) {
+    $('batchPanel').style.display = 'none';
+    if (batchPollTimer) { clearInterval(batchPollTimer); batchPollTimer = null; }
+    return;
+  }
+  $('batchPanel').style.display = '';
+  $('batchStatusLine').textContent = 'Batch submitted for ' + pendingBatch.idxs.length + ' point(s) - checking status...';
+  $('batchResultsBtn').style.display = 'none';
+  checkBatchStatus();
+  startBatchPolling();
 }
 
 function sv(v) {
@@ -3317,7 +3451,7 @@ async function saveCurrentRoute() {
   // before it goes to the server. Drone photo data: URLs have no key and pass through untouched.
   const safeRes = res.map(r => ({ ...r, imageUrl: redactKeyFromUrl(r.imageUrl) }));
   const name = currentSavedRouteId ? undefined : await nextRouteName();
-  const payload = { id: currentSavedRouteId || undefined, name, meta, data: { res: safeRes, scanResults: (typeof scanResults !== 'undefined' ? scanResults : []) } };
+  const payload = { id: currentSavedRouteId || undefined, name, meta, data: { res: safeRes, scanResults: (typeof scanResults !== 'undefined' ? scanResults : []), pendingBatch } };
   try {
     const resp = await fetch('/routes/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
     const out = await resp.json();
@@ -3456,9 +3590,11 @@ async function loadSavedRoute(id) {
     $('gpxBtn').style.display = rp.length ? '' : 'none';
     $('gpxLinkBtn').style.display = rp.length ? '' : 'none';
     currentSavedRouteId = id;
-    $('riskBtn').style.display = '';
+    showRiskBtn();
     $('riskBtn').disabled = false;
     $('riskBtn').textContent = 'Pull Risk';
+    pendingBatch = (entry.data && entry.data.pendingBatch) || null;
+    updateBatchPanelFromState();
     if (needsKey) log('Loaded "' + entry.name + '" - enter your Google Maps key to view the Street View images', 'wn');
     else log('Loaded "' + entry.name + '" (' + res.length + ' points) - no API calls needed', 'ok');
   } catch (e) {

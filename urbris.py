@@ -1012,6 +1012,153 @@ class H(BaseHTTPRequestHandler):
                              "and try again, or try a smaller area."
                 }).encode())
             return
+        if self.path == "/batch-submit":
+            # Batch mode for Pull Risk: same model, same prompt, same iRAP schema as the
+            # live /analyse path - just submitted as one Anthropic Message Batch instead of
+            # one live call per point. Half the token cost, results land within a few
+            # minutes to 24h. Deliberately NOT a cheaper/weaker model - this feeds a safety
+            # index, so live and batch modes must produce comparable coding.
+            akey = data.get("akey", "")
+            items = data.get("items", [])
+            prompt = data.get("prompt", "")
+            model = data.get("model", "claude-opus-4-8")
+            if not akey:
+                self._json({"error": "No Anthropic API key"}, code=400)
+                return
+            if not items:
+                self._json({"error": "No points to submit"}, code=400)
+                return
+
+            def fetch_img(item):
+                try:
+                    if item.get("imageBase64"):
+                        return item["idx"], item["imageBase64"], item.get("mediaType", "image/jpeg"), None
+                    img_req = urllib.request.Request(item["imageUrl"])
+                    with urllib.request.urlopen(img_req, timeout=20) as img_resp:
+                        img_data = img_resp.read()
+                        content_type = img_resp.headers.get("Content-Type", "image/jpeg").split(";")[0]
+                    return item["idx"], base64.b64encode(img_data).decode("utf-8"), content_type, None
+                except Exception as e:
+                    return item["idx"], None, None, str(e)
+
+            with ThreadPoolExecutor(max_workers=10) as pool:
+                fetched = list(pool.map(fetch_img, items))
+
+            fetch_errors = {idx: err for idx, b64, ct, err in fetched if err}
+            requests_list = [
+                {
+                    "custom_id": str(idx),
+                    "params": {
+                        "model": model, "max_tokens": 800,
+                        "messages": [{"role": "user", "content": [
+                            {"type": "image", "source": {"type": "base64", "media_type": ct, "data": b64}},
+                            {"type": "text", "text": prompt}
+                        ]}]
+                    }
+                }
+                for idx, b64, ct, err in fetched if not err
+            ]
+            if not requests_list:
+                self._json({"error": "All images failed to fetch: " + json.dumps(fetch_errors)}, code=502)
+                return
+            try:
+                payload = json.dumps({"requests": requests_list}).encode()
+                req = urllib.request.Request(
+                    "https://api.anthropic.com/v1/messages/batches", data=payload,
+                    headers={"Content-Type": "application/json",
+                             "x-api-key": akey,
+                             "anthropic-version": "2023-06-01"}
+                )
+                with urllib.request.urlopen(req) as r:
+                    batch = json.loads(r.read())
+                self._json({
+                    "batchId": batch.get("id"), "processingStatus": batch.get("processing_status"),
+                    "submitted": len(requests_list), "failed": len(fetch_errors),
+                    "fetchErrors": fetch_errors
+                })
+            except urllib.error.HTTPError as e:
+                self._json({"error": "Batch submit failed: " + e.read().decode("utf-8", "ignore")}, code=e.code)
+            except Exception as e:
+                self._json({"error": "Batch submit failed: " + str(e)}, code=500)
+            return
+
+        if self.path == "/batch-status":
+            akey = data.get("akey", "")
+            batch_id = data.get("batchId", "")
+            if not akey or not batch_id:
+                self._json({"error": "Missing akey or batchId"}, code=400)
+                return
+            try:
+                req = urllib.request.Request(
+                    "https://api.anthropic.com/v1/messages/batches/" + urllib.parse.quote(batch_id),
+                    headers={"x-api-key": akey, "anthropic-version": "2023-06-01"}
+                )
+                with urllib.request.urlopen(req) as r:
+                    batch = json.loads(r.read())
+                self._json({
+                    "processingStatus": batch.get("processing_status"),
+                    "requestCounts": batch.get("request_counts"),
+                    "resultsUrl": batch.get("results_url"),
+                    "endedAt": batch.get("ended_at"),
+                    "expiresAt": batch.get("expires_at")
+                })
+            except urllib.error.HTTPError as e:
+                self._json({"error": "Batch status check failed: " + e.read().decode("utf-8", "ignore")}, code=e.code)
+            except Exception as e:
+                self._json({"error": "Batch status check failed: " + str(e)}, code=500)
+            return
+
+        if self.path == "/batch-results":
+            akey = data.get("akey", "")
+            batch_id = data.get("batchId", "")
+            if not akey or not batch_id:
+                self._json({"error": "Missing akey or batchId"}, code=400)
+                return
+            try:
+                status_req = urllib.request.Request(
+                    "https://api.anthropic.com/v1/messages/batches/" + urllib.parse.quote(batch_id),
+                    headers={"x-api-key": akey, "anthropic-version": "2023-06-01"}
+                )
+                with urllib.request.urlopen(status_req) as r:
+                    batch = json.loads(r.read())
+                if batch.get("processing_status") != "ended" or not batch.get("results_url"):
+                    self._json({"error": "Batch not ready yet", "processingStatus": batch.get("processing_status")}, code=409)
+                    return
+                results_req = urllib.request.Request(
+                    batch["results_url"],
+                    headers={"x-api-key": akey, "anthropic-version": "2023-06-01"}
+                )
+                with urllib.request.urlopen(results_req) as r:
+                    raw_lines = r.read().decode("utf-8").strip().split("\n")
+                results = {}
+                for line in raw_lines:
+                    if not line.strip():
+                        continue
+                    row = json.loads(line)
+                    cid = row.get("custom_id")
+                    result = row.get("result", {})
+                    if result.get("type") == "succeeded":
+                        msg = result.get("message", {})
+                        text = ""
+                        for block in msg.get("content", []):
+                            if block.get("type") == "text":
+                                text = block.get("text", "")
+                                break
+                        clean = re.sub(r"```json|```", "", text).strip()
+                        try:
+                            results[cid] = {"irap": json.loads(clean)}
+                        except Exception:
+                            results[cid] = {"error": "Could not parse iRAP JSON: " + clean[:150]}
+                    else:
+                        err = result.get("error", {})
+                        results[cid] = {"error": err.get("message") or result.get("type") or "Batch item failed"}
+                self._json({"results": results, "requestCounts": batch.get("request_counts")})
+            except urllib.error.HTTPError as e:
+                self._json({"error": "Fetching batch results failed: " + e.read().decode("utf-8", "ignore")}, code=e.code)
+            except Exception as e:
+                self._json({"error": "Fetching batch results failed: " + str(e)}, code=500)
+            return
+
         try:
             if self.path == "/analyse":
                 akey = data.get("akey", "")
