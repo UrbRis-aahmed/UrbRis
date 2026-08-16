@@ -871,7 +871,15 @@ class H(BaseHTTPRequestHandler):
                 results = discover_windy_routes(float(lat), float(lon), float(radius_km), gkey)
                 self._json({"routes": results})
             except urllib.error.HTTPError as e:
-                self._json({"error": "Overpass request failed: HTTP " + str(e.code)}, code=502)
+                # Same lesson as earlier tonight elsewhere - the status code alone
+                # hides the real reason. Overpass's own error text (often explaining
+                # exactly what it rejected and why) lives in the response body.
+                body_text = ""
+                try:
+                    body_text = e.read().decode("utf-8", "ignore")[:1000]
+                except Exception:
+                    pass
+                self._json({"error": "Overpass request failed: HTTP %d - %s" % (e.code, body_text or "(no body)")}, code=502)
             except Exception as e:
                 self._json({"error": "Discovery failed: " + str(e)}, code=500)
             return
