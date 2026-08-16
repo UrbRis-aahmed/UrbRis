@@ -1319,13 +1319,19 @@ async function compareRouteSafety() {
 // currently selected) instead of only scoring against whatever's already coded. This
 // is the "go get a real answer" escape hatch from Tier 1's coverage limits - it costs
 // real API credits (Street View + Claude), same as running Pull Risk on any other route.
+let codingInProgress = false; // guards codeCandidateRoute() - it mutates the same
+// global rp/sp/res/map state pullImagesFlow() and pullRisk() already use, so two
+// "Code this route now" clicks running at once corrupt each other's route data.
 async function codeCandidateRoute(i) {
   const route = lastComparedRoutes[i];
   const statusEl = $('codeStatus-' + i);
   if (!route) { log('That route option is no longer available - re-run Compare routes', 'er'); return; }
+  if (codingInProgress) { log('Already coding a route - wait for it to finish before starting another', 'wn'); if (statusEl) statusEl.textContent = 'Wait for the other route to finish coding first'; return; }
   const gk = $('gkey').value.trim();
   if (!gk) { log('Enter your Google Maps API key first', 'er'); if (statusEl) statusEl.textContent = 'Needs a Google Maps API key'; return; }
 
+  codingInProgress = true;
+  document.querySelectorAll('#safeResults button').forEach(b => b.disabled = true);
   if (statusEl) statusEl.textContent = 'Setting up route...';
   try {
     // overview_path is already real road geometry from Google's own routing, unlike a
@@ -1362,6 +1368,9 @@ async function codeCandidateRoute(i) {
   } catch (e) {
     if (statusEl) statusEl.textContent = '';
     log('Coding this route failed: ' + e.message, 'er');
+  } finally {
+    codingInProgress = false;
+    document.querySelectorAll('#safeResults button').forEach(b => b.disabled = false);
   }
 }
 
