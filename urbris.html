@@ -361,6 +361,10 @@ body[data-workspace-mode="library"] .main{background:radial-gradient(circle at 7
 <div class="hint" style="margin-top:8px">Or import any GPX file - your own saved rides, or a route pulled from Scenic/Kurviger/REVER - and score it, whether you've ridden it or not.</div>
 <input accept=".gpx" id="gpxImportInput" style="margin-top:6px" type="file"/>
 <div class="hint" id="gpxImportStatus" style="margin-top:6px"></div>
+<div class="hint" style="margin-top:8px">Or find nearby roads worth riding - scored on curviness and scenic elevation change, not traffic (that's a timing call, not a road property).</div>
+<button class="savebtn" id="discoverBtn" onclick="discoverWindyRoutes()" style="margin-top:6px">Find windy routes near map center</button>
+<div id="discoverStatus" class="hint" style="margin-top:6px"></div>
+<div id="discoverResults" style="margin-top:8px"></div>
 <button class="savebtn" id="recordVideoBtn" onclick="openCameraRecorder()" style="margin-top:8px">Record with phone camera</button>
 <div id="cameraRecorder" style="display:none;margin-top:8px">
 <video autoplay="" id="cameraPreview" muted="" playsinline="" style="width:100%;border-radius:8px;background:#000;display:block"></video>
@@ -1429,6 +1433,91 @@ function parseGPXPoints(xmlText) {
     if (!isNaN(lat) && !isNaN(lon)) pts.push({ lat, lon });
   });
   return pts;
+}
+
+// Discovery is entirely deterministic (Overpass geometry + the same curvature math
+// already used elsewhere + Elevation for scenic scoring) - no Claude/vision calls
+// anywhere in this path, kept that way deliberately per the cost conversation: broad
+// scanning stays cheap, vision analysis stays reserved for verifying a route someone
+// has actually chosen to ride.
+let discoveredRoutes = [];
+
+async function discoverWindyRoutes() {
+  const gk = $('gkey').value.trim();
+  if (!gk) { log('Enter your Google Maps key first', 'er'); return; }
+  if (!gmap) { log('Load the map first (draw or import a route once) before searching nearby', 'er'); return; }
+
+  const center = gmap.getCenter();
+  const status = $('discoverStatus');
+  const results = $('discoverResults');
+  status.textContent = 'Scanning a 50km radius for curvy, scenic roads - this can take a bit...';
+  results.innerHTML = '';
+  $('discoverBtn').disabled = true;
+
+  try {
+    const resp = await fetch('/discover-routes', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lat: center.lat(), lon: center.lng(), radius_km: 50, gkey: gk })
+    });
+    const raw = await resp.text();
+    if (!resp.ok) {
+      let msg = 'HTTP ' + resp.status;
+      try { const e = JSON.parse(raw); msg = e.error || msg; } catch {}
+      throw new Error(msg);
+    }
+    const d = JSON.parse(raw);
+    discoveredRoutes = d.routes || [];
+    if (!discoveredRoutes.length) {
+      status.textContent = 'No genuinely curvy roads found in this area - try a different map location.';
+      return;
+    }
+    status.textContent = discoveredRoutes.length + ' candidate(s) found, ranked by curviness + scenic elevation change:';
+    results.innerHTML = discoveredRoutes.map((r, i) =>
+      '<div style="background:var(--sf2);border-radius:8px;padding:10px;margin-top:6px">'
+      + '<b>' + (r.name || 'Unnamed road') + '</b>'
+      + '<div class="hint">' + r.length_km + ' km &middot; score ' + Math.round(r.score * 100) + '%'
+      + (r.elev_variation ? ' &middot; ' + Math.round(r.elev_variation) + 'm elevation change' : '') + '</div>'
+      + '<button class="vb" style="margin-top:6px;font-size:11px" onclick="useDiscoveredRoute(' + i + ')">Use this route</button>'
+      + '</div>'
+    ).join('');
+  } catch (e) {
+    status.textContent = '';
+    log('Discovery failed: ' + e.message, 'er');
+  } finally {
+    $('discoverBtn').disabled = false;
+  }
+}
+
+async function useDiscoveredRoute(idx) {
+  const route = discoveredRoutes[idx];
+  if (!route) return;
+  const gk = $('gkey').value.trim();
+  const rawPts = route.points.map(p => ({ lat: p[0], lon: p[1] }));
+
+  // Same 20m thinning already used for GPX import, before road-snapping - avoids
+  // sending excessive points to the Roads API for what's often already dense OSM geometry.
+  const thinned = [];
+  let last = null;
+  for (const p of rawPts) {
+    if (!last || hav(last, p) >= 20) { thinned.push(p); last = p; }
+  }
+
+  log('Loading "' + (route.name || 'discovered route') + '" (' + route.length_km + ' km)...', '');
+  ensureMaps(gk, async () => {
+    initDrawMap();
+    try {
+      const dense = await snapDrawnRoute(thinned, gk);
+      if (!dense.length) throw new Error('No points returned from road snapping');
+      rp = dense;
+      drawMode = false;
+      currentSavedRouteId = null;
+      google.maps.event.clearListeners(gmap, 'click');
+      finishDraw();
+      log('Route loaded - Pull Images to continue verifying it for real', 'ok');
+    } catch (e) {
+      log('Could not load this route: ' + e.message, 'er');
+    }
+  });
 }
 
 async function importRouteFromGPX(file) {
