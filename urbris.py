@@ -126,7 +126,12 @@ def fetch_overpass_roads(lat, lon, radius_m):
         'out geom;'
     ) % (radius_m, lat, lon)
     req = urllib.request.Request(
-        "https://overpass-api.de/api/interpreter",
+        # overpass-api.de's main public instance has been broadly rejecting
+        # requests with this exact 406 recently - confirmed by multiple independent
+        # reports of unrelated tools (QGIS, other scripts) hitting the identical
+        # error, not something specific to this request. Using a mirror instead,
+        # confirmed by another user's report to resolve the exact same symptom.
+        "https://overpass.private.coffee/api/interpreter",
         data=("data=" + urllib.parse.quote(query)).encode(),
         headers={"Content-Type": "application/x-www-form-urlencoded",
                  "Accept": "*/*",
