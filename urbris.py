@@ -73,6 +73,85 @@ def load_towers():
             count += 1
     print(f"  Loaded {count} cell towers from cell_towers.csv")
 
+def fetch_overpass_bbox_roads(minlat, minlon, maxlat, maxlon):
+    query = (
+        '[out:json][timeout:55];'
+        'way["highway"]["highway"!~"^(path|track|footway|service|cycleway|steps|'
+        'pedestrian|proposed|construction|bridleway|motorway_link)$"]'
+        '(%f,%f,%f,%f);'
+        'out geom;'
+    ) % (minlat, minlon, maxlat, maxlon)
+    return fetch_overpass(query)
+
+def route_bbox(path, pad_m):
+    lats = [p["lat"] for p in path]; lons = [p["lon"] for p in path]
+    minlat, maxlat = min(lats), max(lats)
+    minlon, maxlon = min(lons), max(lons)
+    m_lat, m_lon = meters_per_deg((minlat + maxlat) / 2)
+    return (minlat - pad_m / m_lat, minlon - pad_m / m_lon,
+            maxlat + pad_m / m_lat, maxlon + pad_m / m_lon)
+
+def nearest_route_point(lat, lon, path, cum_dist):
+    # Linear scan against the route path is fine at route length scale (hundreds to
+    # low thousands of points) - mirrors the same tradeoff already made client-side
+    # in nearestCodedPoint() for route-safety comparison.
+    best_i, best_d = None, None
+    for i, p in enumerate(path):
+        d = haversine_km(lat, lon, p["lat"], p["lon"]) * 1000
+        if best_d is None or d < best_d:
+            best_d, best_i = d, i
+    return best_i, best_d
+
+def find_route_intersections(path, tolerance_m=50, pad_m=300):
+    # Every road returned by Overpass carries its full vertex geometry (out geom).
+    # A real intersection is simply a coordinate that two or more distinct ways both
+    # contain - no separate node-graph query needed, just cross-referencing the
+    # geometry already being fetched. Rounded to ~1cm to absorb float serialization
+    # noise between ways while still requiring a genuinely shared point, not a
+    # nearby-but-different one.
+    minlat, minlon, maxlat, maxlon = route_bbox(path, pad_m)
+    body, err = fetch_overpass_bbox_roads(minlat, minlon, maxlat, maxlon)
+    if err:
+        return None, err
+    try:
+        data = json.loads(body)
+    except json.JSONDecodeError as e:
+        return None, "Overpass returned malformed JSON: " + str(e)
+    coord_ways = {}
+    for el in data.get("elements", []):
+        if el.get("type") != "way" or "geometry" not in el:
+            continue
+        wid = el.get("id")
+        for node in el["geometry"]:
+            key = (round(node["lat"], 7), round(node["lon"], 7))
+            coord_ways.setdefault(key, set()).add(wid)
+
+    # Precompute cumulative distance along the route so each intersection can be
+    # placed at a real km marker, not just flagged as "somewhere near this route."
+    cum = [0.0]
+    for i in range(1, len(path)):
+        cum.append(cum[-1] + haversine_km(path[i-1]["lat"], path[i-1]["lon"], path[i]["lat"], path[i]["lon"]) * 1000)
+
+    intersections = []
+    seen_close = []  # dedup: two OSM nodes 5m apart shouldn't become two separate results
+    for (lat, lon), way_ids in coord_ways.items():
+        if len(way_ids) < 2:
+            continue
+        idx, dist_to_route = nearest_route_point(lat, lon, path, cum)
+        if idx is None or dist_to_route > tolerance_m:
+            continue
+        if any(haversine_km(lat, lon, s[0], s[1]) * 1000 < 15 for s in seen_close):
+            continue
+        seen_close.append((lat, lon))
+        intersections.append({
+            "lat": lat, "lon": lon,
+            "kmAlongRoute": round(cum[idx] / 1000, 3),
+            "distFromRouteM": round(dist_to_route, 1),
+            "approachRoads": len(way_ids)
+        })
+    intersections.sort(key=lambda x: x["kmAlongRoute"])
+    return intersections, None
+
 def haversine_km(lat1, lon1, lat2, lon2):
     R = 6371
     p1, p2 = math.radians(lat1), math.radians(lat2)
@@ -1135,6 +1214,26 @@ class H(BaseHTTPRequestHandler):
             except Exception as e:
                 self._json({"error": "Delete failed: " + str(e)}, code=500)
             return
+        if self.path == "/route-intersections":
+            # Detects real intersections along a route independent of the fixed 100m
+            # sampling grid the rest of the pipeline uses - an intersection is a
+            # discrete event, not something that needs even spacing. See the shared-
+            # coordinate approach in find_route_intersections() for how.
+            path = data.get("path", [])
+            tolerance_m = data.get("toleranceM", 50)
+            if not path or len(path) < 2:
+                self._json({"error": "No route path provided"}, code=400)
+                return
+            try:
+                intersections, err = find_route_intersections(path, tolerance_m=tolerance_m)
+                if err:
+                    self._json({"error": "Overpass request failed: " + str(err)}, code=502)
+                    return
+                self._json({"intersections": intersections, "count": len(intersections)})
+            except Exception as e:
+                self._json({"error": "Intersection detection failed: " + str(e)}, code=500)
+            return
+
         if self.path == "/roadsinarea":
             bbox = data.get("bbox", "")  # "south,west,north,east"
             query = (
