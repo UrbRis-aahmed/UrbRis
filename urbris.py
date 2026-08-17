@@ -216,6 +216,125 @@ def fetch_log_data():
         total_km += pts[-1].get("km", 0) - pts[0].get("km", 0)
     return total_km, all_pts
 
+def render_research_page():
+    return """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Research — Urbris</title>
+<style>
+:root{
+  --bg:#0b0e0d; --sf:#121715; --sf2:#18201d;
+  --b:rgba(229,235,229,.08); --b2:rgba(229,235,229,.16);
+  --tx:#f0f2ec; --mu:#8d9890; --mu2:#69736c;
+  --ac:#dd6a32; --ac2:#f1844e; --ac-soft:rgba(221,106,50,.12);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;letter-spacing:-.005em;line-height:1.6}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.wrap{max-width:880px;margin:0 auto;padding:0 28px}
+a{color:var(--ac2)}
+nav{position:sticky;top:0;z-index:40;backdrop-filter:blur(10px);background:rgba(11,14,13,.82);border-bottom:1px solid var(--b)}
+nav .wrap{display:flex;align-items:center;justify-content:space-between;height:56px}
+.logo{font-weight:760;letter-spacing:-.045em;font-size:19px}
+.logo span{color:var(--ac2)}
+.navlinks{display:flex;gap:22px;font-size:13px;color:var(--mu)}
+.navlinks a{color:var(--mu);text-decoration:none}
+.navlinks a:hover{color:var(--tx)}
+header{padding:72px 0 48px}
+.eyebrow{display:inline-block;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ac2);font-family:ui-monospace,monospace;margin-bottom:18px}
+h1{font-size:38px;line-height:1.1;letter-spacing:-.02em;font-weight:760;margin:0 0 18px}
+.lede{font-size:16.5px;color:var(--mu);max-width:640px;line-height:1.65;margin:0}
+.disclosure{border:1px solid var(--b);border-left:2px solid var(--ac2);border-radius:8px;padding:16px 20px;background:var(--ac-soft);font-size:13.5px;margin:32px 0 0}
+section{padding:52px 0;border-top:1px solid var(--b)}
+h2{font-size:22px;letter-spacing:-.015em;margin:0 0 8px}
+.section-sub{color:var(--mu);font-size:14px;max-width:600px;margin:0 0 32px}
+.paper{border:1px solid var(--b);border-radius:10px;padding:20px 22px;margin-bottom:14px;background:rgba(17,22,20,.4)}
+.paper .meta{font-family:ui-monospace,monospace;font-size:10.5px;color:var(--mu2);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px}
+.paper h3{font-size:15.5px;margin:0 0 8px}
+.paper h3 a{text-decoration:none;color:var(--tx)}
+.paper h3 a:hover{color:var(--ac2)}
+.paper p{font-size:13.5px;color:var(--mu);margin:0}
+footer{padding:56px 0 80px;text-align:center;color:var(--mu2);font-size:12.5px;border-top:1px solid var(--b)}
+@media(max-width:640px){h1{font-size:28px}}
+</style>
+</head>
+<body>
+<nav><div class="wrap">
+  <div class="logo">Urb<span>ris</span></div>
+  <div class="navlinks"><a href="/">App</a><a href="/log">Log</a></div>
+</div></nav>
+
+<header class="wrap">
+  <div class="eyebrow">Research</div>
+  <h1>What the evidence actually says about why riders crash — and how road design changes it.</h1>
+  <p class="lede">Urbris exists as a research and training effort as much as a tool: coding roads against a real standard only means something if the standard itself is grounded in real crash causation research, not intuition. This page collects the studies Urbris's own methodology is built on and checked against.</p>
+  <div class="disclosure">This is a curated reading list, not original Urbris research (yet) — every study below is independent, peer-reviewed or government/industry-published work, linked directly to its source. Where a finding directly shapes how Urbris codes a road, that connection is called out explicitly.</div>
+</header>
+
+<section class="wrap">
+  <h2>Human factors: why crashes happen</h2>
+  <p class="section-sub">The major case-control studies of real motorcycle crashes, in rough chronological order. All four use a similar method: investigate real crash scenes, then compare against similar riders on the same road who didn't crash, to isolate what actually elevated risk.</p>
+
+  <div class="paper">
+    <div class="meta">FHWA · 2019 · United States</div>
+    <h3><a href="https://www.fhwa.dot.gov/publications/research/safety/18064/18064.pdf" target="_blank" rel="noopener">Motorcycle Crash Causation Study (MCCS)</a></h3>
+    <p>The modern successor to the Hurt Report and the current gold standard for US causation research — over 1,900 data elements analyzed per crash, with a 14-volume supplemental series covering individual factors in depth.</p>
+  </div>
+
+  <div class="paper">
+    <div class="meta">NTSB · 2018 · United States</div>
+    <h3><a href="https://www.ntsb.gov/safety/safety-studies/Documents/SR1801.pdf" target="_blank" rel="noopener">Safety Report on Motorcycle Crash Risk Factors</a></h3>
+    <p>A policy-focused read of the MCCS data, organized around four issue areas: crash warning and prevention, braking and stability, alcohol and drug use, and licensing.</p>
+  </div>
+
+  <div class="paper">
+    <div class="meta">ACEM / MAIDS · 2000 (v2.0 update) · Five EU countries</div>
+    <h3><a href="https://en.wikipedia.org/wiki/MAIDS_report" target="_blank" rel="noopener">MAIDS — Motorcycle Accidents In Depth Study</a></h3>
+    <p>The European equivalent to the Hurt Report — around 2,000 variables coded per crash, including full on-scene reconstructions, compared against matched non-crash exposure riders.</p>
+  </div>
+
+  <div class="paper">
+    <div class="meta">USC / Harry Hurt · 1981 · Los Angeles, US</div>
+    <h3><a href="https://en.wikipedia.org/wiki/Hurt_Report" target="_blank" rel="noopener">Motorcycle Accident Cause Factors and Identification of Countermeasures ("The Hurt Report")</a></h3>
+    <p>The foundational study — on-scene investigation of over 900 real crashes. Some individual findings have since been superseded, but it remains the field's most-cited baseline, and the method every study since has followed.</p>
+  </div>
+</section>
+
+<section class="wrap">
+  <h2>Infrastructure: what the road itself changes</h2>
+  <p class="section-sub">Most causation research above skews toward rider and driver behavior. This is the research that isolates road design specifically — the part Urbris actually measures.</p>
+
+  <div class="paper">
+    <div class="meta">iRAP · ongoing</div>
+    <h3><a href="https://irap.org/research-and-technical-papers/" target="_blank" rel="noopener">iRAP Research &amp; Technical Papers</a></h3>
+    <p>Includes iRAP's own commissioned Motorcycle Safety Review Panel report, finding that crash barriers can be specifically designed to give riders real protection against the features that cause the most devastating injuries — directly informing how Urbris weights barrier condition.</p>
+  </div>
+
+  <div class="paper">
+    <div class="meta">Journal of Railway Transportation and Technology</div>
+    <h3><a href="https://mail.jrtt.org/jrtt/article/view/77" target="_blank" rel="noopener">Road Attributes and Traffic Characteristics Effects on Motorcycle Safety</a></h3>
+    <p>Identifies curvature, median transversability, and operating speed as the most decisive infrastructure factors in motorcycle risk scoring — the direct research basis for why Urbris measures real curve radius as a primary signal, not a secondary one.</p>
+  </div>
+
+  <div class="paper">
+    <div class="meta">FEMA (Federation of European Motorcyclists) × iRAP · 2023</div>
+    <h3><a href="https://www.femamotorcycling.eu/wp-content/uploads/systematic_approach_mc_safety_2023_WT_V4.pdf" target="_blank" rel="noopener">Moving Towards a Systematic Approach for Motorcycle Safety</a></h3>
+    <p>A joint framing of the "safe system" approach specifically for motorcyclists — human behaviour, vehicle design, and road infrastructure treated as one system rather than three separate problems.</p>
+  </div>
+
+  <div class="paper">
+    <div class="meta">iRAP</div>
+    <h3><a href="https://irap.org/" target="_blank" rel="noopener">iRAP Star Rating Methodology</a></h3>
+    <p>The infrastructure-safety standard Urbris codes every route against — Star Ratings for vehicle occupants, motorcyclists, cyclists, and pedestrians, adopted by the WHO as a global road safety benchmark.</p>
+  </div>
+</section>
+
+<footer class="wrap">Urbris — road risk, measured against real research, not intuition.</footer>
+</body>
+</html>"""
+
 def render_public_log_page(gkey, total_km, all_routes_pts):
     data_json = json.dumps(all_routes_pts)
 
@@ -772,6 +891,13 @@ class H(BaseHTTPRequestHandler):
                 self._json({"total_km": total_km, "routes": all_pts})
             except Exception as e:
                 self._json({"error": "Could not load routes: " + str(e)}, code=500)
+            return
+
+        if self.path == "/research":
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(render_research_page().encode("utf-8"))
             return
 
         if self.path == "/log":
