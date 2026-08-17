@@ -295,7 +295,199 @@ def fetch_log_data():
         total_km += pts[-1].get("km", 0) - pts[0].get("km", 0)
     return total_km, all_pts
 
-def render_research_page():
+def call_claude_web_search(prompt, akey, model="claude-sonnet-5"):
+    payload = json.dumps({
+        "model": model, "max_tokens": 2000,
+        "tools": [{"type": "web_search_20250305", "name": "web_search"}],
+        "messages": [{"role": "user", "content": prompt}]
+    }).encode()
+    req = urllib.request.Request(
+        "https://api.anthropic.com/v1/messages", data=payload,
+        headers={"Content-Type": "application/json", "x-api-key": akey, "anthropic-version": "2023-06-01"}
+    )
+    with urllib.request.urlopen(req, timeout=120) as r:
+        result = json.loads(r.read())
+    texts = [b.get("text", "") for b in result.get("content", []) if b.get("type") == "text"]
+    return "\n".join(texts)
+
+def extract_json_array(text):
+    clean = re.sub(r"```json|```", "", text).strip()
+    try:
+        return json.loads(clean)
+    except Exception:
+        pass
+    # fallback: Claude may add a stray sentence despite instructions - pull the
+    # outermost [ ... ] rather than fail the whole scan over it
+    start, end = clean.find("["), clean.rfind("]")
+    if start != -1 and end != -1 and end > start:
+        try:
+            return json.loads(clean[start:end + 1])
+        except Exception:
+            pass
+    return []
+
+RESEARCH_SEARCH_PROMPT = (
+    "Search the web for motorcycle safety or road infrastructure research relevant to "
+    "motorcyclists, published in roughly the last 7 days. Focus on peer-reviewed studies, "
+    "government or industry road-safety reports (e.g. iRAP, NHTSA, Transport Canada, MTO), "
+    "and credible news coverage of genuinely new research findings. Do not include anything "
+    "already well established or widely known (do not re-report the Hurt Report, MAIDS, MCCS, "
+    "or iRAP's general methodology - only newly published material).\n\n"
+    "Respond with ONLY a JSON array, no other text, no markdown fences, no preamble. Each "
+    'item: {"title": "...", "url": "...", "summary": "one or two factual sentences"}. If '
+    "nothing new was found, respond with exactly []."
+)
+
+INCIDENT_SEARCH_PROMPT = (
+    "Search the web for Ontario, Canada motorcycle collisions reported in roughly the last "
+    "3 days - news coverage, OPP news releases, or local police reports. Only include "
+    "incidents with a specific location (a named road, highway, or intersection) - exclude "
+    "anything with only a city or region-level location. Be factual and respectful in "
+    "summaries; do not speculate or editorialize about a real person's death.\n\n"
+    "Respond with ONLY a JSON array, no other text, no markdown fences, no preamble. Each "
+    'item: {"title": "...", "url": "...", "summary": "one or two factual sentences '
+    'including date, specific location, and outcome"}. If nothing new was found, respond '
+    "with exactly []."
+)
+
+def send_research_email(new_research, new_incidents):
+    api_key = os.environ.get("RESEND_API_KEY", "")
+    to_email = os.environ.get("RESEARCH_EMAIL_TO", "")
+    from_email = os.environ.get("RESEND_FROM", "onboarding@resend.dev")
+    if not (api_key and to_email):
+        print("  [research-scan] RESEND_API_KEY or RESEARCH_EMAIL_TO not set - skipping email")
+        return
+
+    def section(title, items):
+        if not items:
+            return ""
+        rows = "".join(
+            '<li style="margin-bottom:12px"><a href="%s">%s</a><br>'
+            '<span style="color:#666;font-size:13px">%s</span></li>'
+            % (i.get("url", ""), i.get("title", "Untitled"), i.get("summary", ""))
+            for i in items
+        )
+        return "<h3>%s</h3><ul>%s</ul>" % (title, rows)
+
+    html = section("New research", new_research) + section("New Ontario incidents", new_incidents)
+    if not html:
+        return
+    body = json.dumps({
+        "from": from_email, "to": [to_email],
+        "subject": "Urbris research update - %d new studies, %d new incidents" % (len(new_research), len(new_incidents)),
+        "html": html
+    }).encode()
+    req = urllib.request.Request(
+        "https://api.resend.com/emails", data=body,
+        headers={"Content-Type": "application/json", "Authorization": "Bearer " + api_key}
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            r.read()
+        print("  [research-scan] email sent")
+    except urllib.error.HTTPError as e:
+        print("  [research-scan] email send failed:", e.code, e.read().decode("utf-8", "ignore")[:200])
+    except Exception as e:
+        print("  [research-scan] email send failed:", e)
+
+def should_run_daily_research_scan():
+    if not supabase_configured():
+        return False
+    try:
+        rows = supabase_request("GET", "research_feed?type=eq._scan_marker&select=found_at&order=found_at.desc&limit=1")
+        if not rows:
+            return True
+        last = (rows[0] or {}).get("found_at")
+        if not last:
+            return True
+        last_dt = datetime.fromisoformat(last.replace("Z", "+00:00"))
+        return (datetime.now(timezone.utc) - last_dt).total_seconds() > 20 * 3600
+    except Exception as e:
+        print("  [research-scan] could not check last scan time:", e)
+        return False
+
+def run_daily_research_scan():
+    # Reuses ANTHROPIC_API_KEY (already required for the batch-completion poller) and
+    # Claude's own server-side web_search tool - one Messages API call executes the
+    # search and returns results in the same response, no separate search API/key
+    # needed. Marker row is written up front so a zero-result scan still counts as
+    # "ran today" and the 3-min poller doesn't retry it forever.
+    if not supabase_configured():
+        return
+    akey = os.environ.get("ANTHROPIC_API_KEY", "")
+    if not akey:
+        return
+
+    try:
+        supabase_request("POST", "research_feed", body={
+            "type": "_scan_marker", "title": "scan", "url": "_meta:scan:" + str(uuid.uuid4()),
+            "summary": "", "found_at": now_iso()
+        })
+    except Exception as e:
+        print("  [research-scan] could not write scan marker - aborting to avoid retry storm:", e)
+        return
+
+    try:
+        existing = supabase_request("GET", "research_feed?select=url") or []
+        existing_urls = {r.get("url") for r in existing}
+    except Exception as e:
+        print("  [research-scan] could not fetch existing items:", e)
+        existing_urls = set()
+
+    new_research, new_incidents = [], []
+    try:
+        raw = call_claude_web_search(RESEARCH_SEARCH_PROMPT, akey)
+        for item in extract_json_array(raw):
+            if item.get("url") and item["url"] not in existing_urls:
+                new_research.append(item)
+    except Exception as e:
+        print("  [research-scan] research search failed:", e)
+
+    try:
+        raw = call_claude_web_search(INCIDENT_SEARCH_PROMPT, akey)
+        for item in extract_json_array(raw):
+            if item.get("url") and item["url"] not in existing_urls:
+                new_incidents.append(item)
+    except Exception as e:
+        print("  [research-scan] incident search failed:", e)
+
+    for kind, items in (("research", new_research), ("incident", new_incidents)):
+        for item in items:
+            try:
+                supabase_request("POST", "research_feed", body={
+                    "type": kind, "title": (item.get("title") or "")[:300],
+                    "url": item["url"], "summary": (item.get("summary") or "")[:600],
+                    "found_at": now_iso()
+                })
+            except Exception as e:
+                print("  [research-scan] insert failed:", e)
+
+    if new_research or new_incidents:
+        send_research_email(new_research, new_incidents)
+    print("  [research-scan] found %d new research item(s), %d new incident(s)" % (len(new_research), len(new_incidents)))
+
+def render_research_page(feed_items=None):
+    feed_items = feed_items or []
+    live_research = [f for f in feed_items if f.get("type") == "research"]
+    live_incidents = [f for f in feed_items if f.get("type") == "incident"]
+
+    def esc(s):
+        return (s or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+    def render_feed_paper(item, meta_label):
+        return (
+            '<div class="paper"><div class="meta">%s</div><h3><a href="%s" target="_blank" '
+            'rel="noopener">%s</a></h3><p>%s</p></div>'
+        ) % (esc(meta_label), esc(item.get("url", "")), esc(item.get("title", "Untitled")), esc(item.get("summary", "")))
+
+    live_research_html = "".join(
+        render_feed_paper(f, "Found " + (f.get("found_at") or "")[:10]) for f in live_research
+    ) or '<p class="section-sub" style="margin:0">No new research found yet - this section fills in as the daily scan runs.</p>'
+
+    live_incidents_html = "".join(
+        render_feed_paper(f, "Found " + (f.get("found_at") or "")[:10]) for f in live_incidents
+    ) or '<p class="section-sub" style="margin:0">No new incidents found yet - this section fills in as the daily scan runs.</p>'
+
     return """<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -349,8 +541,20 @@ footer{padding:56px 0 80px;text-align:center;color:var(--mu2);font-size:12.5px;b
   <div class="eyebrow">Research</div>
   <h1>What the evidence actually says about why riders crash — and how road design changes it.</h1>
   <p class="lede">Urbris exists as a research and training effort as much as a tool: coding roads against a real standard only means something if the standard itself is grounded in real crash causation research, not intuition. This page collects the studies Urbris's own methodology is built on and checked against.</p>
-  <div class="disclosure">This is a curated reading list, not original Urbris research (yet) — every study below is independent, peer-reviewed or government/industry-published work, linked directly to its source. Where a finding directly shapes how Urbris codes a road, that connection is called out explicitly.</div>
+  <div class="disclosure">This is a curated reading list, not original Urbris research (yet) — every study below is independent, peer-reviewed or government/industry-published work, linked directly to its source. Where a finding directly shapes how Urbris codes a road, that connection is called out explicitly. The "Recent" sections below refresh daily via an automated search - unlike the core list above, those entries have not been individually reviewed before appearing here.</div>
 </header>
+
+<section class="wrap">
+  <h2>Recent research</h2>
+  <p class="section-sub">Automatically checked daily for newly published motorcycle safety and road infrastructure research.</p>
+  """ + live_research_html + """
+</section>
+
+<section class="wrap">
+  <h2>Recent Ontario incidents</h2>
+  <p class="section-sub">Automatically checked daily for newly reported Ontario motorcycle collisions with a specific, named location.</p>
+  """ + live_incidents_html + """
+</section>
 
 <section class="wrap">
   <h2>Human factors: why crashes happen</h2>
@@ -973,10 +1177,18 @@ class H(BaseHTTPRequestHandler):
             return
 
         if self.path == "/research":
+            feed_items = []
+            if supabase_configured():
+                try:
+                    feed_items = supabase_request(
+                        "GET", "research_feed?type=in.(research,incident)&order=found_at.desc&limit=100"
+                    ) or []
+                except Exception as e:
+                    print("  [research] could not fetch feed:", e)
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.end_headers()
-            self.wfile.write(render_research_page().encode("utf-8"))
+            self.wfile.write(render_research_page(feed_items).encode("utf-8"))
             return
 
         if self.path == "/log":
@@ -1135,6 +1347,24 @@ class H(BaseHTTPRequestHandler):
             except Exception as e:
                 self._json({"error": "Save failed: " + str(e)}, code=500)
             return
+        if self.path == "/research/run-scan":
+            # Manual trigger for testing - the real scan runs automatically once daily
+            # via the poller thread. Runs synchronously and returns what it found, so
+            # this can be verified without waiting up to 24h for the automatic run.
+            try:
+                akey = os.environ.get("ANTHROPIC_API_KEY", "")
+                if not akey:
+                    self._json({"error": "ANTHROPIC_API_KEY not set on the server"}, code=500)
+                    return
+                if not supabase_configured():
+                    self._json({"error": "Supabase not configured"}, code=500)
+                    return
+                run_daily_research_scan()
+                self._json({"ok": True, "message": "Scan ran - check /research or your email"})
+            except Exception as e:
+                self._json({"error": "Scan failed: " + str(e)}, code=500)
+            return
+
         if self.path == "/routes/coded-points":
             # Feeds Tier 1 of "safest route" comparison: every already-iRAP-coded point
             # across every saved route, stripped down to just lat/lon/irap (no image
@@ -1661,6 +1891,11 @@ def poll_pending_batches_loop():
             poll_pending_batches_once()
         except Exception as e:
             print("  [batch-poller] loop error:", e)
+        try:
+            if should_run_daily_research_scan():
+                run_daily_research_scan()
+        except Exception as e:
+            print("  [research-scan] loop error:", e)
 
 if __name__ == "__main__":
     load_towers()
