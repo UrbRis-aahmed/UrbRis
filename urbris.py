@@ -466,10 +466,9 @@ def run_daily_research_scan():
         send_research_email(new_research, new_incidents)
     print("  [research-scan] found %d new research item(s), %d new incident(s)" % (len(new_research), len(new_incidents)))
 
-def render_research_page(feed_items=None):
+def render_research_page(feed_items=None, search_q="", search_type=""):
     feed_items = feed_items or []
-    live_research = [f for f in feed_items if f.get("type") == "research"]
-    live_incidents = [f for f in feed_items if f.get("type") == "incident"]
+    is_search = bool(search_q or search_type)
 
     def esc(s):
         return (s or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
@@ -480,13 +479,58 @@ def render_research_page(feed_items=None):
             'rel="noopener">%s</a></h3><p>%s</p></div>'
         ) % (esc(meta_label), esc(item.get("url", "")), esc(item.get("title", "Untitled")), esc(item.get("summary", "")))
 
-    live_research_html = "".join(
-        render_feed_paper(f, "Found " + (f.get("found_at") or "")[:10]) for f in live_research
-    ) or '<p class="section-sub" style="margin:0">No new research found yet - this section fills in as the daily scan runs.</p>'
+    search_form = """
+  <form method="get" action="/research" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:28px">
+    <input type="text" name="q" value="%s" placeholder="Search titles and summaries..." style="flex:1;min-width:200px;background:var(--sf2);border:1px solid var(--b2);border-radius:8px;padding:10px 14px;color:var(--tx);font-size:14px">
+    <select name="type" style="background:var(--sf2);border:1px solid var(--b2);border-radius:8px;padding:10px 14px;color:var(--tx);font-size:14px">
+      <option value="">All</option>
+      <option value="research"%s>Research only</option>
+      <option value="incident"%s>Incidents only</option>
+    </select>
+    <button type="submit" style="background:var(--ac);border:none;border-radius:8px;padding:10px 20px;color:#fff;font-size:14px;font-weight:600;cursor:pointer">Search</button>
+    %s
+  </form>""" % (
+        esc(search_q),
+        ' selected' if search_type == 'research' else '',
+        ' selected' if search_type == 'incident' else '',
+        '<a href="/research" style="align-self:center;color:var(--mu);font-size:13px">Clear</a>' if is_search else ''
+    )
 
-    live_incidents_html = "".join(
-        render_feed_paper(f, "Found " + (f.get("found_at") or "")[:10]) for f in live_incidents
-    ) or '<p class="section-sub" style="margin:0">No new incidents found yet - this section fills in as the daily scan runs.</p>'
+    if is_search:
+        results_html = "".join(
+            render_feed_paper(f, ("Research" if f.get("type") == "research" else "Incident") + " · Found " + (f.get("found_at") or "")[:10])
+            for f in feed_items
+        ) or '<p class="section-sub" style="margin:0">No matches.</p>'
+        results_label = "%d result(s)" % len(feed_items)
+        if search_q:
+            results_label += ' for "%s"' % esc(search_q)
+        dynamic_sections = """
+<section class="wrap">
+  <h2>Search results</h2>
+  <p class="section-sub">""" + results_label + """</p>
+  """ + results_html + """
+</section>"""
+    else:
+        live_research = [f for f in feed_items if f.get("type") == "research"]
+        live_incidents = [f for f in feed_items if f.get("type") == "incident"]
+        live_research_html = "".join(
+            render_feed_paper(f, "Found " + (f.get("found_at") or "")[:10]) for f in live_research
+        ) or '<p class="section-sub" style="margin:0">No new research found yet - this section fills in as the daily scan runs.</p>'
+        live_incidents_html = "".join(
+            render_feed_paper(f, "Found " + (f.get("found_at") or "")[:10]) for f in live_incidents
+        ) or '<p class="section-sub" style="margin:0">No new incidents found yet - this section fills in as the daily scan runs.</p>'
+        dynamic_sections = """
+<section class="wrap">
+  <h2>Recent research</h2>
+  <p class="section-sub">Automatically checked daily for newly published motorcycle safety and road infrastructure research.</p>
+  """ + live_research_html + """
+</section>
+
+<section class="wrap">
+  <h2>Recent Ontario incidents</h2>
+  <p class="section-sub">Automatically checked daily for newly reported Ontario motorcycle collisions with a specific, named location.</p>
+  """ + live_incidents_html + """
+</section>"""
 
     return """<!DOCTYPE html>
 <html lang="en">
@@ -542,20 +586,9 @@ footer{padding:56px 0 80px;text-align:center;color:var(--mu2);font-size:12.5px;b
   <h1>What the evidence actually says about why riders crash — and how road design changes it.</h1>
   <p class="lede">Urbris exists as a research and training effort as much as a tool: coding roads against a real standard only means something if the standard itself is grounded in real crash causation research, not intuition. This page collects the studies Urbris's own methodology is built on and checked against.</p>
   <div class="disclosure">This is a curated reading list, not original Urbris research (yet) — every study below is independent, peer-reviewed or government/industry-published work, linked directly to its source. Where a finding directly shapes how Urbris codes a road, that connection is called out explicitly. The "Recent" sections below refresh daily via an automated search - unlike the core list above, those entries have not been individually reviewed before appearing here.</div>
+  """ + search_form + """
 </header>
-
-<section class="wrap">
-  <h2>Recent research</h2>
-  <p class="section-sub">Automatically checked daily for newly published motorcycle safety and road infrastructure research.</p>
-  """ + live_research_html + """
-</section>
-
-<section class="wrap">
-  <h2>Recent Ontario incidents</h2>
-  <p class="section-sub">Automatically checked daily for newly reported Ontario motorcycle collisions with a specific, named location.</p>
-  """ + live_incidents_html + """
-</section>
-
+""" + dynamic_sections + """
 <section class="wrap">
   <h2>Human factors: why crashes happen</h2>
   <p class="section-sub">The major case-control studies of real motorcycle crashes, in rough chronological order. All four use a similar method: investigate real crash scenes, then compare against similar riders on the same road who didn't crash, to isolate what actually elevated risk.</p>
@@ -1176,19 +1209,35 @@ class H(BaseHTTPRequestHandler):
                 self._json({"error": "Could not load routes: " + str(e)}, code=500)
             return
 
-        if self.path == "/research":
+        if self.path == "/research" or self.path.startswith("/research?"):
+            parsed = urllib.parse.urlparse(self.path)
+            qs = urllib.parse.parse_qs(parsed.query)
+            search_q = (qs.get("q", [""])[0] or "").strip()
+            search_type = (qs.get("type", [""])[0] or "").strip()
+            if search_type not in ("research", "incident"):
+                search_type = ""
+
             feed_items = []
             if supabase_configured():
                 try:
-                    feed_items = supabase_request(
-                        "GET", "research_feed?type=in.(research,incident)&order=found_at.desc&limit=100"
-                    ) or []
+                    type_filter = "type=eq." + search_type if search_type else "type=in.(research,incident)"
+                    query_parts = [type_filter, "order=found_at.desc", "limit=100"]
+                    if search_q:
+                        # Strip characters that would break PostgREST's or()/ilike syntax
+                        # (commas and parens are the list/grouping delimiters) rather than
+                        # attempt full escaping - a small loss of search flexibility for a
+                        # guarantee the query string can never come out malformed.
+                        safe_q = re.sub(r"[,()]", " ", search_q).strip()
+                        if safe_q:
+                            pattern = urllib.parse.quote("*" + safe_q + "*")
+                            query_parts.append("or=(title.ilike." + pattern + ",summary.ilike." + pattern + ")")
+                    feed_items = supabase_request("GET", "research_feed?" + "&".join(query_parts)) or []
                 except Exception as e:
                     print("  [research] could not fetch feed:", e)
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.end_headers()
-            self.wfile.write(render_research_page(feed_items).encode("utf-8"))
+            self.wfile.write(render_research_page(feed_items, search_q=search_q, search_type=search_type).encode("utf-8"))
             return
 
         if self.path == "/log":
