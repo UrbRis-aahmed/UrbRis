@@ -1,0 +1,15 @@
+{
+  "appId": "com.urbris.app",
+  "appName": "Urbris",
+  "webDir": "www",
+  "server": {
+    "url": "https://urbris.com",
+    "cleartext": false
+  },
+  "ios": {
+    "contentInset": "automatic"
+  },
+  "android": {
+    "allowMixedContent": false
+  }
+}

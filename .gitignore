@@ -1,1 +1,4 @@
 __pycache__/
+mobile/node_modules/
+mobile/ios/
+mobile/android/

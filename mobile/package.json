@@ -1,0 +1,23 @@
+{
+  "name": "urbris-app",
+  "version": "1.0.0",
+  "description": "Native app wrapper for Urbris - loads the live urbris.com site inside a Capacitor shell",
+  "private": true,
+  "scripts": {
+    "add:ios": "npx cap add ios",
+    "add:android": "npx cap add android",
+    "sync": "npx cap sync",
+    "open:ios": "npx cap open ios",
+    "open:android": "npx cap open android"
+  },
+  "dependencies": {
+    "@capacitor/core": "^8.0.0",
+    "@capacitor/app": "^8.0.0",
+    "@capacitor/geolocation": "^8.0.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.0.0",
+    "@capacitor/ios": "^8.0.0",
+    "@capacitor/android": "^8.0.0"
+  }
+}
