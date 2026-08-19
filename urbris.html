@@ -3107,8 +3107,16 @@ function nearestResPointFor(lat, lon) {
 async function openBriefing() {
   if (briefingActive) return;
   const ak = $('akey').value.trim();
-  if (!ak) { log('Enter your Anthropic API key first', 'er'); return; }
-  if (!denseCurve || !densePts) { log('Run road analysis first - the briefing needs coded risk data', 'wn'); return; }
+  if (!ak) { log('Enter your Anthropic API key first', 'er'); alert('Enter your Anthropic API key first (top of the page) before playing the briefing.'); return; }
+  if (!rp.length || !res.length) { log('Load or draw a route with coded risk data first', 'wn'); alert('Load or draw a route with coded risk data first.'); return; }
+  // denseCurve/densePts are normally set during a live Pull Images run - but a
+  // previously-saved, already-coded route loaded from the sidebar never runs that
+  // flow this session, so rebuild from rp on demand rather than silently requiring
+  // a fresh re-run of something already done.
+  if (!denseCurve || !densePts) {
+    denseCurve = buildDenseCurvature(rp);
+    densePts = rp;
+  }
 
   $('briefingStatus').textContent = 'Building briefing...';
   $('briefingOverlay').style.display = '';
