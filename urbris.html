@@ -525,6 +525,8 @@ body[data-workspace-mode="library"] .main{background:radial-gradient(circle at 7
 <div id="vg"><div class="grid" id="grid"></div></div>
 <div id="briefingOverlay" style="display:none;position:fixed;inset:0;z-index:200;background:#0b0e0d">
   <canvas id="briefingCanvas" style="width:100%;height:100%;display:block"></canvas>
+  <div id="briefingOverviewMap" style="display:none;position:absolute;left:12%;top:22%;width:76%;height:42%;border-radius:10px;overflow:hidden"></div>
+  <div id="briefingMiniMap" style="display:none;position:absolute;border-radius:8px;overflow:hidden;border:1px solid rgba(229,235,229,.16)"></div>
   <button onclick="closeBriefing()" style="position:absolute;top:18px;right:18px;background:rgba(24,32,29,.85);border:1px solid rgba(229,235,229,.16);color:#f0f2ec;border-radius:50%;width:38px;height:38px;font-size:18px;cursor:pointer">&times;</button>
   <div id="briefingStatus" style="position:absolute;bottom:18px;left:18px;right:18px;color:#8d9890;font-size:12px;font-family:ui-monospace,monospace"></div>
 </div>
@@ -3202,18 +3204,33 @@ async function openBriefing() {
     const routeName = ($('fn').textContent || 'This route').replace(/^\+\s*/, '');
     const totalKm = td(rp) / 1000;
 
-    const curves = extractDistinctCurves(denseCurve, densePts, 5, 150);
+    // Scan every coded point directly against the same RF flag set the actual risk
+    // score uses - NOT gated on curve classification first. The earlier version only
+    // considered points already classified as Sharp/Hairpin as candidates at all,
+    // which meant a real flag on a moderate or straight section (damaged barrier,
+    // poor surface, poor delineation) never surfaced in the briefing even though the
+    // data existed - that was the actual cause of segments coming up empty.
+    const flaggedPoints = res
+      .filter(r => r.irap && r.hasCoverage && r.imageUrl)
+      .map(r => {
+        const flags = Object.keys(RF).filter(k => {
+          const v = r.irap[k];
+          return v != null && RF[k].some(f => String(v).toLowerCase().includes(f));
+        });
+        return { r, flags };
+      })
+      .filter(x => x.flags.length > 0)
+      .sort((a, b) => b.flags.length - a.flags.length); // most-flagged first
+
     const segments = [];
-    for (const c of curves) {
-      const pt = nearestResPointFor(c.lat, c.lon);
-      if (!pt || !pt.irap) continue;
-      const flags = Object.keys(RF).filter(k => {
-        const v = pt.irap[k];
-        return v != null && RF[k].some(f => String(v).toLowerCase().includes(f));
-      });
-      if (!flags.length) continue;
-      segments.push({ km: c.km, cls: c.cls, flags, imageUrl: pt.imageUrl, lat: c.lat, lon: c.lon });
+    for (const { r, flags } of flaggedPoints) {
+      if (segments.some(s => Math.abs(s.km - r.km) * 1000 < 150)) continue; // spread out along the route
+      const curveInfo = (r.irap.curvature && String(r.irap.curvature).toLowerCase().includes('sharp')) ? 'Sharp curve'
+        : (r.irap.curvature && String(r.irap.curvature).toLowerCase().includes('hairpin')) ? 'Hairpin' : 'Flagged section';
+      segments.push({ km: r.km, cls: curveInfo, flags, imageUrl: r.imageUrl, lat: r.lat, lon: r.lon });
+      if (segments.length >= 5) break;
     }
+    segments.sort((a, b) => a.km - b.km); // back to route order for narration
 
     const weatherSummary = (wxData || []).map(w => ({
       km: w.km, label: w.label, temp: w.temp, precip: w.precip, gusts: w.gusts, risky: w.risky
@@ -3250,6 +3267,7 @@ async function openBriefing() {
 function closeBriefing() {
   briefingActive = false;
   if (window.speechSynthesis) speechSynthesis.cancel();
+  clearBriefingMapObjs();
   $('briefingOverlay').style.display = 'none';
 }
 
@@ -3293,6 +3311,73 @@ function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
   return ly + lineHeight;
 }
 
+let briefingOverviewGmap = null, briefingMiniGmap = null, briefingMapObjs = [];
+
+function clearBriefingMapObjs() {
+  briefingMapObjs.forEach(o => o.setMap(null));
+  briefingMapObjs = [];
+}
+
+function showBriefingOverviewMap(segments) {
+  $('briefingMiniMap').style.display = 'none';
+  $('briefingOverviewMap').style.display = '';
+  if (!briefingOverviewGmap) {
+    briefingOverviewGmap = new google.maps.Map($('briefingOverviewMap'), {
+      styles: mapStyles(false), disableDefaultUI: true, gestureHandling: 'none', zoomControl: false
+    });
+  }
+  clearBriefingMapObjs();
+  const path = rp.map(p => ({ lat: p.lat, lng: p.lon }));
+  briefingMapObjs.push(new google.maps.Polyline({ path, strokeColor: '#f0f2ec', strokeOpacity: .55, strokeWeight: 3, map: briefingOverviewGmap }));
+  segments.forEach(s => {
+    briefingMapObjs.push(new google.maps.Marker({
+      position: { lat: s.lat, lng: s.lon }, map: briefingOverviewGmap,
+      icon: { path: google.maps.SymbolPath.CIRCLE, scale: 7, fillColor: '#f1844e', fillOpacity: 1, strokeColor: '#0b0e0d', strokeWeight: 2 }
+    }));
+  });
+  const bounds = new google.maps.LatLngBounds();
+  path.forEach(p => bounds.extend(p));
+  briefingOverviewGmap.fitBounds(bounds, 40);
+}
+
+function showBriefingMiniMap(seg, allSegments, segIdx) {
+  $('briefingOverviewMap').style.display = 'none';
+  const el = $('briefingMiniMap');
+  const W = window.innerWidth, H = window.innerHeight;
+  const insetW = W * 0.22, insetH = insetW * 0.62;
+  el.style.width = insetW + 'px'; el.style.height = insetH + 'px';
+  el.style.left = (W - insetW - W * 0.04) + 'px'; el.style.top = (H * 0.04) + 'px';
+  el.style.display = '';
+  if (!briefingMiniGmap) {
+    briefingMiniGmap = new google.maps.Map(el, {
+      styles: mapStyles(false), disableDefaultUI: true, gestureHandling: 'none', zoomControl: false
+    });
+  } else {
+    google.maps.event.trigger(briefingMiniGmap, 'resize');
+  }
+  clearBriefingMapObjs();
+  const path = rp.map(p => ({ lat: p.lat, lng: p.lon }));
+  briefingMapObjs.push(new google.maps.Polyline({ path, strokeColor: '#f0f2ec', strokeOpacity: .4, strokeWeight: 2, map: briefingMiniGmap }));
+  allSegments.forEach((s, i) => {
+    const isHi = i === segIdx;
+    briefingMapObjs.push(new google.maps.Marker({
+      position: { lat: s.lat, lng: s.lon }, map: briefingMiniGmap,
+      icon: {
+        path: google.maps.SymbolPath.CIRCLE, scale: isHi ? 8 : 4,
+        fillColor: isHi ? '#f1844e' : 'rgba(221,106,50,.5)', fillOpacity: 1,
+        strokeColor: '#0b0e0d', strokeWeight: isHi ? 2 : 1
+      }
+    }));
+  });
+  briefingMiniGmap.setCenter({ lat: seg.lat, lng: seg.lon });
+  briefingMiniGmap.setZoom(12);
+}
+
+function hideBriefingMaps() {
+  $('briefingOverviewMap').style.display = 'none';
+  $('briefingMiniMap').style.display = 'none';
+}
+
 async function playBriefingSlides(slides, routeName, totalKm) {
   const canvas = $('briefingCanvas');
   const dpr = window.devicePixelRatio || 1;
@@ -3309,6 +3394,7 @@ async function playBriefingSlides(slides, routeName, totalKm) {
     ctx.fillStyle = '#0b0e0d'; ctx.fillRect(0, 0, W, H);
 
     if (s.type === 'title') {
+      hideBriefingMaps();
       ctx.fillStyle = '#f0f2ec'; ctx.textAlign = 'left';
       ctx.font = '760 ' + Math.round(W * 0.045) + 'px Inter, sans-serif';
       ctx.fillText(routeName, W * 0.08, H * 0.42);
@@ -3317,6 +3403,7 @@ async function playBriefingSlides(slides, routeName, totalKm) {
       ctx.fillStyle = '#8d9890'; ctx.font = Math.round(W * 0.02) + 'px Inter, sans-serif';
       wrapText(ctx, s.text, W * 0.08, H * 0.55, W * 0.8, Math.round(W * 0.028));
     } else if (s.type === 'weather') {
+      hideBriefingMaps();
       ctx.fillStyle = '#dd6a32'; ctx.textAlign = 'left';
       ctx.font = '760 ' + Math.round(W * 0.03) + 'px Inter, sans-serif';
       ctx.fillText('Weather along the way', W * 0.08, H * 0.35);
@@ -3326,9 +3413,7 @@ async function playBriefingSlides(slides, routeName, totalKm) {
       ctx.fillStyle = '#dd6a32'; ctx.textAlign = 'left';
       ctx.font = '760 ' + Math.round(W * 0.03) + 'px Inter, sans-serif';
       ctx.fillText('The route ahead', W * 0.08, H * 0.16);
-      const mapX = W * 0.12, mapY = H * 0.22, mapW = W * 0.76, mapH = H * 0.42;
-      drawRouteLine(ctx, briefingProj, rp, mapX, mapY, mapW, mapH, { color: 'rgba(240,242,236,.6)', width: 2.5 });
-      drawSegmentMarkers(ctx, briefingProj, s.segments, mapX, mapY, mapW, mapH, -1);
+      showBriefingOverviewMap(s.segments);
       ctx.fillStyle = '#f0f2ec'; ctx.font = Math.round(W * 0.02) + 'px Inter, sans-serif';
       wrapText(ctx, s.text, W * 0.08, H * 0.78, W * 0.84, Math.round(W * 0.028));
     } else if (s.type === 'segment') {
@@ -3341,19 +3426,17 @@ async function playBriefingSlides(slides, routeName, totalKm) {
       const grad = ctx.createLinearGradient(0, H * 0.5, 0, H);
       grad.addColorStop(0, 'rgba(11,14,13,0)'); grad.addColorStop(1, 'rgba(11,14,13,0.92)');
       ctx.fillStyle = grad; ctx.fillRect(0, H * 0.5, W, H * 0.5);
-      // Mini-map inset - same route line as the overview slide, only this segment's
-      // position highlighted, so its place in the whole ride stays visible even while
-      // looking at a close-up image.
-      const insetW = W * 0.22, insetH = insetW * 0.62, insetX = W - insetW - W * 0.04, insetY = H * 0.04;
-      ctx.fillStyle = 'rgba(11,14,13,.72)'; ctx.fillRect(insetX - 8, insetY - 8, insetW + 16, insetH + 16);
-      drawRouteLine(ctx, briefingProj, rp, insetX, insetY, insetW, insetH, { color: 'rgba(240,242,236,.4)', width: 1.5 });
-      drawSegmentMarkers(ctx, briefingProj, s.allSegments, insetX, insetY, insetW, insetH, s.segIdx);
+      // Real Google Maps inset (same styling as the main app's map), not a hand-drawn
+      // approximation - same route, only this segment's marker highlighted, so its
+      // place in the whole ride stays visible even while looking at a close-up image.
+      showBriefingMiniMap(s.seg, s.allSegments, s.segIdx);
       ctx.fillStyle = '#f1844e'; ctx.textAlign = 'left';
       ctx.font = 'ui-monospace, monospace ' + Math.round(W * 0.016) + 'px';
       ctx.fillText('km ' + s.seg.km.toFixed(1) + ' · ' + s.seg.cls, W * 0.06, H * 0.68);
       ctx.fillStyle = '#f0f2ec'; ctx.font = Math.round(W * 0.024) + 'px Inter, sans-serif';
       wrapText(ctx, s.text, W * 0.06, H * 0.76, W * 0.88, Math.round(W * 0.032));
     } else {
+      hideBriefingMaps();
       ctx.fillStyle = '#f0f2ec'; ctx.textAlign = 'center'; ctx.font = '760 ' + Math.round(W * 0.035) + 'px Inter, sans-serif';
       ctx.fillText(s.text, W / 2, H / 2);
     }
