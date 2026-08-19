@@ -326,6 +326,20 @@ def extract_json_array(text):
             pass
     return []
 
+def extract_json_object(text):
+    clean = re.sub(r"```json|```", "", text).strip()
+    try:
+        return json.loads(clean)
+    except Exception:
+        pass
+    start, end = clean.find("{"), clean.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        try:
+            return json.loads(clean[start:end + 1])
+        except Exception:
+            pass
+    return {}
+
 RESEARCH_SEARCH_PROMPT = (
     "Search the web for motorcycle safety or road infrastructure research relevant to "
     "motorcyclists, published in roughly the last 7 days. Focus on peer-reviewed studies, "
@@ -1493,6 +1507,56 @@ class H(BaseHTTPRequestHandler):
             except Exception as e:
                 self._json({"error": "Delete failed: " + str(e)}, code=500)
             return
+        if self.path == "/briefing-script":
+            # Turns real route/weather/risk data into a short, stylized narration script
+            # for the in-app Route Briefing - Claude's job here is wording only, never
+            # inventing facts. Every number and flag it narrates comes from the request
+            # body, which the client built entirely from already-coded/already-fetched
+            # data (real Street View coding, real weather forecast) - nothing here is
+            # generated content standing in for something unverified.
+            akey = data.get("akey", "")
+            if not akey:
+                self._json({"error": "No Anthropic API key"}, code=400)
+                return
+            route_name = data.get("routeName", "This route")
+            total_km = data.get("totalKm", 0)
+            weather = data.get("weather", [])
+            segments = data.get("segments", [])
+            prompt = (
+                "You are writing a short spoken pre-ride briefing for a motorcyclist, in the "
+                "style of an aviation pre-flight briefing - calm, direct, professional, no hype, "
+                "no invented details. Only use the facts given below; never invent road "
+                "conditions, weather, or risks not present in this data.\n\n"
+                "Route: " + str(route_name) + ", " + str(total_km) + " km total.\n"
+                "Weather along the way: " + json.dumps(weather) + "\n"
+                "Key risk segments (already coded from real imagery): " + json.dumps(segments) + "\n\n"
+                "Respond with ONLY a JSON object, no other text, no markdown fences: "
+                '{"intro": "one or two sentence route overview", '
+                '"weather": "one or two sentence weather summary, only mention genuinely '
+                'notable conditions", '
+                '"segments": ["one short spoken sentence per segment, same order as given, '
+                'each grounded only in that segment\'s actual flags"]}'
+            )
+            try:
+                payload = json.dumps({
+                    "model": "claude-sonnet-5", "max_tokens": 1000,
+                    "messages": [{"role": "user", "content": prompt}]
+                }).encode()
+                req = urllib.request.Request(
+                    "https://api.anthropic.com/v1/messages", data=payload,
+                    headers={"Content-Type": "application/json", "x-api-key": akey, "anthropic-version": "2023-06-01"}
+                )
+                with urllib.request.urlopen(req, timeout=60) as r:
+                    result = json.loads(r.read())
+                texts = [b.get("text", "") for b in result.get("content", []) if b.get("type") == "text"]
+                script = extract_json_object("\n".join(texts))
+                self._json({"script": script})
+            except urllib.error.HTTPError as e:
+                self._json({"error": "Briefing script generation failed: " + e.read().decode("utf-8", "ignore")}, code=e.code)
+            except Exception as e:
+                self._json({"error": "Briefing script generation failed: " + str(e)}, code=500)
+            return
+
         if self.path == "/route-intersections":
             # Detects real intersections along a route independent of the fixed 100m
             # sampling grid the rest of the pipeline uses - an intersection is a

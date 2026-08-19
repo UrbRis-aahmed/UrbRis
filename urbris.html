@@ -511,6 +511,7 @@ body[data-workspace-mode="library"] .main{background:radial-gradient(circle at 7
     <div><div class="rp-eyebrow">UrbRis Route Profile</div><div class="rp-title" id="rpTitle">Route intelligence</div><div class="rp-sub">Road Risk Index summarizes flagged infrastructure indicators. Technical Complexity comes from measured route geometry. Neither is a crash-probability estimate.</div></div>
     <div class="rp-badge" id="rpState">Assessment building</div>
   </div>
+  <button class="xb" id="briefingBtn" onclick="openBriefing()" style="margin:4px 0 0;font-size:12px">Play route briefing</button>
   <div class="rp-grid">
     <div class="rp-metric"><div class="rp-metric-label">Road Risk Index</div><div class="rp-metric-value"><strong id="rpRisk">—</strong><span id="rpRiskScale">/ 100</span></div><div class="rp-metric-note" id="rpRiskNote">Run road analysis to calculate infrastructure indicators.</div><div class="rp-bar"><i id="rpRiskBar" style="width:0%"></i></div></div>
     <div class="rp-metric"><div class="rp-metric-label">Technical Complexity</div><div class="rp-metric-value"><strong id="rpTech">—</strong><span>/ 100</span></div><div class="rp-metric-note" id="rpTechNote">Calculated from measured curvature along the route.</div><div class="rp-bar"><i id="rpTechBar" style="width:0%"></i></div></div>
@@ -522,6 +523,11 @@ body[data-workspace-mode="library"] .main{background:radial-gradient(circle at 7
   </div>
 </div>
 <div id="vg"><div class="grid" id="grid"></div></div>
+<div id="briefingOverlay" style="display:none;position:fixed;inset:0;z-index:200;background:#0b0e0d">
+  <canvas id="briefingCanvas" style="width:100%;height:100%;display:block"></canvas>
+  <button onclick="closeBriefing()" style="position:absolute;top:18px;right:18px;background:rgba(24,32,29,.85);border:1px solid rgba(229,235,229,.16);color:#f0f2ec;border-radius:50%;width:38px;height:38px;font-size:18px;cursor:pointer">&times;</button>
+  <div id="briefingStatus" style="position:absolute;bottom:18px;left:18px;right:18px;color:#8d9890;font-size:12px;font-family:ui-monospace,monospace"></div>
+</div>
 <div id="vm" style="display:none">
 <div id="drawBar" style="display:none;margin-bottom:10px;gap:8px;align-items:center;flex-wrap:wrap">
 <button class="vb" id="drawToolBtn" onclick="toggleDrawTool()">Pan/zoom mode - tap to draw</button>
@@ -3078,6 +3084,183 @@ function tightestInWindow(dense, targetM, windowM) {
     if (diff < nd) { nd = diff; ni = i; }
   }
   return dense.curve[ni];
+}
+
+// Route Briefing: a stylized, narrated slideshow built entirely from data already
+// coded/fetched for this route - real Street View frames, real weather forecast, real
+// flagged iRAP fields. Claude's only job (via /briefing-script) is wording the narration;
+// every fact it speaks comes from the request body, nothing is invented. Live playback
+// only for now (browser speechSynthesis can't be captured into an exportable video file
+// reliably cross-browser) - a real downloadable export is a separate, later build.
+let briefingActive = false;
+
+function nearestResPointFor(lat, lon) {
+  let best = null, bestD = 60; // meters
+  for (const r of res) {
+    if (!r.hasCoverage || !r.imageUrl) continue;
+    const d = hav({ lat, lon }, { lat: r.lat, lon: r.lon });
+    if (d < bestD) { bestD = d; best = r; }
+  }
+  return best;
+}
+
+async function openBriefing() {
+  if (briefingActive) return;
+  const ak = $('akey').value.trim();
+  if (!ak) { log('Enter your Anthropic API key first', 'er'); return; }
+  if (!denseCurve || !densePts) { log('Run road analysis first - the briefing needs coded risk data', 'wn'); return; }
+
+  $('briefingStatus').textContent = 'Building briefing...';
+  $('briefingOverlay').style.display = '';
+  briefingActive = true;
+
+  try {
+    const routeName = ($('fn').textContent || 'This route').replace(/^\+\s*/, '');
+    const totalKm = td(rp) / 1000;
+
+    const curves = extractDistinctCurves(denseCurve, densePts, 5, 150);
+    const segments = [];
+    for (const c of curves) {
+      const pt = nearestResPointFor(c.lat, c.lon);
+      if (!pt || !pt.irap) continue;
+      const flags = Object.keys(RF).filter(k => {
+        const v = pt.irap[k];
+        return v != null && RF[k].some(f => String(v).toLowerCase().includes(f));
+      });
+      if (!flags.length) continue;
+      segments.push({ km: c.km, cls: c.cls, flags, imageUrl: pt.imageUrl });
+    }
+
+    const weatherSummary = (wxData || []).map(w => ({
+      km: w.km, label: w.label, temp: w.temp, precip: w.precip, gusts: w.gusts, risky: w.risky
+    }));
+
+    const r = await fetch('/briefing-script', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        akey: ak, routeName, totalKm: totalKm.toFixed(1), weather: weatherSummary,
+        segments: segments.map(s => ({ km: s.km.toFixed(1), curveType: s.cls, flags: s.flags }))
+      })
+    });
+    const out = await r.json();
+    if (!r.ok || out.error) throw new Error(out.error || ('HTTP ' + r.status));
+    const script = out.script || {};
+
+    const slides = [{ type: 'title', text: script.intro || (routeName + ', ' + totalKm.toFixed(1) + ' kilometers.') }];
+    if (script.weather) slides.push({ type: 'weather', text: script.weather });
+    segments.forEach((s, i) => {
+      slides.push({ type: 'segment', seg: s, text: (script.segments && script.segments[i]) || (s.cls + ' at kilometer ' + s.km.toFixed(1) + '.') });
+    });
+    slides.push({ type: 'outro', text: 'That is the full briefing. Ride safe.' });
+
+    await playBriefingSlides(slides, routeName, totalKm);
+  } catch (e) {
+    $('briefingStatus').textContent = 'Briefing failed: ' + e.message;
+    log('Route briefing failed: ' + e.message, 'er');
+  } finally {
+    briefingActive = false;
+  }
+}
+
+function closeBriefing() {
+  briefingActive = false;
+  if (window.speechSynthesis) speechSynthesis.cancel();
+  $('briefingOverlay').style.display = 'none';
+}
+
+function speakAndWait(text) {
+  return new Promise(resolve => {
+    if (!window.speechSynthesis || !text) { setTimeout(resolve, text ? Math.min(6000, text.length * 60) : 400); return; }
+    const u = new SpeechSynthesisUtterance(text);
+    u.rate = 0.98;
+    let done = false;
+    const finish = () => { if (!done) { done = true; resolve(); } };
+    u.onend = finish; u.onerror = finish;
+    // Fallback in case the utterance never fires end/error (happens on some browsers
+    // when a tab loses focus) - never let the briefing hang indefinitely on one slide.
+    setTimeout(finish, Math.max(4000, text.length * 90));
+    speechSynthesis.speak(u);
+  });
+}
+
+function loadImg(url) {
+  return new Promise(resolve => {
+    if (!url) { resolve(null); return; }
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = url;
+  });
+}
+
+function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
+  const words = (text || '').split(' ');
+  let line = '', ly = y;
+  for (const w of words) {
+    const test = line + w + ' ';
+    if (ctx.measureText(test).width > maxWidth && line) {
+      ctx.fillText(line, x, ly); line = w + ' '; ly += lineHeight;
+    } else line = test;
+  }
+  ctx.fillText(line, x, ly);
+  return ly + lineHeight;
+}
+
+async function playBriefingSlides(slides, routeName, totalKm) {
+  const canvas = $('briefingCanvas');
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = canvas.clientWidth * dpr; canvas.height = canvas.clientHeight * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  const W = canvas.clientWidth, H = canvas.clientHeight;
+
+  for (let i = 0; i < slides.length; i++) {
+    if (!briefingActive) return;
+    const s = slides[i];
+    $('briefingStatus').textContent = 'Slide ' + (i + 1) + ' of ' + slides.length;
+
+    ctx.fillStyle = '#0b0e0d'; ctx.fillRect(0, 0, W, H);
+
+    if (s.type === 'title') {
+      ctx.fillStyle = '#f0f2ec'; ctx.textAlign = 'left';
+      ctx.font = '760 ' + Math.round(W * 0.045) + 'px Inter, sans-serif';
+      ctx.fillText(routeName, W * 0.08, H * 0.42);
+      ctx.fillStyle = '#f1844e'; ctx.font = 'ui-monospace, monospace ' + Math.round(W * 0.018) + 'px';
+      ctx.fillText(totalKm.toFixed(1) + ' km · route briefing', W * 0.08, H * 0.42 + Math.round(W * 0.045));
+      ctx.fillStyle = '#8d9890'; ctx.font = Math.round(W * 0.02) + 'px Inter, sans-serif';
+      wrapText(ctx, s.text, W * 0.08, H * 0.55, W * 0.8, Math.round(W * 0.028));
+    } else if (s.type === 'weather') {
+      ctx.fillStyle = '#dd6a32'; ctx.textAlign = 'left';
+      ctx.font = '760 ' + Math.round(W * 0.03) + 'px Inter, sans-serif';
+      ctx.fillText('Weather along the way', W * 0.08, H * 0.35);
+      ctx.fillStyle = '#f0f2ec'; ctx.font = Math.round(W * 0.022) + 'px Inter, sans-serif';
+      wrapText(ctx, s.text, W * 0.08, H * 0.45, W * 0.8, Math.round(W * 0.03));
+    } else if (s.type === 'segment') {
+      const img = await loadImg(s.seg.imageUrl);
+      if (img) {
+        const scale = Math.max(W / img.width, H / img.height);
+        const iw = img.width * scale, ih = img.height * scale;
+        ctx.drawImage(img, (W - iw) / 2, (H - ih) / 2, iw, ih);
+      }
+      const grad = ctx.createLinearGradient(0, H * 0.5, 0, H);
+      grad.addColorStop(0, 'rgba(11,14,13,0)'); grad.addColorStop(1, 'rgba(11,14,13,0.92)');
+      ctx.fillStyle = grad; ctx.fillRect(0, H * 0.5, W, H * 0.5);
+      ctx.fillStyle = '#f1844e'; ctx.textAlign = 'left';
+      ctx.font = 'ui-monospace, monospace ' + Math.round(W * 0.016) + 'px';
+      ctx.fillText('km ' + s.seg.km.toFixed(1) + ' · ' + s.seg.cls, W * 0.06, H * 0.68);
+      ctx.fillStyle = '#f0f2ec'; ctx.font = Math.round(W * 0.024) + 'px Inter, sans-serif';
+      wrapText(ctx, s.text, W * 0.06, H * 0.76, W * 0.88, Math.round(W * 0.032));
+    } else {
+      ctx.fillStyle = '#f0f2ec'; ctx.textAlign = 'center'; ctx.font = '760 ' + Math.round(W * 0.035) + 'px Inter, sans-serif';
+      ctx.fillText(s.text, W / 2, H / 2);
+    }
+
+    await speakAndWait(s.text);
+    if (!briefingActive) return;
+  }
+  $('briefingStatus').textContent = 'Briefing complete';
+  setTimeout(() => { if (briefingActive) closeBriefing(); }, 1500);
 }
 
 function extractDistinctCurves(dense, pts, maxN, minSepM) {
