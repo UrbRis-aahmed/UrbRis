@@ -3104,6 +3104,80 @@ function nearestResPointFor(lat, lon) {
   return best;
 }
 
+// Projects the route's lat/lon points into normalized [0,1] canvas space, preserving
+// aspect ratio (not a real map projection - this is decorative context, not for
+// navigation). Reused for both the full-route overview slide and the small position
+// inset on every segment slide, so "where am I in the journey" stays visually
+// consistent throughout the briefing.
+function projectRoutePoints(points) {
+  const lats = points.map(p => p.lat), lons = points.map(p => p.lon);
+  const minLat = Math.min(...lats), maxLat = Math.max(...lats);
+  const minLon = Math.min(...lons), maxLon = Math.max(...lons);
+  const latSpan = Math.max(maxLat - minLat, 1e-6), lonSpan = Math.max(maxLon - minLon, 1e-6);
+  const span = Math.max(latSpan, lonSpan);
+  const cx = (minLat + maxLat) / 2, cy = (minLon + maxLon) / 2;
+  return {
+    project: (lat, lon) => ({
+      x: 0.5 + (lon - cy) / span, y: 0.5 - (lat - cx) / span
+    })
+  };
+}
+
+function drawRouteLine(ctx, proj, points, x0, y0, w, h, opts) {
+  opts = opts || {};
+  ctx.save();
+  ctx.strokeStyle = opts.color || 'rgba(240,242,236,.55)';
+  ctx.lineWidth = opts.width || 2;
+  ctx.beginPath();
+  points.forEach((p, i) => {
+    const pr = proj.project(p.lat, p.lon);
+    const x = x0 + pr.x * w, y = y0 + pr.y * h;
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawSegmentMarkers(ctx, proj, segments, x0, y0, w, h, highlightIdx) {
+  segments.forEach((s, i) => {
+    const pr = proj.project(s.lat, s.lon);
+    const x = x0 + pr.x * w, y = y0 + pr.y * h;
+    const isHi = i === highlightIdx;
+    ctx.beginPath();
+    ctx.arc(x, y, isHi ? 7 : 4, 0, Math.PI * 2);
+    ctx.fillStyle = isHi ? '#f1844e' : 'rgba(221,106,50,.5)';
+    ctx.fill();
+    if (isHi) {
+      ctx.beginPath(); ctx.arc(x, y, 13, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(241,132,78,.5)'; ctx.lineWidth = 2; ctx.stroke();
+    }
+  });
+}
+
+// Voice quality varies wildly by browser/OS default. Voice list loads asynchronously
+// in some browsers (empty on first call until 'voiceschanged' fires) - this waits for
+// that, then prefers higher-quality voices by name heuristic over a generic default.
+function getBestVoice() {
+  return new Promise(resolve => {
+    if (!window.speechSynthesis) { resolve(null); return; }
+    const pick = () => {
+      const voices = speechSynthesis.getVoices();
+      if (!voices.length) return null;
+      const preferred = voices.find(v => /Google|Natural|Neural|Premium|Enhanced/i.test(v.name) && v.lang.startsWith('en'))
+        || voices.find(v => v.lang === 'en-US' || v.lang === 'en-CA')
+        || voices.find(v => v.lang.startsWith('en'))
+        || voices[0];
+      return preferred;
+    };
+    const existing = pick();
+    if (existing) { resolve(existing); return; }
+    speechSynthesis.onvoiceschanged = () => resolve(pick());
+    setTimeout(() => resolve(pick()), 1000); // fallback if the event never fires
+  });
+}
+
+let briefingVoice = null, briefingProj = null;
+
 async function openBriefing() {
   if (briefingActive) return;
   const ak = $('akey').value.trim();
@@ -3121,6 +3195,8 @@ async function openBriefing() {
   $('briefingStatus').textContent = 'Building briefing...';
   $('briefingOverlay').style.display = '';
   briefingActive = true;
+  briefingVoice = await getBestVoice();
+  briefingProj = projectRoutePoints(rp);
 
   try {
     const routeName = ($('fn').textContent || 'This route').replace(/^\+\s*/, '');
@@ -3136,7 +3212,7 @@ async function openBriefing() {
         return v != null && RF[k].some(f => String(v).toLowerCase().includes(f));
       });
       if (!flags.length) continue;
-      segments.push({ km: c.km, cls: c.cls, flags, imageUrl: pt.imageUrl });
+      segments.push({ km: c.km, cls: c.cls, flags, imageUrl: pt.imageUrl, lat: c.lat, lon: c.lon });
     }
 
     const weatherSummary = (wxData || []).map(w => ({
@@ -3156,8 +3232,9 @@ async function openBriefing() {
 
     const slides = [{ type: 'title', text: script.intro || (routeName + ', ' + totalKm.toFixed(1) + ' kilometers.') }];
     if (script.weather) slides.push({ type: 'weather', text: script.weather });
+    slides.push({ type: 'overview', segments, text: script.overview || ('Here is the route ahead, with ' + segments.length + ' notable spot(s) marked.') });
     segments.forEach((s, i) => {
-      slides.push({ type: 'segment', seg: s, text: (script.segments && script.segments[i]) || (s.cls + ' at kilometer ' + s.km.toFixed(1) + '.') });
+      slides.push({ type: 'segment', seg: s, segIdx: i, allSegments: segments, text: (script.segments && script.segments[i]) || (s.cls + ' at kilometer ' + s.km.toFixed(1) + '.') });
     });
     slides.push({ type: 'outro', text: 'That is the full briefing. Ride safe.' });
 
@@ -3180,13 +3257,14 @@ function speakAndWait(text) {
   return new Promise(resolve => {
     if (!window.speechSynthesis || !text) { setTimeout(resolve, text ? Math.min(6000, text.length * 60) : 400); return; }
     const u = new SpeechSynthesisUtterance(text);
-    u.rate = 0.98;
+    u.rate = 0.96; u.pitch = 1.0;
+    if (briefingVoice) u.voice = briefingVoice;
     let done = false;
     const finish = () => { if (!done) { done = true; resolve(); } };
     u.onend = finish; u.onerror = finish;
     // Fallback in case the utterance never fires end/error (happens on some browsers
     // when a tab loses focus) - never let the briefing hang indefinitely on one slide.
-    setTimeout(finish, Math.max(4000, text.length * 90));
+    setTimeout(finish, Math.max(5000, text.length * 100));
     speechSynthesis.speak(u);
   });
 }
@@ -3244,6 +3322,15 @@ async function playBriefingSlides(slides, routeName, totalKm) {
       ctx.fillText('Weather along the way', W * 0.08, H * 0.35);
       ctx.fillStyle = '#f0f2ec'; ctx.font = Math.round(W * 0.022) + 'px Inter, sans-serif';
       wrapText(ctx, s.text, W * 0.08, H * 0.45, W * 0.8, Math.round(W * 0.03));
+    } else if (s.type === 'overview') {
+      ctx.fillStyle = '#dd6a32'; ctx.textAlign = 'left';
+      ctx.font = '760 ' + Math.round(W * 0.03) + 'px Inter, sans-serif';
+      ctx.fillText('The route ahead', W * 0.08, H * 0.16);
+      const mapX = W * 0.12, mapY = H * 0.22, mapW = W * 0.76, mapH = H * 0.42;
+      drawRouteLine(ctx, briefingProj, rp, mapX, mapY, mapW, mapH, { color: 'rgba(240,242,236,.6)', width: 2.5 });
+      drawSegmentMarkers(ctx, briefingProj, s.segments, mapX, mapY, mapW, mapH, -1);
+      ctx.fillStyle = '#f0f2ec'; ctx.font = Math.round(W * 0.02) + 'px Inter, sans-serif';
+      wrapText(ctx, s.text, W * 0.08, H * 0.78, W * 0.84, Math.round(W * 0.028));
     } else if (s.type === 'segment') {
       const img = await loadImg(s.seg.imageUrl);
       if (img) {
@@ -3254,6 +3341,13 @@ async function playBriefingSlides(slides, routeName, totalKm) {
       const grad = ctx.createLinearGradient(0, H * 0.5, 0, H);
       grad.addColorStop(0, 'rgba(11,14,13,0)'); grad.addColorStop(1, 'rgba(11,14,13,0.92)');
       ctx.fillStyle = grad; ctx.fillRect(0, H * 0.5, W, H * 0.5);
+      // Mini-map inset - same route line as the overview slide, only this segment's
+      // position highlighted, so its place in the whole ride stays visible even while
+      // looking at a close-up image.
+      const insetW = W * 0.22, insetH = insetW * 0.62, insetX = W - insetW - W * 0.04, insetY = H * 0.04;
+      ctx.fillStyle = 'rgba(11,14,13,.72)'; ctx.fillRect(insetX - 8, insetY - 8, insetW + 16, insetH + 16);
+      drawRouteLine(ctx, briefingProj, rp, insetX, insetY, insetW, insetH, { color: 'rgba(240,242,236,.4)', width: 1.5 });
+      drawSegmentMarkers(ctx, briefingProj, s.allSegments, insetX, insetY, insetW, insetH, s.segIdx);
       ctx.fillStyle = '#f1844e'; ctx.textAlign = 'left';
       ctx.font = 'ui-monospace, monospace ' + Math.round(W * 0.016) + 'px';
       ctx.fillText('km ' + s.seg.km.toFixed(1) + ' · ' + s.seg.cls, W * 0.06, H * 0.68);

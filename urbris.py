@@ -310,6 +310,20 @@ def call_claude_web_search(prompt, akey, model="claude-sonnet-5"):
     texts = [b.get("text", "") for b in result.get("content", []) if b.get("type") == "text"]
     return "\n".join(texts)
 
+BRIEFING_WHY_NOTES = {
+    # Grounded in the same research already curated on /research - not invented for
+    # this feature. Handed to Claude as real context it may draw on, never as something
+    # to embellish beyond.
+    "curvature": "curvature is one of the most decisive infrastructure factors in motorcycle risk scoring, per real road-attribute research",
+    "safety_barrier": "iRAP's own Motorcycle Safety Review Panel found barrier design matters enormously for injury severity on a slide - a missing or damaged barrier is a real gap in what would catch you",
+    "delineation": "poor or missing lane markings make it harder to read a curve's true shape at speed, before you're already committed to it",
+    "road_surface": "unpaved or mixed surface changes available traction under lean angle, differently than it would for a car",
+    "road_condition": "poor surface condition affects traction and shock loading through the suspension",
+    "shoulder_type": "no shoulder means less room to recover if you're forced off your line",
+    "roadside_distance": "how close a fixed hazard sits to the road edge determines what's actually there if you do go off",
+    "street_lighting": "no lighting matters specifically for visibility if riding this after dark",
+}
+
 def extract_json_array(text):
     clean = re.sub(r"```json|```", "", text).strip()
     try:
@@ -1508,12 +1522,13 @@ class H(BaseHTTPRequestHandler):
                 self._json({"error": "Delete failed: " + str(e)}, code=500)
             return
         if self.path == "/briefing-script":
-            # Turns real route/weather/risk data into a short, stylized narration script
-            # for the in-app Route Briefing - Claude's job here is wording only, never
-            # inventing facts. Every number and flag it narrates comes from the request
-            # body, which the client built entirely from already-coded/already-fetched
-            # data (real Street View coding, real weather forecast) - nothing here is
-            # generated content standing in for something unverified.
+            # Turns real route/weather/risk data into a short, natural narration script
+            # for the in-app Route Briefing - Claude's job here is wording and weaving
+            # real "why it matters" context together, never inventing a fact. Every flag,
+            # number, and why-note handed to it below is real (the flags come from the
+            # actual iRAP coding; the why-notes are the same research basis already
+            # curated on /research) - Claude is only asked to phrase it naturally, not
+            # to originate any of the substance.
             akey = data.get("akey", "")
             if not akey:
                 self._json({"error": "No Anthropic API key"}, code=400)
@@ -1522,24 +1537,35 @@ class H(BaseHTTPRequestHandler):
             total_km = data.get("totalKm", 0)
             weather = data.get("weather", [])
             segments = data.get("segments", [])
+            for seg in segments:
+                seg["whyNotes"] = [BRIEFING_WHY_NOTES[f] for f in seg.get("flags", []) if f in BRIEFING_WHY_NOTES]
             prompt = (
-                "You are writing a short spoken pre-ride briefing for a motorcyclist, in the "
-                "style of an aviation pre-flight briefing - calm, direct, professional, no hype, "
-                "no invented details. Only use the facts given below; never invent road "
-                "conditions, weather, or risks not present in this data.\n\n"
-                "Route: " + str(route_name) + ", " + str(total_km) + " km total.\n"
+                "You are writing a short spoken pre-ride briefing for a motorcyclist - think "
+                "of a knowledgeable riding buddy giving you the rundown before you head out, "
+                "not a robotic checklist. Warm, direct, conversational - but every fact must "
+                "come from the data below. Never invent road conditions, weather, or risks not "
+                "present in this data. When a segment includes 'whyNotes', you may use that "
+                "real context to explain why a flag matters, in your own natural phrasing - "
+                "but don't state anything as fact that isn't grounded in the given data.\n\n"
+                "Route: " + str(route_name) + ", " + str(total_km) + " km total, "
+                + str(len(segments)) + " notable segment(s) flagged.\n"
                 "Weather along the way: " + json.dumps(weather) + "\n"
-                "Key risk segments (already coded from real imagery): " + json.dumps(segments) + "\n\n"
+                "Flagged segments (already coded from real imagery), in route order: "
+                + json.dumps(segments) + "\n\n"
                 "Respond with ONLY a JSON object, no other text, no markdown fences: "
-                '{"intro": "one or two sentence route overview", '
+                '{"intro": "two to three warm, natural sentences introducing the ride - '
+                'distance, general character, how many notable spots to watch for", '
                 '"weather": "one or two sentence weather summary, only mention genuinely '
-                'notable conditions", '
-                '"segments": ["one short spoken sentence per segment, same order as given, '
-                'each grounded only in that segment\'s actual flags"]}'
+                'notable conditions - if nothing stands out, say so briefly and move on", '
+                '"overview": "one or two sentences setting up that we will walk through '
+                'the flagged segments in order along the route", '
+                '"segments": ["two to four natural spoken sentences per segment, same order '
+                'as given - mention the segment\'s flags together naturally, and where '
+                'whyNotes exist, weave in why it actually matters, in your own words"]}'
             )
             try:
                 payload = json.dumps({
-                    "model": "claude-sonnet-5", "max_tokens": 1000,
+                    "model": "claude-sonnet-5", "max_tokens": 1800,
                     "messages": [{"role": "user", "content": prompt}]
                 }).encode()
                 req = urllib.request.Request(
