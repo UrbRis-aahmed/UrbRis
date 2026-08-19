@@ -1521,6 +1521,46 @@ class H(BaseHTTPRequestHandler):
             except Exception as e:
                 self._json({"error": "Delete failed: " + str(e)}, code=500)
             return
+        if self.path == "/briefing-audio":
+            # Real audio, not browser speechSynthesis - a genuine improvement in voice
+            # quality now, and also what unlocks a real downloadable video export later
+            # (browser TTS can't be reliably captured into a recording; a real audio
+            # file can be). Not building the export pipeline itself tonight - just the
+            # audio piece, as its own complete, testable unit.
+            openai_key = data.get("openaiKey", "")
+            text = data.get("text", "")
+            if not openai_key:
+                self._json({"error": "No OpenAI API key"}, code=400)
+                return
+            if not text:
+                self._json({"error": "No text to speak"}, code=400)
+                return
+            try:
+                payload = json.dumps({
+                    "model": "gpt-4o-mini-tts",
+                    "input": text[:6000],  # stay well under the model's ~2000-token input limit
+                    "voice": "onyx",
+                    "instructions": "Warm, calm, conversational tone - like a knowledgeable riding "
+                                     "buddy giving a pre-ride briefing, not a robotic announcement.",
+                    "response_format": "mp3"
+                }).encode()
+                req = urllib.request.Request(
+                    "https://api.openai.com/v1/audio/speech", data=payload,
+                    headers={"Content-Type": "application/json", "Authorization": "Bearer " + openai_key}
+                )
+                with urllib.request.urlopen(req, timeout=60) as r:
+                    audio_bytes = r.read()
+                self.send_response(200)
+                self.send_header("Content-Type", "audio/mpeg")
+                self.send_header("Content-Length", str(len(audio_bytes)))
+                self.end_headers()
+                self.wfile.write(audio_bytes)
+            except urllib.error.HTTPError as e:
+                self._json({"error": "OpenAI TTS failed: " + e.read().decode("utf-8", "ignore")}, code=e.code)
+            except Exception as e:
+                self._json({"error": "OpenAI TTS failed: " + str(e)}, code=500)
+            return
+
         if self.path == "/briefing-script":
             # Turns real route/weather/risk data into a short, natural narration script
             # for the in-app Route Briefing - Claude's job here is wording and weaving

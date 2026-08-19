@@ -346,6 +346,8 @@ body[data-workspace-mode="library"] .main{background:radial-gradient(circle at 7
 <input id="gkey" placeholder="AIza..." type="text"/>
 <label class="fl" style="margin-top:8px">Anthropic key</label>
 <input id="akey" placeholder="sk-ant-..." type="password"/>
+<label class="fl" style="margin-top:8px">OpenAI key <span style="color:var(--mu);font-weight:400">(optional - route briefing voice)</span></label>
+<input id="okey" placeholder="sk-..." type="password"/>
 <div class="hint" style="margin-top:8px">Not saved anywhere - cleared on refresh. Re-enter each session.</div>
 </div><div>
 <div class="sl">Route</div>
@@ -3271,7 +3273,7 @@ function closeBriefing() {
   $('briefingOverlay').style.display = 'none';
 }
 
-function speakAndWait(text) {
+function speakWithBrowserTTS(text) {
   return new Promise(resolve => {
     if (!window.speechSynthesis || !text) { setTimeout(resolve, text ? Math.min(6000, text.length * 60) : 400); return; }
     const u = new SpeechSynthesisUtterance(text);
@@ -3284,6 +3286,37 @@ function speakAndWait(text) {
     // when a tab loses focus) - never let the briefing hang indefinitely on one slide.
     setTimeout(finish, Math.max(5000, text.length * 100));
     speechSynthesis.speak(u);
+  });
+}
+
+// Real OpenAI audio when a key is provided (falls back to free browser TTS otherwise,
+// matching the 'optional' framing on the key field itself). Genuinely better voice
+// quality now, and - not built tonight, but worth knowing - this is also what makes a
+// real downloadable video export possible later, since a real audio file (unlike
+// browser TTS) can be properly captured into a MediaRecorder recording.
+function speakAndWait(text) {
+  const ok = $('okey') ? $('okey').value.trim() : '';
+  if (!ok || !text) return speakWithBrowserTTS(text);
+  return new Promise(async resolve => {
+    let done = false;
+    const finish = () => { if (!done) { done = true; resolve(); } };
+    try {
+      const r = await fetch('/briefing-audio', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ openaiKey: ok, text })
+      });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const blob = await r.blob();
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      audio.onended = () => { URL.revokeObjectURL(url); finish(); };
+      audio.onerror = () => { URL.revokeObjectURL(url); finish(); };
+      setTimeout(finish, Math.max(8000, text.length * 110)); // safety fallback, same purpose as the browser-TTS one
+      audio.play().catch(() => finish());
+    } catch (e) {
+      log('OpenAI voice failed (' + e.message + ') - falling back to browser voice for this line', 'wn');
+      speakWithBrowserTTS(text).then(finish);
+    }
   });
 }
 
