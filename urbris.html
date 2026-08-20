@@ -3792,6 +3792,9 @@ async function stopDriveMode(useRoute) {
     rp = pts;
     ust();
     $('fn').textContent = '+ Driven route (' + driveTracedPath.length + ' points)';
+    $('run').disabled = false;
+    $('run').textContent = 'Pull Images';
+    setRouteNextStep('images');
     showRiskBtn();
     $('xw').style.display = '';
     currentSavedRouteId = null;
