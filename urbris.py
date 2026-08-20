@@ -675,6 +675,43 @@ footer{padding:56px 0 80px;text-align:center;color:var(--mu2);font-size:12.5px;b
   </div>
 </section>
 
+<section class="wrap">
+  <h2>Riding abroad on a Canadian license</h2>
+  <p class="section-sub">General guidance for Canadian-licensed riders, not a definitive per-country list — requirements vary by destination, change over time, and sometimes depend on length of stay or the rental company itself. Always verify with your destination's embassy/consulate or the official Government of Canada travel advisory before you go.</p>
+
+  <div class="disclosure"><b>The one detail worth knowing before anything else:</b> an International Driving Permit only carries the vehicle classes already on your underlying Canadian license. If your license doesn't have a motorcycle endorsement, the IDP issued from it will not authorize you to ride a motorcycle abroad — it inherits your license's restrictions, it doesn't expand them.</div>
+
+  <div class="paper">
+    <div class="meta">What it is</div>
+    <h3>International Driving Permit (IDP)</h3>
+    <p>Not a license on its own — a standardized translation of your existing Canadian license, valid only alongside it. Recognized in roughly 186 countries that are party to the 1949 Convention on Road Traffic, plus some non-signatory countries that honor it anyway. Valid for one year from issue date.</p>
+  </div>
+
+  <div class="paper">
+    <div class="meta">How to get one, in Canada</div>
+    <h3>CAA is the only authorized issuer</h3>
+    <p>Issued exclusively by the Canadian Automobile Association under a UN-approved mandate — any IDP not issued by CAA is not genuine and will not be accepted abroad. $32 CAD as of December 2025. Requires a valid Canadian provincial/territorial license (learner's and suspended licenses don't qualify) plus two passport-style photos.</p>
+  </div>
+
+  <div class="paper">
+    <div class="meta">United States</div>
+    <h3>No IDP needed for a Canadian license</h3>
+    <p>Canadians with a provincial or territorial driver's license (including a motorcycle endorsement) can ride in the US on that license directly — no IDP required.</p>
+  </div>
+
+  <div class="paper">
+    <div class="meta">Worth knowing requirements do change</div>
+    <h3>Vietnam stopped recognizing the Canadian IDP</h3>
+    <p>Effective 2025, Vietnam no longer accepts the Canadian-issued IDP — a concrete example of why checking your specific destination before departure matters, not a one-time check you can rely on indefinitely.</p>
+  </div>
+
+  <div class="paper">
+    <div class="meta">Always check the actual current requirement</div>
+    <h3><a href="https://travel.gc.ca/travelling/documents/international-driving-permit" target="_blank" rel="noopener">Government of Canada — International Driving Permit guidance</a></h3>
+    <p>The authoritative, kept-current source. Look under the "Laws and culture" tab of the Travel Advice and Advisory for your specific destination, or contact that country's embassy/consulate in Canada directly.</p>
+  </div>
+</section>
+
 <footer class="wrap">Urbris — road risk, measured against real research, not intuition.</footer>
 </body>
 </html>"""
