@@ -3629,12 +3629,21 @@ async function onDriveMapClick(e) {
   const lat = e.latLng.lat(), lon = e.latLng.lng();
   $('driveStatus').textContent = 'Loading nearby roads...';
   try {
-    const d = 0.01; // roughly 1km padding
+    // Smaller than the coverage-scan's typical area on purpose - a big bbox with every
+    // road type can make Overpass slow enough to hit a timeout somewhere in the chain,
+    // which cuts the response short and produces a confusing 'Unexpected end of JSON
+    // input' error client-side even though the server-side JSON is always well-formed.
+    // A smaller area here starts fast, and the graph naturally extends as needed
+    // whenever a route runs to its edge (not built yet - current v1 is single-fetch).
+    const d = 0.006; // roughly 650m padding, ~1.3km box
     const bbox = (lat - d) + ',' + (lon - d) + ',' + (lat + d) + ',' + (lon + d);
     const r = await fetch('/roadsinarea', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bbox })
     });
-    const overpassData = await r.json();
+    const raw = await r.text();
+    let overpassData;
+    try { overpassData = JSON.parse(raw); }
+    catch (parseErr) { throw new Error('Server response was not valid JSON (likely a slow/timed-out Overpass query) - try again, or click a bit closer to a main road'); }
     if (overpassData.error) throw new Error(overpassData.error);
     driveGraph = buildDriveGraph(overpassData);
     if (!driveGraph.edges.length) throw new Error('No roads found near that point');
