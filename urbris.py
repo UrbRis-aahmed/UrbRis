@@ -712,29 +712,6 @@ footer{padding:56px 0 80px;text-align:center;color:var(--mu2);font-size:12.5px;b
   </div>
 </section>
 
-<section class="wrap">
-  <h2>Insurers writing motorcycle coverage in Canada</h2>
-  <p class="section-sub">Which companies actually write this line of business changes over time — always confirm current availability and get an actual quote from a licensed broker rather than treating this as a shopping list on its own.</p>
-
-  <div class="paper">
-    <div class="meta">National carriers</div>
-    <h3>Aviva, Intact, Economical, Travelers, Wawanesa, Echelon</h3>
-    <p>Aviva offers motorcycle coverage directly as well as through brokers, with a dedicated "Lifestyle" line built around riders specifically. Intact and Echelon distribute their motorcycle policies exclusively through licensed brokers, not direct-to-consumer.</p>
-  </div>
-
-  <div class="paper">
-    <div class="meta">Ontario-specific</div>
-    <h3>CAA Insurance Company</h3>
-    <p>Ontario-headquartered, affiliated with the Canadian Automobile Association — the same organization that issues International Driving Permits (see above).</p>
-  </div>
-
-  <div class="paper">
-    <div class="meta">Worth knowing before you assume it applies to you</div>
-    <h3>SGI is not an Ontario option</h3>
-    <p>SGI (Saskatchewan Government Insurance) is a provincial public auto insurer specific to Saskatchewan, not a company Ontario riders can get a policy from — it shows up on national "top providers" lists because it's genuinely one of Canada's largest motorcycle insurers by volume, just not one available outside its own province.</p>
-  </div>
-</section>
-
 <footer class="wrap">Urbris — road risk, measured against real research, not intuition.</footer>
 </body>
 </html>"""
