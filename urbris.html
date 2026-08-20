@@ -3296,7 +3296,7 @@ function speakWithBrowserTTS(text) {
 // browser TTS) can be properly captured into a MediaRecorder recording.
 function speakAndWait(text) {
   const ok = $('okey') ? $('okey').value.trim() : '';
-  if (!ok || !text) return speakWithBrowserTTS(text);
+  if (!ok || !text) { $('briefingStatus').textContent += ' · voice: browser'; return speakWithBrowserTTS(text); }
   return new Promise(async resolve => {
     let done = false;
     const finish = () => { if (!done) { done = true; resolve(); } };
@@ -3305,15 +3305,21 @@ function speakAndWait(text) {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ openaiKey: ok, text })
       });
-      if (!r.ok) throw new Error('HTTP ' + r.status);
+      if (!r.ok) {
+        let detail = 'HTTP ' + r.status;
+        try { const errBody = await r.json(); if (errBody.error) detail = errBody.error; } catch (e2) {}
+        throw new Error(detail);
+      }
       const blob = await r.blob();
       const url = URL.createObjectURL(blob);
       const audio = new Audio(url);
+      $('briefingStatus').textContent += ' · voice: OpenAI';
       audio.onended = () => { URL.revokeObjectURL(url); finish(); };
       audio.onerror = () => { URL.revokeObjectURL(url); finish(); };
       setTimeout(finish, Math.max(8000, text.length * 110)); // safety fallback, same purpose as the browser-TTS one
       audio.play().catch(() => finish());
     } catch (e) {
+      $('briefingStatus').textContent += ' · voice: browser (OpenAI failed: ' + e.message + ')';
       log('OpenAI voice failed (' + e.message + ') - falling back to browser voice for this line', 'wn');
       speakWithBrowserTTS(text).then(finish);
     }
