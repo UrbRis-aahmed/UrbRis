@@ -352,6 +352,7 @@ body[data-workspace-mode="library"] .main{background:radial-gradient(circle at 7
 </div><div>
 <div class="sl">Route</div>
 <button class="savebtn" id="newRouteBtn" onclick="startDraw()">New route</button>
+<button class="xb" id="driveModeBtn" onclick="startDriveMode()" style="margin-top:8px;width:100%">Drive it (arrow keys)</button>
 <div class="hint" style="margin-top:8px">Draw your route on the map to begin - trace it like a pencil, lift and draw again to continue.</div>
 <div class="hint" style="margin-top:8px">Or import a route straight from a GoPro/DJI video's GPS track - no need to draw it by hand.</div>
 <input accept="video/mp4,video/quicktime,.srt" id="videoImportInput" multiple="" style="margin-top:6px" type="file"/>
@@ -531,6 +532,17 @@ body[data-workspace-mode="library"] .main{background:radial-gradient(circle at 7
   <div id="briefingMiniMap" style="display:none;position:absolute;border-radius:8px;overflow:hidden;border:1px solid rgba(229,235,229,.16)"></div>
   <button onclick="closeBriefing()" style="position:absolute;top:18px;right:18px;background:rgba(24,32,29,.85);border:1px solid rgba(229,235,229,.16);color:#f0f2ec;border-radius:50%;width:38px;height:38px;font-size:18px;cursor:pointer">&times;</button>
   <div id="briefingStatus" style="position:absolute;bottom:18px;left:18px;right:18px;color:#8d9890;font-size:12px;font-family:ui-monospace,monospace"></div>
+</div>
+<div id="driveOverlay" style="display:none;position:fixed;inset:0;z-index:200;background:#0b0e0d">
+  <div id="driveMap" style="width:100%;height:100%"></div>
+  <div style="position:absolute;top:18px;left:18px;right:18px;display:flex;justify-content:space-between;align-items:flex-start;pointer-events:none">
+    <div style="background:rgba(24,32,29,.85);border:1px solid rgba(229,235,229,.16);border-radius:8px;padding:10px 16px;color:#f0f2ec;font-size:12.5px;font-family:ui-monospace,monospace;pointer-events:auto">
+      Arrow keys to steer · click the map to set a starting point<br/>
+      <span id="driveStatus" style="color:#8d9890">Click a starting point on the map</span>
+    </div>
+    <button onclick="stopDriveMode(false)" style="background:rgba(24,32,29,.85);border:1px solid rgba(229,235,229,.16);color:#f0f2ec;border-radius:50%;width:38px;height:38px;font-size:18px;cursor:pointer;pointer-events:auto">&times;</button>
+  </div>
+  <button onclick="stopDriveMode(true)" id="finishDriveBtn" style="display:none;position:absolute;bottom:24px;left:50%;transform:translateX(-50%);background:#dd6a32;border:none;color:#fff;border-radius:980px;padding:14px 32px;font-size:14px;font-weight:600;cursor:pointer">Stop &amp; use this route</button>
 </div>
 <div id="vm" style="display:none">
 <div id="drawBar" style="display:none;margin-bottom:10px;gap:8px;align-items:center;flex-wrap:wrap">
@@ -3485,6 +3497,239 @@ async function playBriefingSlides(slides, routeName, totalKm) {
   }
   $('briefingStatus').textContent = 'Briefing complete';
   setTimeout(() => { if (briefingActive) closeBriefing(); }, 1500);
+}
+
+// Drive Mode: build a navigable graph from real OSM road geometry, then let the rider
+// "drive" it with arrow keys - direction is relative to current heading (not a fixed
+// N/S/E/W grid) since real intersections rarely line up like Pac-Man's maze. Once
+// stopped, the traced path feeds into the exact same rp/ust()/Pull-Images pipeline
+// every other route-creation method already uses - no new downstream code needed.
+//
+// The graph-building and direction-selection logic below was unit-tested against
+// synthetic OSM-shaped data before ever touching the browser: a 4-way intersection
+// (confirmed straight/left/right each pick the correct real road relative to heading)
+// and a T-junction with no straight-through option (confirmed no crash, sensible
+// fallback). The animation loop, keyboard handling, and map rendering below could not
+// be tested the same way - real browser behavior only confirms that part.
+
+function driveCoordKey(lat, lon) { return Math.round(lat * 1e6) + ',' + Math.round(lon * 1e6); }
+
+function buildDriveGraph(overpassData) {
+  const coordWays = new Map();
+  const ways = (overpassData.elements || []).filter(el => el.type === 'way' && el.geometry);
+  ways.forEach((w, wi) => {
+    w.geometry.forEach(pt => {
+      const k = driveCoordKey(pt.lat, pt.lon);
+      if (!coordWays.has(k)) coordWays.set(k, new Set());
+      coordWays.get(k).add(wi);
+    });
+  });
+  const intersectionKeys = new Set();
+  coordWays.forEach((wset, k) => { if (wset.size >= 2) intersectionKeys.add(k); });
+
+  const edges = [], intersections = new Map();
+  ways.forEach(w => {
+    let segStart = 0;
+    for (let i = 1; i < w.geometry.length; i++) {
+      const k = driveCoordKey(w.geometry[i].lat, w.geometry[i].lon);
+      const isEnd = i === w.geometry.length - 1;
+      if (intersectionKeys.has(k) || isEnd) {
+        const pts = w.geometry.slice(segStart, i + 1);
+        if (pts.length >= 2) {
+          const startKey = driveCoordKey(pts[0].lat, pts[0].lon);
+          const endKey = driveCoordKey(pts[pts.length - 1].lat, pts[pts.length - 1].lon);
+          let len = 0; const cum = [0];
+          for (let j = 1; j < pts.length; j++) { len += hav(pts[j - 1], pts[j]); cum.push(len); }
+          const edgeIdx = edges.length;
+          edges.push({ pts, cum, len, startKey, endKey, name: w.tags && w.tags.name });
+          if (!intersections.has(startKey)) intersections.set(startKey, []);
+          if (!intersections.has(endKey)) intersections.set(endKey, []);
+          intersections.get(startKey).push({ edgeIdx, dir: 1 });
+          intersections.get(endKey).push({ edgeIdx, dir: -1 });
+        }
+        segStart = i;
+      }
+    }
+  });
+  return { edges, intersections };
+}
+
+function driveEdgePointAt(edge, dist) {
+  dist = Math.max(0, Math.min(edge.len, dist));
+  for (let i = 1; i < edge.cum.length; i++) {
+    if (dist <= edge.cum[i]) {
+      const segLen = edge.cum[i] - edge.cum[i - 1];
+      const f = segLen > 0 ? (dist - edge.cum[i - 1]) / segLen : 0;
+      const a = edge.pts[i - 1], b = edge.pts[i];
+      return { lat: a.lat + (b.lat - a.lat) * f, lon: a.lon + (b.lon - a.lon) * f };
+    }
+  }
+  return edge.pts[edge.pts.length - 1];
+}
+
+function driveEdgeBearingAt(edge, dist, dir) {
+  const d = Math.max(2, Math.min(Math.max(edge.len - 2, 2), dist));
+  const p1 = driveEdgePointAt(edge, dir === 1 ? d - 2 : d + 2);
+  const p2 = driveEdgePointAt(edge, dir === 1 ? d + 2 : d - 2);
+  return brng(p1, p2);
+}
+
+function driveAngDiff(a, b) { return (b - a + 540) % 360 - 180; }
+
+function chooseNextEdge(graph, atKey, arrivingFromEdgeIdx, currentHeading, key) {
+  const candidates = (graph.intersections.get(atKey) || []).filter(c => c.edgeIdx !== arrivingFromEdgeIdx);
+  if (!candidates.length) return null; // dead end
+  const scored = candidates.map(c => {
+    const edge = graph.edges[c.edgeIdx];
+    const startDist = c.dir === 1 ? 0 : edge.len;
+    const bearing = driveEdgeBearingAt(edge, startDist, c.dir);
+    return { ...c, bearing, turn: driveAngDiff(currentHeading, bearing) };
+  });
+  if (!key || key === 'ArrowUp') return scored.reduce((a, b) => Math.abs(a.turn) < Math.abs(b.turn) ? a : b);
+  if (key === 'ArrowRight') {
+    const r = scored.filter(s => s.turn > 15);
+    return r.length ? r.reduce((a, b) => a.turn < b.turn ? a : b) : scored.reduce((a, b) => Math.abs(a.turn) < Math.abs(b.turn) ? a : b);
+  }
+  if (key === 'ArrowLeft') {
+    const l = scored.filter(s => s.turn < -15);
+    return l.length ? l.reduce((a, b) => a.turn > b.turn ? a : b) : scored.reduce((a, b) => Math.abs(a.turn) < Math.abs(b.turn) ? a : b);
+  }
+  return scored.reduce((a, b) => Math.abs(a.turn) < Math.abs(b.turn) ? a : b);
+}
+
+let driveGraph = null, driveEdgeIdx = null, driveDist = 0, driveDir = 1, driveHeading = 0;
+let driveHeldKey = null, driveTracedPath = [], driveActive = false, driveMap = null, driveMarker = null, drivePathLine = null;
+let driveAnimHandle = null, driveLastTs = 0;
+const DRIVE_SPEED_MPS = 18; // roughly 65 km/h - fast enough to cover ground, slow enough to react at intersections
+
+async function startDriveMode() {
+  const gk = $('gkey').value.trim();
+  if (!gk) { log('Enter your Google Maps API key first', 'er'); alert('Enter your Google Maps API key first.'); return; }
+  driveActive = true;
+  driveGraph = null; driveEdgeIdx = null; driveTracedPath = [];
+  $('driveOverlay').style.display = '';
+  $('driveStatus').textContent = 'Click a starting point on the map';
+  $('finishDriveBtn').style.display = 'none';
+
+  if (!driveMap) {
+    driveMap = new google.maps.Map($('driveMap'), {
+      center: (rp.length ? { lat: rp[0].lat, lng: rp[0].lon } : { lat: 43.25, lng: -79.87 }),
+      zoom: 15, styles: mapStyles(false), disableDefaultUI: true, zoomControl: true
+    });
+    driveMap.addListener('click', onDriveMapClick);
+  } else if (rp.length) {
+    driveMap.setCenter({ lat: rp[0].lat, lng: rp[0].lon });
+  }
+  window.addEventListener('keydown', onDriveKeyDown);
+  window.addEventListener('keyup', onDriveKeyUp);
+}
+
+async function onDriveMapClick(e) {
+  if (!driveActive || driveGraph) return; // already started - ignore further clicks
+  const lat = e.latLng.lat(), lon = e.latLng.lng();
+  $('driveStatus').textContent = 'Loading nearby roads...';
+  try {
+    const d = 0.01; // roughly 1km padding
+    const bbox = (lat - d) + ',' + (lon - d) + ',' + (lat + d) + ',' + (lon + d);
+    const r = await fetch('/roadsinarea', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bbox })
+    });
+    const overpassData = await r.json();
+    if (overpassData.error) throw new Error(overpassData.error);
+    driveGraph = buildDriveGraph(overpassData);
+    if (!driveGraph.edges.length) throw new Error('No roads found near that point');
+
+    // Snap to the nearest edge and the point on it closest to the click
+    let best = null, bestD = Infinity;
+    driveGraph.edges.forEach((edge, ei) => {
+      for (let i = 0; i < edge.cum.length; i++) {
+        const dd = hav({ lat, lon }, edge.pts[i]);
+        if (dd < bestD) { bestD = dd; best = { edgeIdx: ei, dist: edge.cum[i] }; }
+      }
+    });
+    if (!best) throw new Error('Could not find a road to start on');
+    driveEdgeIdx = best.edgeIdx; driveDist = best.dist; driveDir = 1;
+    driveHeading = driveEdgeBearingAt(driveGraph.edges[driveEdgeIdx], driveDist, driveDir);
+    driveTracedPath = [driveEdgePointAt(driveGraph.edges[driveEdgeIdx], driveDist)];
+
+    if (drivePathLine) drivePathLine.setMap(null);
+    drivePathLine = new google.maps.Polyline({ path: [], strokeColor: '#f1844e', strokeWeight: 4, map: driveMap });
+    if (!driveMarker) {
+      driveMarker = new google.maps.Marker({ map: driveMap, icon: { path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW, scale: 5, fillColor: '#f1844e', fillOpacity: 1, strokeColor: '#0b0e0d', strokeWeight: 1 } });
+    }
+    $('driveStatus').textContent = 'Ready - use arrow keys to ride';
+    $('finishDriveBtn').style.display = '';
+    driveLastTs = performance.now();
+    driveAnimHandle = requestAnimationFrame(driveTick);
+  } catch (e) {
+    $('driveStatus').textContent = 'Failed to load roads: ' + e.message;
+    log('Drive Mode setup failed: ' + e.message, 'er');
+  }
+}
+
+function onDriveKeyDown(e) {
+  if (!driveActive) return;
+  if (['ArrowUp', 'ArrowLeft', 'ArrowRight', 'ArrowDown'].includes(e.key)) { driveHeldKey = e.key; e.preventDefault(); }
+}
+function onDriveKeyUp(e) {
+  if (e.key === driveHeldKey) driveHeldKey = null;
+}
+
+function driveTick(ts) {
+  if (!driveActive || !driveGraph || driveEdgeIdx == null) return;
+  const dt = Math.min(0.1, (ts - driveLastTs) / 1000); // clamp so a tab-switch pause doesn't jump the marker
+  driveLastTs = ts;
+  const edge = driveGraph.edges[driveEdgeIdx];
+  driveDist += DRIVE_SPEED_MPS * dt * driveDir;
+
+  if (driveDist >= edge.len || driveDist <= 0) {
+    const arrivedAtStart = driveDist <= 0;
+    const atKey = arrivedAtStart ? edge.startKey : edge.endKey;
+    const next = chooseNextEdge(driveGraph, atKey, driveEdgeIdx, driveHeading, driveHeldKey);
+    if (!next) {
+      // dead end - stop cleanly rather than run off the graph
+      $('driveStatus').textContent = 'Dead end - reverse or click Stop to finish here';
+      driveDist = Math.max(0, Math.min(edge.len, driveDist));
+    } else {
+      driveEdgeIdx = next.edgeIdx; driveDir = next.dir;
+      const newEdge = driveGraph.edges[driveEdgeIdx];
+      driveDist = next.dir === 1 ? 0 : newEdge.len;
+      driveHeading = driveEdgeBearingAt(newEdge, driveDist, driveDir);
+    }
+  }
+
+  const pos = driveEdgePointAt(driveGraph.edges[driveEdgeIdx], driveDist);
+  driveTracedPath.push(pos);
+  if (driveMarker) driveMarker.setPosition({ lat: pos.lat, lng: pos.lon });
+  if (driveMarker) driveMarker.setIcon({ path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW, scale: 5, rotation: driveHeading, fillColor: '#f1844e', fillOpacity: 1, strokeColor: '#0b0e0d', strokeWeight: 1 });
+  if (drivePathLine) drivePathLine.setPath(driveTracedPath.map(p => ({ lat: p.lat, lng: p.lon })));
+  driveMap.panTo({ lat: pos.lat, lng: pos.lon });
+
+  driveAnimHandle = requestAnimationFrame(driveTick);
+}
+
+function stopDriveMode(useRoute) {
+  driveActive = false;
+  if (driveAnimHandle) cancelAnimationFrame(driveAnimHandle);
+  window.removeEventListener('keydown', onDriveKeyDown);
+  window.removeEventListener('keyup', onDriveKeyUp);
+  $('driveOverlay').style.display = 'none';
+
+  if (useRoute && driveTracedPath.length > 1) {
+    // Feeds into the exact same pipeline a hand-drawn or imported route uses -
+    // nothing new needed downstream.
+    rp = driveTracedPath.map(p => ({ lat: p.lat, lon: p.lon }));
+    ust();
+    $('fn').textContent = '+ Driven route (' + driveTracedPath.length + ' points)';
+    showRiskBtn();
+    $('xw').style.display = '';
+    currentSavedRouteId = null;
+    res = sp.map(pt => ({ km: pt.distKm, lat: pt.lat, lon: pt.lon, heading: pt.heading, imageUrl: '', hasCoverage: false, etaSec: 0 }));
+    rebuildViewFromRes();
+    sv('map');
+    saveCurrentRoute();
+    log('Route ready from Drive Mode: ' + (td(rp) / 1000).toFixed(1) + ' km - click Pull Images to continue', 'ok');
+  }
 }
 
 function extractDistinctCurves(dense, pts, maxN, minSepM) {
