@@ -3696,12 +3696,13 @@ function onDriveKeyDown(e) {
 function onDriveKeyUp(e) {
   if (e.key === driveHeldKey) driveHeldKey = null;
 }
-let driveDebugLastKeyEver = null, driveDebugLastChoice = null;
+let driveDebugLastKeyEver = null, driveDebugLastChoice = null, driveFrameCount = 0, driveLastPannedHeading = null;
 
 function driveTick(ts) {
   if (!driveActive || !driveGraph || driveEdgeIdx == null) return;
   const dt = Math.min(0.1, (ts - driveLastTs) / 1000); // clamp so a tab-switch pause doesn't jump the marker
   driveLastTs = ts;
+  driveFrameCount++;
   const edge = driveGraph.edges[driveEdgeIdx];
   driveDist += DRIVE_SPEED_MPS * dt * driveDir;
 
@@ -3731,9 +3732,23 @@ function driveTick(ts) {
   const pos = driveEdgePointAt(driveGraph.edges[driveEdgeIdx], driveDist);
   driveTracedPath.push(pos);
   if (driveMarker) driveMarker.setPosition({ lat: pos.lat, lng: pos.lon });
-  if (driveMarker) driveMarker.setIcon({ path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW, scale: 5, rotation: driveHeading, fillColor: '#f1844e', fillOpacity: 1, strokeColor: '#0b0e0d', strokeWeight: 1 });
-  if (drivePathLine) drivePathLine.setPath(driveTracedPath.map(p => ({ lat: p.lat, lng: p.lon })));
-  driveMap.panTo({ lat: pos.lat, lng: pos.lon });
+  // Only touch the icon when heading actually changed meaningfully, not every frame
+  // with the same rotation value repeated - setIcon allocates a new icon object each
+  // call, real but smaller cost than the two fixes below.
+  if (driveMarker && (driveLastPannedHeading == null || Math.abs(driveAngDiff(driveLastPannedHeading, driveHeading)) > 3)) {
+    driveMarker.setIcon({ path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW, scale: 5, rotation: driveHeading, fillColor: '#f1844e', fillOpacity: 1, strokeColor: '#0b0e0d', strokeWeight: 1 });
+    driveLastPannedHeading = driveHeading;
+  }
+  // The real fix: append one point to the existing MVCArray instead of rebuilding and
+  // re-handing the WHOLE traced path to Maps every frame. The old setPath() call here
+  // was an O(n) operation that grew every frame for the rest of the drive - the single
+  // biggest cause of the reported slowness, worsening the longer a drive went on.
+  if (drivePathLine) drivePathLine.getPath().push(new google.maps.LatLng(pos.lat, pos.lon));
+  // panTo() runs its own internal smoothing animation - calling it 60 times a second
+  // makes it fight itself, restarting that animation before the last one finishes.
+  // Recentering every 6th frame (~10x/sec) tracks the marker plenty smoothly without
+  // that self-interruption.
+  if (driveFrameCount % 6 === 0) driveMap.panTo({ lat: pos.lat, lng: pos.lon });
   // Visible diagnostics - if turning still doesn't work, this line will show exactly
   // where the failure actually is (key never detected at all vs. detected but no real
   // turn choice existed vs. a turn was chosen but the map didn't update).
