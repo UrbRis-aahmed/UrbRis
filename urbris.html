@@ -3743,7 +3743,7 @@ function driveTick(ts) {
   driveAnimHandle = requestAnimationFrame(driveTick);
 }
 
-function stopDriveMode(useRoute) {
+async function stopDriveMode(useRoute) {
   driveActive = false;
   if (driveAnimHandle) cancelAnimationFrame(driveAnimHandle);
   window.removeEventListener('keydown', onDriveKeyDown, true);
@@ -3751,9 +3751,30 @@ function stopDriveMode(useRoute) {
   $('driveOverlay').style.display = 'none';
 
   if (useRoute && driveTracedPath.length > 1) {
+    // Every other route-creation method (finishDraw, GPX import) snaps to Google's own
+    // Roads API immediately, before ever setting rp - Drive Mode was skipping this,
+    // using raw OSM geometry directly. OSM and Google Maps don't always align their
+    // road centerlines pixel-perfectly, so the traced path could visibly drift off
+    // Google's rendered road even though it was accurate to OSM's own data. This
+    // applies the same correction every sibling feature already relies on.
+    let pts = samp(driveTracedPath, 15); // one traced point per animation frame is far
+    // more than needed and would mean dozens/hundreds of chunked Roads API calls for
+    // anything but a very short drive - 15m spacing is plenty for what a route needs
+    const gk = $('gkey').value.trim();
+    if (gk) {
+      log('Snapping driven route to Google\'s road data (' + pts.length + ' points)...', '');
+      try {
+        const snapped = await snapDrawnRoute(pts, gk);
+        if (snapped && snapped.length) pts = snapped;
+      } catch (e) {
+        log('Snapping failed (' + e.message + ') - using the raw driven path instead', 'wn');
+      }
+    } else {
+      log('No Google Maps key entered - using the raw driven path unsnapped', 'wn');
+    }
     // Feeds into the exact same pipeline a hand-drawn or imported route uses -
     // nothing new needed downstream.
-    rp = driveTracedPath.map(p => ({ lat: p.lat, lon: p.lon }));
+    rp = pts;
     ust();
     $('fn').textContent = '+ Driven route (' + driveTracedPath.length + ' points)';
     showRiskBtn();
