@@ -3619,14 +3619,15 @@ async function startDriveMode() {
   if (!driveMap) {
     driveMap = new google.maps.Map($('driveMap'), {
       center: (rp.length ? { lat: rp[0].lat, lng: rp[0].lon } : { lat: 43.25, lng: -79.87 }),
-      zoom: 18, styles: mapStyles(false), disableDefaultUI: true, zoomControl: true
+      zoom: 18, styles: mapStyles(false), disableDefaultUI: true, zoomControl: true, keyboardShortcuts: false
     });
     driveMap.addListener('click', onDriveMapClick);
   } else if (rp.length) {
     driveMap.setCenter({ lat: rp[0].lat, lng: rp[0].lon });
   }
-  window.addEventListener('keydown', onDriveKeyDown);
-  window.addEventListener('keyup', onDriveKeyUp);
+  window.addEventListener('keydown', onDriveKeyDown, true); // capture phase - fires
+  // before Google Maps' own internal key handling has a chance to consume it
+  window.addEventListener('keyup', onDriveKeyUp, true);
 }
 
 async function onDriveMapClick(e) {
@@ -3688,12 +3689,14 @@ function onDriveKeyDown(e) {
     driveLastKey = e.key; driveLastKeyTs = performance.now(); // remembered separately from
     // driveHeldKey - a quick tap that's released before the exact transition frame should
     // still count, not just a key still physically held down at that instant
+    driveDebugLastKeyEver = e.key; // never cleared - visible proof a keypress was ever detected at all
     e.preventDefault();
   }
 }
 function onDriveKeyUp(e) {
   if (e.key === driveHeldKey) driveHeldKey = null;
 }
+let driveDebugLastKeyEver = null, driveDebugLastChoice = null;
 
 function driveTick(ts) {
   if (!driveActive || !driveGraph || driveEdgeIdx == null) return;
@@ -3709,7 +3712,9 @@ function driveTick(ts) {
     // exact instant this frame happens to cross the intersection - frame-perfect timing
     // isn't a fair ask, and this is the actual fix for turns not registering.
     const recentKey = (driveLastKey && (ts - driveLastKeyTs) < 700) ? driveLastKey : (driveHeldKey || null);
+    const candidateCount = (driveGraph.intersections.get(atKey) || []).filter(c => c.edgeIdx !== driveEdgeIdx).length;
     const next = chooseNextEdge(driveGraph, atKey, driveEdgeIdx, driveHeading, recentKey);
+    driveDebugLastChoice = 'key=' + (recentKey || 'none') + ' · choices=' + candidateCount + ' · picked=' + (next ? (driveGraph.edges[next.edgeIdx].name || 'unnamed') : 'dead-end');
     driveLastKey = null; // consumed - don't let one press steer through two intersections in a row
     if (!next) {
       // dead end - stop cleanly rather than run off the graph
@@ -3729,6 +3734,11 @@ function driveTick(ts) {
   if (driveMarker) driveMarker.setIcon({ path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW, scale: 5, rotation: driveHeading, fillColor: '#f1844e', fillOpacity: 1, strokeColor: '#0b0e0d', strokeWeight: 1 });
   if (drivePathLine) drivePathLine.setPath(driveTracedPath.map(p => ({ lat: p.lat, lng: p.lon })));
   driveMap.panTo({ lat: pos.lat, lng: pos.lon });
+  // Visible diagnostics - if turning still doesn't work, this line will show exactly
+  // where the failure actually is (key never detected at all vs. detected but no real
+  // turn choice existed vs. a turn was chosen but the map didn't update).
+  $('driveStatus').textContent = 'key ever pressed: ' + (driveDebugLastKeyEver || 'none yet')
+    + (driveDebugLastChoice ? ' · last intersection: ' + driveDebugLastChoice : '');
 
   driveAnimHandle = requestAnimationFrame(driveTick);
 }
@@ -3736,8 +3746,8 @@ function driveTick(ts) {
 function stopDriveMode(useRoute) {
   driveActive = false;
   if (driveAnimHandle) cancelAnimationFrame(driveAnimHandle);
-  window.removeEventListener('keydown', onDriveKeyDown);
-  window.removeEventListener('keyup', onDriveKeyUp);
+  window.removeEventListener('keydown', onDriveKeyDown, true);
+  window.removeEventListener('keyup', onDriveKeyUp, true);
   $('driveOverlay').style.display = 'none';
 
   if (useRoute && driveTracedPath.length > 1) {
