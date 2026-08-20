@@ -3600,7 +3600,12 @@ function chooseNextEdge(graph, atKey, arrivingFromEdgeIdx, currentHeading, key) 
 let driveGraph = null, driveEdgeIdx = null, driveDist = 0, driveDir = 1, driveHeading = 0;
 let driveHeldKey = null, driveTracedPath = [], driveActive = false, driveMap = null, driveMarker = null, drivePathLine = null;
 let driveAnimHandle = null, driveLastTs = 0;
-const DRIVE_SPEED_MPS = 18; // roughly 65 km/h - fast enough to cover ground, slow enough to react at intersections
+const DRIVE_SPEED_MPS = 35; // arcade pace, not literal real-world speed - this is a
+// game-feel control scheme, not a riding simulator, and at a legible zoom level 18
+// felt too slow to be fun or intersections too far apart to react to comfortably
+let driveLastKey = null, driveLastKeyTs = 0; // most recent key press, with a timestamp -
+// see chooseNextEdge's caller below for why this replaces "whatever's held at the
+// exact instant of crossing"
 
 async function startDriveMode() {
   const gk = $('gkey').value.trim();
@@ -3614,7 +3619,7 @@ async function startDriveMode() {
   if (!driveMap) {
     driveMap = new google.maps.Map($('driveMap'), {
       center: (rp.length ? { lat: rp[0].lat, lng: rp[0].lon } : { lat: 43.25, lng: -79.87 }),
-      zoom: 15, styles: mapStyles(false), disableDefaultUI: true, zoomControl: true
+      zoom: 18, styles: mapStyles(false), disableDefaultUI: true, zoomControl: true
     });
     driveMap.addListener('click', onDriveMapClick);
   } else if (rp.length) {
@@ -3678,7 +3683,13 @@ async function onDriveMapClick(e) {
 
 function onDriveKeyDown(e) {
   if (!driveActive) return;
-  if (['ArrowUp', 'ArrowLeft', 'ArrowRight', 'ArrowDown'].includes(e.key)) { driveHeldKey = e.key; e.preventDefault(); }
+  if (['ArrowUp', 'ArrowLeft', 'ArrowRight', 'ArrowDown'].includes(e.key)) {
+    driveHeldKey = e.key;
+    driveLastKey = e.key; driveLastKeyTs = performance.now(); // remembered separately from
+    // driveHeldKey - a quick tap that's released before the exact transition frame should
+    // still count, not just a key still physically held down at that instant
+    e.preventDefault();
+  }
 }
 function onDriveKeyUp(e) {
   if (e.key === driveHeldKey) driveHeldKey = null;
@@ -3694,7 +3705,12 @@ function driveTick(ts) {
   if (driveDist >= edge.len || driveDist <= 0) {
     const arrivedAtStart = driveDist <= 0;
     const atKey = arrivedAtStart ? edge.startKey : edge.endKey;
-    const next = chooseNextEdge(driveGraph, atKey, driveEdgeIdx, driveHeading, driveHeldKey);
+    // A key pressed anywhere in the last 700ms counts, not just one held down at the
+    // exact instant this frame happens to cross the intersection - frame-perfect timing
+    // isn't a fair ask, and this is the actual fix for turns not registering.
+    const recentKey = (driveLastKey && (ts - driveLastKeyTs) < 700) ? driveLastKey : (driveHeldKey || null);
+    const next = chooseNextEdge(driveGraph, atKey, driveEdgeIdx, driveHeading, recentKey);
+    driveLastKey = null; // consumed - don't let one press steer through two intersections in a row
     if (!next) {
       // dead end - stop cleanly rather than run off the graph
       $('driveStatus').textContent = 'Dead end - reverse or click Stop to finish here';
