@@ -1450,7 +1450,21 @@ class H(BaseHTTPRequestHandler):
             self._handle_import_local(body, content_type)
             return
         body = self.rfile.read(content_length)
-        data = json.loads(body)
+        # An empty body (no Content-Length, or a POST sent with no body at all - e.g.
+        # fetch('/x', {method:'POST'}) with nothing in the body key) previously crashed
+        # this whole handler with an unhandled JSONDecodeError before any endpoint's own
+        # code ever ran - confirmed directly from a real Render traceback. Every endpoint
+        # already reads its fields via data.get(key, default), so treating an empty body
+        # as {} is both safe and correct; only genuinely malformed non-empty JSON should
+        # produce a real error now, and it gets a clean 400 instead of an unhandled crash.
+        if not body.strip():
+            data = {}
+        else:
+            try:
+                data = json.loads(body)
+            except json.JSONDecodeError as e:
+                self._json({"error": "Request body was not valid JSON: " + str(e)}, code=400)
+                return
         if self.path == "/discover-routes":
             lat = data.get("lat")
             lon = data.get("lon")
