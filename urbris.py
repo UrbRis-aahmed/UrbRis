@@ -1752,17 +1752,24 @@ class H(BaseHTTPRequestHandler):
             return
 
         if self.path == "/admin/refresh-hamilton-roads":
-            # Manually triggerable now (to seed the cache the first time), and also
-            # called automatically on a ~30-day cadence from the same poller loop that
-            # already runs the daily research scan and batch-completion checks.
+            # Runs in a background thread rather than blocking this HTTP request/
+            # response cycle - fetching Hamilton's entire road network genuinely takes
+            # long enough that Render's own proxy times the connection out (502 Bad
+            # Gateway) before the synchronous version could ever finish. The automatic
+            # monthly refresh was already architected correctly (it runs inside the
+            # poller loop, no HTTP request involved at all) - only this manual trigger
+            # had the blocking-request problem.
             if not supabase_configured():
                 self._json({"error": "Supabase not configured"}, code=500)
                 return
-            try:
-                result = refresh_hamilton_roads_cache()
-                self._json(result)
-            except Exception as e:
-                self._json({"error": "Refresh failed: " + str(e)}, code=500)
+            def _run_refresh_bg():
+                try:
+                    result = refresh_hamilton_roads_cache()
+                    print("  [hamilton-roads] manual refresh finished:", result)
+                except Exception as e:
+                    print("  [hamilton-roads] manual refresh failed:", e)
+            threading.Thread(target=_run_refresh_bg, daemon=True).start()
+            self._json({"started": True, "message": "Refresh started in the background - this can take a minute or more for the whole city. Check /hamilton-roads shortly, or watch the server logs."})
             return
 
         if self.path == "/roadsinarea":
