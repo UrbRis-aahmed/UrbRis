@@ -3612,6 +3612,7 @@ async function startDriveMode() {
   if (!gk) { log('Enter your Google Maps API key first', 'er'); alert('Enter your Google Maps API key first.'); return; }
   driveActive = true;
   driveGraph = null; driveEdgeIdx = null; driveTracedPath = [];
+  driveExpanding = false; driveExpandedKeys.clear();
   $('driveOverlay').style.display = '';
   $('driveStatus').textContent = 'Click a starting point on the map';
   $('finishDriveBtn').style.display = 'none';
@@ -3698,6 +3699,39 @@ function onDriveKeyUp(e) {
 }
 let driveDebugLastKeyEver = null, driveDebugLastChoice = null, driveFrameCount = 0, driveLastPannedHeading = null;
 
+let driveExpanding = false;
+const driveExpandedKeys = new Set(); // dead-end keys already tried, so we don't
+// re-fetch the same spot every single frame while waiting on a slow request
+
+async function expandDriveGraph(lat, lon) {
+  if (driveExpanding) return;
+  driveExpanding = true;
+  $('driveStatus').textContent = 'Loading more roads ahead...';
+  try {
+    const d = 0.006;
+    const bbox = (lat - d) + ',' + (lon - d) + ',' + (lat + d) + ',' + (lon + d);
+    const r = await fetch('/roadsinarea', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bbox }) });
+    const raw = await r.text();
+    let overpassData;
+    try { overpassData = JSON.parse(raw); } catch (e) { throw new Error('server response was not valid JSON, likely a timed-out Overpass query'); }
+    if (overpassData.error) throw new Error(overpassData.error);
+    const newGraph = buildDriveGraph(overpassData);
+    // Merge into the existing graph in place - offset new edge indices past the
+    // current edge count so they don't collide with anything already in the graph.
+    const offset = driveGraph.edges.length;
+    newGraph.edges.forEach(e => driveGraph.edges.push(e));
+    newGraph.intersections.forEach((list, key) => {
+      const offsetList = list.map(c => ({ edgeIdx: c.edgeIdx + offset, dir: c.dir }));
+      if (driveGraph.intersections.has(key)) driveGraph.intersections.get(key).push(...offsetList);
+      else driveGraph.intersections.set(key, offsetList);
+    });
+  } catch (e) {
+    log('Could not load more roads ahead: ' + e.message, 'wn');
+  } finally {
+    driveExpanding = false;
+  }
+}
+
 function driveTick(ts) {
   if (!driveActive || !driveGraph || driveEdgeIdx == null) return;
   const dt = Math.min(0.1, (ts - driveLastTs) / 1000); // clamp so a tab-switch pause doesn't jump the marker
@@ -3718,9 +3752,19 @@ function driveTick(ts) {
     driveDebugLastChoice = 'key=' + (recentKey || 'none') + ' · choices=' + candidateCount + ' · picked=' + (next ? (driveGraph.edges[next.edgeIdx].name || 'unnamed') : 'dead-end');
     driveLastKey = null; // consumed - don't let one press steer through two intersections in a row
     if (!next) {
-      // dead end - stop cleanly rather than run off the graph
-      $('driveStatus').textContent = 'Dead end - reverse or click Stop to finish here';
-      driveDist = Math.max(0, Math.min(edge.len, driveDist));
+      // The graph only ever covers the small area fetched when the drive started - at
+      // arcade speed you can reach the edge of that in under 20 seconds. This is very
+      // likely THE actual cause of the reported "freezing" - not a real dead end, just
+      // running off the edge of what's been loaded so far. Fetch more roads around the
+      // current position and merge them in before accepting this as a genuine dead end.
+      const pos0 = driveEdgePointAt(edge, arrivedAtStart ? 0 : edge.len);
+      if (!driveExpanding && !driveExpandedKeys.has(atKey)) {
+        driveExpandedKeys.add(atKey);
+        expandDriveGraph(pos0.lat, pos0.lon);
+      } else if (!driveExpanding) {
+        $('driveStatus').textContent = 'Dead end - reverse or click Stop to finish here';
+      }
+      driveDist = Math.max(0, Math.min(edge.len, driveDist)); // hold position while loading
     } else {
       driveEdgeIdx = next.edgeIdx; driveDir = next.dir;
       const newEdge = driveGraph.edges[driveEdgeIdx];
@@ -3751,9 +3795,13 @@ function driveTick(ts) {
   if (driveFrameCount % 6 === 0) driveMap.panTo({ lat: pos.lat, lng: pos.lon });
   // Visible diagnostics - if turning still doesn't work, this line will show exactly
   // where the failure actually is (key never detected at all vs. detected but no real
-  // turn choice existed vs. a turn was chosen but the map didn't update).
-  $('driveStatus').textContent = 'key ever pressed: ' + (driveDebugLastKeyEver || 'none yet')
-    + (driveDebugLastChoice ? ' · last intersection: ' + driveDebugLastChoice : '');
+  // turn choice existed vs. a turn was chosen but the map didn't update). Skipped while
+  // a graph expansion fetch is in flight so 'Loading more roads ahead...' stays visible
+  // instead of being overwritten the same frame it's set.
+  if (!driveExpanding) {
+    $('driveStatus').textContent = 'key ever pressed: ' + (driveDebugLastKeyEver || 'none yet')
+      + (driveDebugLastChoice ? ' · last intersection: ' + driveDebugLastChoice : '');
+  }
 
   driveAnimHandle = requestAnimationFrame(driveTick);
 }
