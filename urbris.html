@@ -3631,27 +3631,53 @@ async function startDriveMode() {
   window.addEventListener('keyup', onDriveKeyUp, true);
 }
 
+const HAMILTON_BBOX_JS = { minLat: 43.13, minLon: -80.15, maxLat: 43.35, maxLon: -79.70 }; // must match HAMILTON_BBOX in urbris.py
+let driveUsingCache = false; // true when running on the full-city Hamilton cache -
+// skips the proactive/reactive expansion logic entirely, since the whole city is
+// already loaded and there's nothing meaningful to expand into
+
 async function onDriveMapClick(e) {
   if (!driveActive || driveGraph) return; // already started - ignore further clicks
   const lat = e.latLng.lat(), lon = e.latLng.lng();
-  $('driveStatus').textContent = 'Loading nearby roads...';
+  driveUsingCache = false;
+  const inHamilton = lat >= HAMILTON_BBOX_JS.minLat && lat <= HAMILTON_BBOX_JS.maxLat
+    && lon >= HAMILTON_BBOX_JS.minLon && lon <= HAMILTON_BBOX_JS.maxLon;
+
+  $('driveStatus').textContent = inHamilton ? 'Loading Hamilton road data...' : 'Loading nearby roads...';
   try {
-    // Smaller than the coverage-scan's typical area on purpose - a big bbox with every
-    // road type can make Overpass slow enough to hit a timeout somewhere in the chain,
-    // which cuts the response short and produces a confusing 'Unexpected end of JSON
-    // input' error client-side even though the server-side JSON is always well-formed.
-    // A smaller area here starts fast, and the graph naturally extends as needed
-    // whenever a route runs to its edge (not built yet - current v1 is single-fetch).
-    const d = 0.006; // roughly 650m padding, ~1.3km box
-    const bbox = (lat - d) + ',' + (lon - d) + ',' + (lat + d) + ',' + (lon + d);
-    const r = await fetch('/roadsinarea', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bbox })
-    });
-    const raw = await r.text();
-    let overpassData;
-    try { overpassData = JSON.parse(raw); }
-    catch (parseErr) { throw new Error('Server response was not valid JSON (likely a slow/timed-out Overpass query) - try again, or click a bit closer to a main road'); }
-    if (overpassData.error) throw new Error(overpassData.error);
+    let overpassData = null;
+
+    if (inHamilton) {
+      // Prefer the pre-fetched, cached snapshot - removes the live-Overpass dependency
+      // entirely for the city Urbris is actually being tested against, since Overpass's
+      // own speed/reliability was the real bottleneck behind tonight's freezing, not
+      // anything in this app's own code.
+      try {
+        const cr = await fetch('/hamilton-roads', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+        if (cr.ok) {
+          const cached = await cr.json();
+          if (!cached.error && cached.elements && cached.elements.length) {
+            overpassData = cached;
+            driveUsingCache = true;
+          }
+        }
+      } catch (cacheErr) { /* fall through to live fetch below */ }
+    }
+
+    if (!overpassData) {
+      // Live Overpass fallback - unchanged from before, used for anywhere outside
+      // Hamilton, or if the cache isn't seeded/available yet.
+      const d = 0.006; // roughly 650m padding, ~1.3km box
+      const bbox = (lat - d) + ',' + (lon - d) + ',' + (lat + d) + ',' + (lon + d);
+      const r = await fetch('/roadsinarea', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bbox })
+      });
+      const raw = await r.text();
+      try { overpassData = JSON.parse(raw); }
+      catch (parseErr) { throw new Error('Server response was not valid JSON (likely a slow/timed-out Overpass query) - try again, or click a bit closer to a main road'); }
+      if (overpassData.error) throw new Error(overpassData.error);
+    }
+
     driveGraph = buildDriveGraph(overpassData);
     if (!driveGraph.edges.length) throw new Error('No roads found near that point');
 
@@ -3667,14 +3693,14 @@ async function onDriveMapClick(e) {
     driveEdgeIdx = best.edgeIdx; driveDist = best.dist; driveDir = 1;
     driveHeading = driveEdgeBearingAt(driveGraph.edges[driveEdgeIdx], driveDist, driveDir);
     driveTracedPath = [driveEdgePointAt(driveGraph.edges[driveEdgeIdx], driveDist)];
-    driveLastFetchCenter = { lat, lon }; // proactive prefetch measures distance from here
+    driveLastFetchCenter = { lat, lon }; // proactive prefetch measures distance from here - unused while driveUsingCache is true
 
     if (drivePathLine) drivePathLine.setMap(null);
     drivePathLine = new google.maps.Polyline({ path: [], strokeColor: '#f1844e', strokeWeight: 4, map: driveMap });
     if (!driveMarker) {
       driveMarker = new google.maps.Marker({ map: driveMap, icon: { path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW, scale: 5, fillColor: '#f1844e', fillOpacity: 1, strokeColor: '#0b0e0d', strokeWeight: 1 } });
     }
-    $('driveStatus').textContent = 'Ready - use arrow keys to ride';
+    $('driveStatus').textContent = 'Ready - use arrow keys to ride' + (driveUsingCache ? ' (Hamilton cache)' : '');
     $('finishDriveBtn').style.display = '';
     driveLastTs = performance.now();
     driveAnimHandle = requestAnimationFrame(driveTick);
@@ -3749,7 +3775,7 @@ function driveTick(ts) {
   // already seen a real 504 timeout from one mirror tonight). Fetching well before the
   // edge, while still comfortably driving on already-loaded road, means the new area is
   // ready by the time it's actually needed - no visible pause at all, ideally.
-  if (driveFrameCount % 30 === 0 && driveLastFetchCenter && !driveExpanding) {
+  if (!driveUsingCache && driveFrameCount % 30 === 0 && driveLastFetchCenter && !driveExpanding) {
     const curPos = driveEdgePointAt(edge, driveDist);
     if (hav(curPos, driveLastFetchCenter) > 300) { // fetched area is ~650m radius - 300m
       // gives a real buffer before actually reaching the true edge
@@ -3772,13 +3798,14 @@ function driveTick(ts) {
     driveDebugLastChoice = 'key=' + (recentKey || 'none') + ' · choices=' + candidateCount + ' · picked=' + (next ? (driveGraph.edges[next.edgeIdx].name || 'unnamed') : 'dead-end');
     driveLastKey = null; // consumed - don't let one press steer through two intersections in a row
     if (!next) {
-      // The graph only ever covers the small area fetched when the drive started - at
-      // arcade speed you can reach the edge of that in under 20 seconds. This is very
-      // likely THE actual cause of the reported "freezing" - not a real dead end, just
-      // running off the edge of what's been loaded so far. Fetch more roads around the
-      // current position and merge them in before accepting this as a genuine dead end.
+      // On the full-city Hamilton cache, a dead end here is a real one (or the true
+      // edge of the city bbox) - no point attempting an expansion fetch that would just
+      // re-pull the same cached data. The small-area live-fetch case still benefits
+      // from expansion, same reasoning as before.
       const pos0 = driveEdgePointAt(edge, arrivedAtStart ? 0 : edge.len);
-      if (!driveExpanding && !driveExpandedKeys.has(atKey)) {
+      if (driveUsingCache) {
+        $('driveStatus').textContent = 'Dead end - reverse or click Stop to finish here';
+      } else if (!driveExpanding && !driveExpandedKeys.has(atKey)) {
         driveExpandedKeys.add(atKey);
         expandDriveGraph(pos0.lat, pos0.lon);
       } else if (!driveExpanding) {

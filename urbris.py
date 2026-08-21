@@ -434,6 +434,58 @@ def should_run_daily_research_scan():
         print("  [research-scan] could not check last scan time:", e)
         return False
 
+# Hamilton's approximate full-city bounding box - Ancaster/Waterdown in the northwest
+# to Stoney Creek in the southeast, comfortably covering the city Urbris is actually
+# being tested against tonight. Small enough (~1,100 km²) that one Overpass query
+# handles it, unlike a whole-province fetch which would need real tiling.
+HAMILTON_BBOX = (43.13, -80.15, 43.35, -79.70)  # (minlat, minlon, maxlat, maxlon)
+
+def should_run_hamilton_roads_refresh():
+    if not supabase_configured():
+        return False
+    try:
+        rows = supabase_request("GET", "hamilton_roads_cache?select=fetched_at&order=fetched_at.desc&limit=1")
+        if not rows:
+            return True  # never fetched at all - seed it
+        last = (rows[0] or {}).get("fetched_at")
+        if not last:
+            return True
+        last_dt = datetime.fromisoformat(last.replace("Z", "+00:00"))
+        return (datetime.now(timezone.utc) - last_dt).total_seconds() > 30 * 24 * 3600  # ~monthly
+    except Exception as e:
+        print("  [hamilton-roads] could not check last refresh time:", e)
+        return False
+
+def refresh_hamilton_roads_cache():
+    # Same road-type filter /roadsinarea already uses for Drive Mode's live fallback -
+    # deliberately not reusing fetch_overpass_bbox_roads() above, which was built for
+    # intersection detection with a broader/different inclusion rule. Cached and live
+    # roads need to agree on what counts as a drivable road, or a route that crosses
+    # from cached Hamilton data into a live-fallback area at the city edge could behave
+    # inconsistently.
+    minlat, minlon, maxlat, maxlon = HAMILTON_BBOX
+    query = (
+        '[out:json][timeout:55];'
+        'way["highway"~"^(motorway|trunk|primary|secondary|tertiary|'
+        'unclassified|residential|track|motorway_link|trunk_link|'
+        'primary_link|secondary_link|tertiary_link)$"]'
+        '["access"!~"^(no|private)$"](%f,%f,%f,%f);'
+        'out geom;'
+    ) % (minlat, minlon, maxlat, maxlon)
+    body_result, err = fetch_overpass(query)
+    if body_result is None:
+        return {"error": "Overpass fetch failed: " + str(err)}
+    try:
+        parsed = json.loads(body_result)
+    except Exception as e:
+        return {"error": "Overpass returned malformed JSON: " + str(e)}
+    element_count = len(parsed.get("elements", []))
+    supabase_request("POST", "hamilton_roads_cache", body={
+        "data": parsed, "fetched_at": now_iso(), "element_count": element_count
+    })
+    print(f"  [hamilton-roads] cache refreshed - {element_count} elements")
+    return {"ok": True, "elementCount": element_count, "fetchedAt": now_iso()}
+
 def run_daily_research_scan():
     # Reuses ANTHROPIC_API_KEY (already required for the batch-completion poller) and
     # Claude's own server-side web_search tool - one Messages API call executes the
@@ -1680,6 +1732,39 @@ class H(BaseHTTPRequestHandler):
                 self._json({"error": "Intersection detection failed: " + str(e)}, code=500)
             return
 
+        if self.path == "/hamilton-roads":
+            # Serves a pre-fetched, cached snapshot of Hamilton's road network instead
+            # of a live Overpass call. Drive Mode's real bottleneck all night was Overpass
+            # itself being a free, shared, occasionally-slow service - this removes that
+            # dependency entirely for the city Urbris actually gets tested against, while
+            # leaving live Overpass as the fallback for anywhere else.
+            if not supabase_configured():
+                self._json({"error": "Supabase not configured"}, code=500)
+                return
+            try:
+                rows = supabase_request("GET", "hamilton_roads_cache?select=data,fetched_at&order=fetched_at.desc&limit=1")
+                if not rows:
+                    self._json({"error": "No cached Hamilton road data yet - run /admin/refresh-hamilton-roads once first"}, code=404)
+                    return
+                self._json({"elements": rows[0]["data"].get("elements", []), "fetchedAt": rows[0]["fetched_at"]})
+            except Exception as e:
+                self._json({"error": "Could not load cached Hamilton roads: " + str(e)}, code=500)
+            return
+
+        if self.path == "/admin/refresh-hamilton-roads":
+            # Manually triggerable now (to seed the cache the first time), and also
+            # called automatically on a ~30-day cadence from the same poller loop that
+            # already runs the daily research scan and batch-completion checks.
+            if not supabase_configured():
+                self._json({"error": "Supabase not configured"}, code=500)
+                return
+            try:
+                result = refresh_hamilton_roads_cache()
+                self._json(result)
+            except Exception as e:
+                self._json({"error": "Refresh failed: " + str(e)}, code=500)
+            return
+
         if self.path == "/roadsinarea":
             bbox = data.get("bbox", "")  # "south,west,north,east"
             query = (
@@ -2112,6 +2197,11 @@ def poll_pending_batches_loop():
                 run_daily_research_scan()
         except Exception as e:
             print("  [research-scan] loop error:", e)
+        try:
+            if should_run_hamilton_roads_refresh():
+                refresh_hamilton_roads_cache()
+        except Exception as e:
+            print("  [hamilton-roads] loop error:", e)
 
 if __name__ == "__main__":
     load_towers()
