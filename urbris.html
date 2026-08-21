@@ -3586,12 +3586,17 @@ function chooseNextEdge(graph, atKey, arrivingFromEdgeIdx, currentHeading, key) 
     return { ...c, bearing, turn: driveAngDiff(currentHeading, bearing) };
   });
   if (!key || key === 'ArrowUp') return scored.reduce((a, b) => Math.abs(a.turn) < Math.abs(b.turn) ? a : b);
+  // Lowered from 15deg to 8deg - a real intersection corner is a sharp branch, but a
+  // highway on/off-ramp is deliberately built for a shallow, gradual merge (often well
+  // under 15deg at the actual split point), so it never crossed the old threshold and
+  // just got lumped in with "basically straight" - meaning pressing right/left could
+  // never select it.
   if (key === 'ArrowRight') {
-    const r = scored.filter(s => s.turn > 15);
+    const r = scored.filter(s => s.turn > 8);
     return r.length ? r.reduce((a, b) => a.turn < b.turn ? a : b) : scored.reduce((a, b) => Math.abs(a.turn) < Math.abs(b.turn) ? a : b);
   }
   if (key === 'ArrowLeft') {
-    const l = scored.filter(s => s.turn < -15);
+    const l = scored.filter(s => s.turn < -8);
     return l.length ? l.reduce((a, b) => a.turn > b.turn ? a : b) : scored.reduce((a, b) => Math.abs(a.turn) < Math.abs(b.turn) ? a : b);
   }
   return scored.reduce((a, b) => Math.abs(a.turn) < Math.abs(b.turn) ? a : b);
