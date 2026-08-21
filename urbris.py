@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import json, urllib.request, urllib.error, urllib.parse, webbrowser, os, sys, csv, math, uuid, base64, re, time, threading
 from datetime import datetime, timezone
-from http.server import HTTPServer, BaseHTTPRequestHandler
+from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from concurrent.futures import ThreadPoolExecutor
 
 BASE = os.path.dirname(os.path.abspath(__file__))
@@ -2123,4 +2123,4 @@ if __name__ == "__main__":
         print("  Opening browser...")
         webbrowser.open(f"http://{host}:{port}")
     print("  Ctrl+C to stop\n")
-    HTTPServer((host, port), H).serve_forever()
+    ThreadingHTTPServer((host, port), H).serve_forever()
