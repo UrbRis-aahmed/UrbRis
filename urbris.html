@@ -3667,6 +3667,7 @@ async function onDriveMapClick(e) {
     driveEdgeIdx = best.edgeIdx; driveDist = best.dist; driveDir = 1;
     driveHeading = driveEdgeBearingAt(driveGraph.edges[driveEdgeIdx], driveDist, driveDir);
     driveTracedPath = [driveEdgePointAt(driveGraph.edges[driveEdgeIdx], driveDist)];
+    driveLastFetchCenter = { lat, lon }; // proactive prefetch measures distance from here
 
     if (drivePathLine) drivePathLine.setMap(null);
     drivePathLine = new google.maps.Polyline({ path: [], strokeColor: '#f1844e', strokeWeight: 4, map: driveMap });
@@ -3698,15 +3699,16 @@ function onDriveKeyUp(e) {
   if (e.key === driveHeldKey) driveHeldKey = null;
 }
 let driveDebugLastKeyEver = null, driveDebugLastChoice = null, driveFrameCount = 0, driveLastPannedHeading = null;
+let driveLastFetchCenter = null; // last point an area was fetched around, for proactive prefetch
 
 let driveExpanding = false;
 const driveExpandedKeys = new Set(); // dead-end keys already tried, so we don't
 // re-fetch the same spot every single frame while waiting on a slow request
 
-async function expandDriveGraph(lat, lon) {
+async function expandDriveGraph(lat, lon, silent) {
   if (driveExpanding) return;
   driveExpanding = true;
-  $('driveStatus').textContent = 'Loading more roads ahead...';
+  if (!silent) $('driveStatus').textContent = 'Loading more roads ahead...';
   try {
     const d = 0.006;
     const bbox = (lat - d) + ',' + (lon - d) + ',' + (lat + d) + ',' + (lon + d);
@@ -3739,6 +3741,24 @@ function driveTick(ts) {
   driveFrameCount++;
   const edge = driveGraph.edges[driveEdgeIdx];
   driveDist += DRIVE_SPEED_MPS * dt * driveDir;
+
+  // Proactive prefetch, checked every ~30 frames (not every frame - this is cheap but
+  // no need to run it 60x/sec). The reactive dead-end expansion added earlier was still
+  // visibly pausing because it only started fetching AFTER hitting the edge, and the
+  // Overpass fetch itself can genuinely take several seconds (a shared free service -
+  // already seen a real 504 timeout from one mirror tonight). Fetching well before the
+  // edge, while still comfortably driving on already-loaded road, means the new area is
+  // ready by the time it's actually needed - no visible pause at all, ideally.
+  if (driveFrameCount % 30 === 0 && driveLastFetchCenter && !driveExpanding) {
+    const curPos = driveEdgePointAt(edge, driveDist);
+    if (hav(curPos, driveLastFetchCenter) > 300) { // fetched area is ~650m radius - 300m
+      // gives a real buffer before actually reaching the true edge
+      driveLastFetchCenter = curPos; // update immediately so this doesn't refire every
+      // check while the fetch is still in flight
+      expandDriveGraph(curPos.lat, curPos.lon, true); // silent - this is proactive, the
+      // vehicle keeps driving smoothly while this loads in the background
+    }
+  }
 
   if (driveDist >= edge.len || driveDist <= 0) {
     const arrivedAtStart = driveDist <= 0;
