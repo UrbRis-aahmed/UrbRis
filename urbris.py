@@ -578,12 +578,35 @@ PF_ROAD_QUALITY = {
     "tertiary": 7, "tertiary_link": 7, "unclassified": 6, "residential": 6, "track": 2,
 }
 
+def pf_edge_curviness(edge):
+    # Sum of heading changes between consecutive segments along the edge's OWN
+    # geometry, per km of length - this is what actually measures whether a road
+    # winds, unlike 'turn to enter the edge' (which only measures how sharply you
+    # have to turn to get ONTO it, saying nothing about whether the road itself
+    # curves once you're on it). A straight road accumulates near-zero heading
+    # change regardless of length; a genuinely winding one accumulates a lot,
+    # normalized so a long road isn't unfairly favored just for being long.
+    pts = edge["pts"]
+    if len(pts) < 3 or edge["len"] < 1:
+        return 0.0
+    total_change = 0.0
+    prev_bearing = None
+    for i in range(1, len(pts)):
+        b = pf_bearing(pts[i - 1], pts[i])
+        if prev_bearing is not None:
+            total_change += abs(pf_ang_diff(prev_bearing, b))
+        prev_bearing = b
+    return total_change / (edge["len"] / 1000.0)  # degrees of heading change per km
+
 def pf_choose_next_edge(graph, at_key, arriving_from_edge_idx, current_heading, recently_visited):
-    # Cheap, metadata-only scoring - deliberately no per-junction AI vision call, per
-    # tonight's own cost-discipline conversation about exactly this tradeoff. Prefers
-    # not-recently-visited roads (so it actually explores instead of looping one
-    # block) and mildly prefers nicer road classes, while always allowing any real
-    # road as a fallback so it can never get stuck with zero options.
+    # Metadata + geometry-based scoring - deliberately no per-junction AI vision call,
+    # per tonight's own cost-discipline conversation about exactly this tradeoff.
+    # Reworked after real feedback that this was backtracking over the same ground
+    # and actively avoiding curves - both genuine misses against Pathfinder's actual
+    # purpose (discovering new roads, seeking out good curves), not just tuning:
+    # the old formula penalized turning at all (backwards for a curve-seeking agent),
+    # and recently_visited was only a 20-entry window, far too short to prevent
+    # looping back over any real distance.
     candidates = [c for c in graph["intersections"].get(at_key, []) if c["edge_idx"] != arriving_from_edge_idx]
     if not candidates:
         # A real dead end (a genuine cul-de-sac, not just a data gap) has no other
@@ -605,8 +628,18 @@ def pf_choose_next_edge(graph, at_key, arriving_from_edge_idx, current_heading, 
         turn = pf_ang_diff(current_heading, b)
         quality = PF_ROAD_QUALITY.get(edge.get("highway"), 5)
         far_key = edge["end_key"] if c["dir"] == 1 else edge["start_key"]
-        visited_penalty = 3 if far_key in recently_visited else 0
-        score = quality - visited_penalty - abs(turn) / 90.0
+        # A real, meaningful penalty for anything already visited this trip - not the
+        # old 3-point nudge that a 20-entry memory made nearly irrelevant anyway.
+        visited_penalty = 6 if far_key in recently_visited else 0
+        curviness = pf_edge_curviness(edge)
+        # Genuinely rewards curvy roads now, instead of penalizing every turn - the
+        # actual point of a route-discovery agent for a motorcycle project. Capped so
+        # an extremely winding road can never completely swamp the visited-penalty -
+        # caught this in testing: an uncapped bonus let a sufficiently curvy road get
+        # re-picked even when already marked visited, defeating the anti-backtracking
+        # fix entirely. Curviness should influence the choice, not override novelty.
+        curviness_bonus = min(curviness / 15.0, 5.0)
+        score = quality - visited_penalty - abs(turn) / 180.0 + curviness_bonus
         scored.append({**c, "score": score, "bearing": b})
     return max(scored, key=lambda s: s["score"])
 
@@ -916,7 +949,12 @@ def pathfinder_tick_inner():
     state["ride_hours_since_rest"] = ride_hours_since_rest + (PF_TICK_SECONDS / 3600)
     state["km_since_service"] = km_since_service + km_moved
     state["total_km"] = state.get("total_km", 0) + km_moved
-    recent_list = list(recently_visited)[-20:]  # cap so this never grows unbounded
+    # 20 was far too small a memory to mean anything over a real distance - after
+    # even 21km, well over 20 intersections had already been crossed, so the oldest
+    # ones had already aged out and become fair game to loop back over again. 500
+    # gives real, meaningful novelty-tracking across a genuine day's ride while still
+    # capped so this never grows unbounded.
+    recent_list = list(recently_visited)[-500:]
     state["recent_keys"] = [list(k) for k in recent_list]
     # Rolling trail, capped the same way recent_keys is - a rider with no home and no
     # end point would otherwise accumulate an unbounded path forever. 400 points is
