@@ -679,7 +679,32 @@ def pf_fetch_and_cache_region(lat, lon, radius_km):
     pf_log_event(f"Cached a new region ({len(parsed.get('elements', []))} roads) around ({lat:.3f}, {lon:.3f})")
     return parsed
 
+def pf_record_tick_result(error_message):
+    # Runs every single tick, success or failure - a lightweight, isolated write
+    # (not routed through the full state object) specifically so this diagnostic
+    # write itself is unlikely to be the thing that fails. This is what turns "check
+    # Render's logs and paste them back" into something visible directly on the page -
+    # built after several rounds of exactly that pattern tonight, to make any future
+    # issue with this specific system self-diagnosing instead of requiring log access.
+    try:
+        supabase_request("PATCH", "pathfinder_state?id=eq.1", body={
+            "last_tick_at": now_iso(), "last_tick_error": error_message
+        })
+    except Exception as e:
+        print("  [pathfinder] could not even record tick result:", e)
+
 def pathfinder_tick():
+    try:
+        pathfinder_tick_inner()
+        pf_record_tick_result(None)
+    except Exception as e:
+        import traceback
+        err_text = f"{type(e).__name__}: {e}"
+        print("  [pathfinder] tick failed:", err_text)
+        traceback.print_exc()
+        pf_record_tick_result(err_text)
+
+def pathfinder_tick_inner():
     if not supabase_configured():
         return
     state = pf_get_state()
@@ -833,6 +858,14 @@ def render_pathfinder_page(state, log_entries, gkey):
     lon = state["lon"] if state else -79.87
     pf_state = state.get("state", "unknown") if state else "not started"
     total_km = state.get("total_km", 0) if state else 0
+    last_tick_at = (state.get("last_tick_at") or "") if state else ""
+    last_tick_error = (state.get("last_tick_error") or "") if state else ""
+    diag_html = ""
+    if last_tick_error:
+        diag_html = ('<div class="diag err">Last tick failed: ' + last_tick_error.replace("&", "&amp;").replace("<", "&lt;")
+                      + ' <span class="ts">' + last_tick_at[:19].replace("T", " ") + '</span></div>')
+    elif last_tick_at:
+        diag_html = '<div class="diag ok">Last tick OK <span class="ts">' + last_tick_at[:19].replace("T", " ") + '</span></div>'
     log_html = "".join(
         '<div class="entry">%s <span class="ts">%s</span></div>' % (
             (e.get("message") or "").replace("&", "&amp;").replace("<", "&lt;"),
@@ -856,6 +889,12 @@ def render_pathfinder_page(state, log_entries, gkey):
   #overlay .title { font-family:ui-monospace,monospace; font-size:11px; color:#dd6a32; letter-spacing:.08em; text-transform:uppercase; margin-bottom:8px; }
   #overlay .state { font-size:24px; font-weight:700; text-transform:capitalize; margin-bottom:4px; }
   #overlay .km { font-size:13px; color:#8d9890; margin-bottom:16px; }
+  /* Diagnostic strip - the whole reason this exists is so a broken tick is visible
+     right here, instead of needing to check Render's logs to find out. */
+  .diag { font-family:ui-monospace,monospace; font-size:11px; padding:8px 10px; border-radius:8px; margin-top:4px; }
+  .diag.ok { background:rgba(70,140,90,.15); color:#8ecb9e; }
+  .diag.err { background:rgba(200,70,60,.18); color:#f2938a; }
+  .diag .ts { opacity:.7; margin-left:6px; }
   #log { position:fixed; bottom:24px; left:24px; right:24px; max-height:160px; overflow-y:auto;
     background:rgba(18,23,21,0.85); backdrop-filter:blur(8px); border:1px solid rgba(229,235,229,.12);
     border-radius:14px; padding:14px 18px; font-family:ui-monospace,monospace; font-size:11.5px; color:#8d9890; }
@@ -868,6 +907,7 @@ def render_pathfinder_page(state, log_entries, gkey):
   <div class="title">Pathfinder</div>
   <div class="state" id="stateText">""" + pf_state + """</div>
   <div class="km" id="kmText">""" + f"{total_km:,.0f}" + """ km traveled, no fixed home</div>
+  <div id="diagBox">""" + diag_html + """</div>
 </div>
 <div id="log">""" + log_html + """</div>
 <script>
@@ -889,6 +929,13 @@ function initMap() {
         document.getElementById('kmText').textContent = Math.round(d.state.total_km || 0).toLocaleString() + ' km traveled, no fixed home';
         marker.setPosition({lat: d.state.lat, lng: d.state.lon});
         map.panTo({lat: d.state.lat, lng: d.state.lon});
+        const diagBox = document.getElementById('diagBox');
+        const ts = (d.state.last_tick_at || '').slice(0, 19).replace('T', ' ');
+        if (d.state.last_tick_error) {
+          diagBox.innerHTML = '<div class="diag err">Last tick failed: ' + d.state.last_tick_error.replace(/</g,'&lt;') + ' <span class="ts">' + ts + '</span></div>';
+        } else if (d.state.last_tick_at) {
+          diagBox.innerHTML = '<div class="diag ok">Last tick OK <span class="ts">' + ts + '</span></div>';
+        }
       }
     } catch (e) { /* silent - a missed poll just tries again next interval */ }
   }, 20000);
