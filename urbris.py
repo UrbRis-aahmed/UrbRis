@@ -800,6 +800,9 @@ def pathfinder_tick_inner():
     # is the actual fix - confirmed by reproducing the exact TypeError before writing
     # this line, not just reasoning about it.
     recently_visited = set(tuple(k) for k in state.get("recent_keys", []))
+    tick_points = [{"lat": lat, "lon": lon}]  # the actual path this tick traces, not
+    # just start->end - captured at each real edge transition, same idea as Drive
+    # Mode's frame-by-frame path but at tick granularity instead of animation frames
 
     while move_remaining > 0:
         dist += move_remaining * direction
@@ -807,6 +810,7 @@ def pathfinder_tick_inner():
             arrived_at_start = dist <= 0
             at_key = edge["start_key"] if arrived_at_start else edge["end_key"]
             overshoot = abs(dist - edge["len"]) if not arrived_at_start else abs(dist)
+            tick_points.append(pf_edge_point_at(edge, edge["len"] if not arrived_at_start else 0))
             nxt = pf_choose_next_edge(graph, at_key, best_edge_idx, heading, recently_visited)
             if not nxt:
                 dist = max(0.0, min(edge["len"], dist))
@@ -823,6 +827,7 @@ def pathfinder_tick_inner():
             move_remaining = 0
 
     pos = pf_edge_point_at(edge, dist)
+    tick_points.append(pos)
     km_moved = haversine_km(lat, lon, pos["lat"], pos["lon"])
 
     state["lat"], state["lon"], state["heading"] = pos["lat"], pos["lon"], heading
@@ -833,6 +838,12 @@ def pathfinder_tick_inner():
     state["total_km"] = state.get("total_km", 0) + km_moved
     recent_list = list(recently_visited)[-20:]  # cap so this never grows unbounded
     state["recent_keys"] = [list(k) for k in recent_list]
+    # Rolling trail, capped the same way recent_keys is - a rider with no home and no
+    # end point would otherwise accumulate an unbounded path forever. 400 points is
+    # generous for showing real recent travel on the map without the payload growing
+    # without limit.
+    existing_trail = state.get("trail", [])
+    state["trail"] = (existing_trail + tick_points)[-400:]
     pf_save_state(state)
 
 def pathfinder_nightly_precache():
@@ -858,6 +869,8 @@ def render_pathfinder_page(state, log_entries, gkey):
     lon = state["lon"] if state else -79.87
     pf_state = state.get("state", "unknown") if state else "not started"
     total_km = state.get("total_km", 0) if state else 0
+    trail = state.get("trail", []) if state else []
+    trail_json = json.dumps(trail)
     last_tick_at = (state.get("last_tick_at") or "") if state else ""
     last_tick_error = (state.get("last_tick_error") or "") if state else ""
     diag_html = ""
@@ -920,6 +933,14 @@ function initMap() {
     map, position: {lat: """ + str(lat) + """, lng: """ + str(lon) + """},
     icon: {path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW, scale: 6, fillColor: '#f1844e', fillOpacity: 1, strokeColor: '#0b0e0d', strokeWeight: 1}
   });
+  // Rolling trail - a capped recent path (see pathfinder_tick_inner's trail logic),
+  // not an unbounded full history, since a rider with no home and no end point would
+  // otherwise accumulate forever. Same orange accent as the marker for consistency.
+  const initialTrail = """ + trail_json + """;
+  const trailLine = new google.maps.Polyline({
+    path: initialTrail.map(p => ({lat: p.lat, lng: p.lon})),
+    strokeColor: '#f1844e', strokeOpacity: 0.55, strokeWeight: 3, map
+  });
   setInterval(async () => {
     try {
       const r = await fetch('/pathfinder/status', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'});
@@ -929,6 +950,9 @@ function initMap() {
         document.getElementById('kmText').textContent = Math.round(d.state.total_km || 0).toLocaleString() + ' km traveled, no fixed home';
         marker.setPosition({lat: d.state.lat, lng: d.state.lon});
         map.panTo({lat: d.state.lat, lng: d.state.lon});
+        if (Array.isArray(d.state.trail)) {
+          trailLine.setPath(d.state.trail.map(p => ({lat: p.lat, lng: p.lon})));
+        }
         const diagBox = document.getElementById('diagBox');
         const ts = (d.state.last_tick_at || '').slice(0, 19).replace('T', ' ');
         if (d.state.last_tick_error) {
