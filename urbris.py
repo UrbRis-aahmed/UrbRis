@@ -871,6 +871,12 @@ def render_pathfinder_page(state, log_entries, gkey):
     total_km = state.get("total_km", 0) if state else 0
     trail = state.get("trail", []) if state else []
     trail_json = json.dumps(trail)
+    STATE_DESCRIPTIONS = {
+        "riding": "On the road", "sleeping": "Resting for the night",
+        "fueling": "Stopped for gas", "eating": "Taking a break",
+        "maintenance": "In for service", "unknown": "", "not started": "",
+    }
+    state_desc = STATE_DESCRIPTIONS.get(pf_state, "")
     last_tick_at = (state.get("last_tick_at") or "") if state else ""
     last_tick_error = (state.get("last_tick_error") or "") if state else ""
     diag_html = ""
@@ -900,7 +906,10 @@ def render_pathfinder_page(state, log_entries, gkey):
     padding:20px 24px; color:#f0f2ec;
   }
   #overlay .title { font-family:ui-monospace,monospace; font-size:11px; color:#dd6a32; letter-spacing:.08em; text-transform:uppercase; margin-bottom:8px; }
-  #overlay .state { font-size:24px; font-weight:700; text-transform:capitalize; margin-bottom:4px; }
+  #overlay .state { font-size:24px; font-weight:700; text-transform:capitalize; margin-bottom:2px; }
+  #overlay .stateDesc { font-size:13px; color:#8d9890; margin-bottom:10px; }
+  #overlay .clock { font-family:ui-monospace,monospace; font-size:15px; color:#f1844e; margin-bottom:12px; }
+  #overlay .clock .tz { color:#69736c; font-size:11px; margin-left:6px; }
   #overlay .km { font-size:13px; color:#8d9890; margin-bottom:16px; }
   /* Diagnostic strip - the whole reason this exists is so a broken tick is visible
      right here, instead of needing to check Render's logs to find out. */
@@ -919,6 +928,8 @@ def render_pathfinder_page(state, log_entries, gkey):
 <div id="overlay">
   <div class="title">Pathfinder</div>
   <div class="state" id="stateText">""" + pf_state + """</div>
+  <div class="stateDesc" id="stateDesc">""" + state_desc + """</div>
+  <div class="clock" id="clockText">-- : -- <span class="tz">local time where it is</span></div>
   <div class="km" id="kmText">""" + f"{total_km:,.0f}" + """ km traveled, no fixed home</div>
   <div id="diagBox">""" + diag_html + """</div>
 </div>
@@ -941,6 +952,26 @@ function initMap() {
     path: initialTrail.map(p => ({lat: p.lat, lng: p.lon})),
     strokeColor: '#f1844e', strokeOpacity: 0.55, strokeWeight: 3, map
   });
+
+  // Live local-time clock at the rider's own current position - same longitude-based
+  // approximation the backend already uses to decide whether it's daytime (15deg of
+  // longitude is roughly 1 hour of solar time). A rider with no fixed home has no
+  // single 'current time' that means anything, so this is deliberately local to
+  // wherever it actually is, not the viewer's own clock or a fixed UTC time.
+  const STATE_DESCRIPTIONS = {
+    riding: 'On the road', sleeping: 'Resting for the night', fueling: 'Stopped for gas',
+    eating: 'Taking a break', maintenance: 'In for service'
+  };
+  let currentLon = """ + str(lon) + """;
+  function tickClock() {
+    const nowUtcMs = Date.now();
+    const localMs = nowUtcMs + (currentLon / 15) * 3600000;
+    const d = new Date(localMs);
+    const hh = String(d.getUTCHours()).padStart(2, '0'), mm = String(d.getUTCMinutes()).padStart(2, '0'), ss = String(d.getUTCSeconds()).padStart(2, '0');
+    document.getElementById('clockText').innerHTML = hh + ':' + mm + ':' + ss + ' <span class="tz">local time where it is</span>';
+  }
+  tickClock();
+  setInterval(tickClock, 1000);
 
   // Smooth playback instead of teleporting once per poll: the backend only advances
   // once every PF_TICK_SECONDS (180s), producing one real chunk of new trail points
@@ -993,7 +1024,9 @@ function initMap() {
       const d = await r.json();
       if (d.state) {
         document.getElementById('stateText').textContent = d.state.state || 'unknown';
+        document.getElementById('stateDesc').textContent = STATE_DESCRIPTIONS[d.state.state] || '';
         document.getElementById('kmText').textContent = Math.round(d.state.total_km || 0).toLocaleString() + ' km traveled, no fixed home';
+        if (typeof d.state.lon === 'number') currentLon = d.state.lon; // clock follows wherever it actually is now
         if (Array.isArray(d.state.trail)) {
           trailLine.setPath(d.state.trail.map(p => ({lat: p.lat, lng: p.lon})));
           // Only queue genuinely NEW points beyond what's already displayed or queued -
