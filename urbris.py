@@ -1053,7 +1053,14 @@ function initMap() {
     const h = Math.sin(dp/2)**2 + Math.cos(p1)*Math.cos(p2)*Math.sin(dl/2)**2;
     return 2*EARTH_R*Math.asin(Math.sqrt(h));
   }
-  let displayedCount = initialTrail.length;   // trail points already fully played
+  // Tracks the last point already displayed/queued, by actual coordinate content -
+  // NOT by array length. That was the real bug: the trail is capped at 400 points
+  // server-side, and once it hits that cap, old points drop off the front while new
+  // ones get added at the back - the array's LENGTH stays at exactly 400 forever
+  // after that point. Length-based tracking could never detect anything as 'new'
+  // once the cap was reached, even though the server kept genuinely moving - exactly
+  // the symptom found (real movement in the data, zero movement on screen).
+  let lastKnownPoint = initialTrail.length ? initialTrail[initialTrail.length - 1] : null;
   let queue = [];                             // newly-arrived points not yet animated
   let segFrom = null, segTo = null, segDist = 0, segProgress = 0, lastFrameTs = null;
 
@@ -1090,16 +1097,26 @@ function initMap() {
         document.getElementById('stateDesc').textContent = STATE_DESCRIPTIONS[d.state.state] || '';
         document.getElementById('kmText').textContent = Math.round(d.state.total_km || 0).toLocaleString() + ' km traveled, no fixed home';
         if (typeof d.state.lon === 'number') currentLon = d.state.lon; // clock follows wherever it actually is now
-        if (Array.isArray(d.state.trail)) {
+        if (Array.isArray(d.state.trail) && d.state.trail.length) {
           trailLine.setPath(d.state.trail.map(p => ({lat: p.lat, lng: p.lon})));
-          // Only queue genuinely NEW points beyond what's already displayed or queued -
-          // never re-animate a segment that already played, and never skip a point a
-          // poll happened to catch mid-flight.
-          const alreadyQueued = displayedCount + queue.length;
-          if (d.state.trail.length > alreadyQueued) {
-            queue.push(...d.state.trail.slice(alreadyQueued));
+          // Find where the last point we've already queued/displayed sits in the NEW
+          // trail, searching from the end since the array is a sliding window (see
+          // the comment on lastKnownPoint's declaration for why length alone can't
+          // be trusted here). If it's not found at all - fell off the front due to
+          // the cap, or this is the very first poll - just resync to the tail rather
+          // than trying to replay history that's already gone.
+          let matchIdx = -1;
+          if (lastKnownPoint) {
+            for (let i = d.state.trail.length - 1; i >= 0; i--) {
+              const p = d.state.trail[i];
+              if (Math.abs(p.lat - lastKnownPoint.lat) < 1e-7 && Math.abs(p.lon - lastKnownPoint.lon) < 1e-7) { matchIdx = i; break; }
+            }
           }
-          displayedCount = d.state.trail.length - queue.length;
+          const newPoints = matchIdx >= 0 ? d.state.trail.slice(matchIdx + 1) : d.state.trail.slice(-1);
+          if (newPoints.length) {
+            queue.push(...newPoints);
+            lastKnownPoint = newPoints[newPoints.length - 1];
+          }
         }
         const diagBox = document.getElementById('diagBox');
         const ts = (d.state.last_tick_at || '').slice(0, 19).replace('T', ' ');
