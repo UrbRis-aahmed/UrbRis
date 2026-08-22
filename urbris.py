@@ -704,8 +704,17 @@ def pf_record_tick_result(error_message):
 
 def pathfinder_tick():
     try:
-        pathfinder_tick_inner()
-        pf_record_tick_result(None)
+        status = pathfinder_tick_inner()
+        # "OK" previously meant only 'no exception was thrown' - which is true even
+        # when the tick took an early exit and never actually saved a new position.
+        # That gap is exactly what let this look like repeated success while the
+        # rider sat frozen. Now a 'stuck:' status is treated as a real, visible
+        # problem (shows red, same as an actual crash would), while genuine
+        # non-movement that's expected (sleeping, fueling, etc.) still shows clean.
+        if status and status.startswith("stuck"):
+            pf_record_tick_result(status)
+        else:
+            pf_record_tick_result(None)
     except Exception as e:
         import traceback
         err_text = f"{type(e).__name__}: {e}"
@@ -715,10 +724,10 @@ def pathfinder_tick():
 
 def pathfinder_tick_inner():
     if not supabase_configured():
-        return
+        return "skip: supabase not configured"
     state = pf_get_state()
     if not state or not state.get("active"):
-        return
+        return "skip: inactive"
 
     lat, lon, heading = state["lat"], state["lon"], state.get("heading", 0)
     now = datetime.now(timezone.utc)
@@ -740,7 +749,7 @@ def pathfinder_tick_inner():
             pf_log_event("Stopping for the night" if not within_hours else "Weather looks bad - pulling over to wait it out")
         state["state"] = "sleeping"
         pf_save_state(state)
-        return
+        return "waiting: sleeping"
 
     # --- Fuel / hunger / maintenance checks take priority over riding ---
     fuel_remaining = state.get("fuel_km_remaining", PF_FUEL_RANGE_KM)
@@ -752,19 +761,19 @@ def pathfinder_tick_inner():
         state["km_since_service"] = 0
         pf_save_state(state)
         pf_log_event(f"Pulling in for scheduled maintenance near ({lat:.3f}, {lon:.3f}) - {km_since_service:.0f} km since last service")
-        return
+        return "waiting: maintenance"
     if fuel_remaining <= 30 and current_pf_state != "fueling":
         state["state"] = "fueling"
         state["fuel_km_remaining"] = PF_FUEL_RANGE_KM
         pf_save_state(state)
         pf_log_event(f"Stopping for fuel near ({lat:.3f}, {lon:.3f})")
-        return
+        return "waiting: fueling"
     if ride_hours_since_rest >= PF_RIDE_HOURS_BEFORE_REST and current_pf_state != "eating":
         state["state"] = "eating"
         state["ride_hours_since_rest"] = 0
         pf_save_state(state)
         pf_log_event(f"Taking a break near ({lat:.3f}, {lon:.3f})")
-        return
+        return "waiting: eating"
 
     # A stop (fueling/eating/maintenance) that was already triggered gets one tick to
     # "rest", then resumes riding - deliberately simple for v1, not a real Places
@@ -772,7 +781,7 @@ def pathfinder_tick_inner():
     if current_pf_state in ("fueling", "eating", "maintenance"):
         state["state"] = "riding"
         pf_save_state(state)
-        return
+        return "waiting: resumed riding, moves next tick"
 
     # --- Actually ride ---
     region = pf_find_cached_region(lat, lon)
@@ -780,14 +789,14 @@ def pathfinder_tick_inner():
         pf_log_event(f"No cached roads here yet - fetching live around ({lat:.3f}, {lon:.3f})")
         parsed = pf_fetch_and_cache_region(lat, lon, PF_REGION_FETCH_PAD_KM)
         if not parsed:
-            return  # try again next tick
+            return "stuck: live region fetch failed"
         graph = pf_build_graph(parsed)
     else:
         graph = pf_build_graph(region["data"])
 
     if not graph["edges"]:
         pf_log_event("No roads found in this area - stuck, needs manual repositioning")
-        return
+        return "stuck: no edges in cached region"
 
     # Snap current position to the nearest point on the graph
     best_edge_idx, best_dist, best_gap = None, 0.0, float("inf")
@@ -797,7 +806,15 @@ def pathfinder_tick_inner():
             if d < best_gap:
                 best_gap, best_edge_idx, best_dist = d, ei, edge["cum"][i]
     if best_edge_idx is None:
-        return
+        return "stuck: could not snap to any road"
+    # A snap this far from any known road means the cached region doesn't actually
+    # cover where the rider is, even though the coarse bbox check said it should -
+    # walking from a snap this bad would just wander a road that isn't really nearby.
+    # Force a fresh, targeted fetch instead of proceeding on bad data.
+    if best_gap > 300:
+        pf_log_event(f"Nearest known road is {best_gap:.0f}m away - cached region doesn't really cover this spot, fetching a fresh one")
+        pf_fetch_and_cache_region(lat, lon, PF_REGION_FETCH_PAD_KM)
+        return "stuck: nearest road too far from cached data"
     edge = graph["edges"][best_edge_idx]
     direction = 1
     dist = best_dist
@@ -813,6 +830,7 @@ def pathfinder_tick_inner():
     # just start->end - captured at each real edge transition, same idea as Drive
     # Mode's frame-by-frame path but at tick granularity instead of animation frames
 
+    hit_dead_end = False
     while move_remaining > 0:
         dist += move_remaining * direction
         if dist >= edge["len"] or dist <= 0:
@@ -824,6 +842,7 @@ def pathfinder_tick_inner():
             if not nxt:
                 dist = max(0.0, min(edge["len"], dist))
                 move_remaining = 0
+                hit_dead_end = True
                 # A genuine dead end in the cached graph doesn't throw an exception -
                 # it just quietly stops advancing, which is exactly why this looked
                 # like repeated 'successful' ticks while total_km stayed frozen. There
@@ -855,7 +874,8 @@ def pathfinder_tick_inner():
     # explicitly means this is visible on the page immediately if it ever recurs,
     # instead of needing another raw state dump to diagnose.
     expected_km = (PF_SPEED_MPS * PF_TICK_SECONDS) / 1000
-    if km_moved < expected_km * 0.05:
+    barely_moved = km_moved < expected_km * 0.05
+    if barely_moved and not hit_dead_end:
         pf_log_event(f"Barely moved this tick ({km_moved*1000:.0f}m of ~{expected_km*1000:.0f}m expected) - possible thin/degenerate cached region near ({pos['lat']:.3f}, {pos['lon']:.3f})")
 
     state["lat"], state["lon"], state["heading"] = pos["lat"], pos["lon"], heading
@@ -873,6 +893,11 @@ def pathfinder_tick_inner():
     existing_trail = state.get("trail", [])
     state["trail"] = (existing_trail + tick_points)[-400:]
     pf_save_state(state)
+    if hit_dead_end:
+        return "stuck: dead end, region expansion triggered"
+    if barely_moved:
+        return "stuck: barely moved, possible degenerate region"
+    return f"moved {km_moved:.2f}km"
 
 def pathfinder_nightly_precache():
     # Runs once per night while the rider is asleep - computes how far it could
