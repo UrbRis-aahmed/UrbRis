@@ -888,7 +888,7 @@ function initMap() {
   }, 20000);
 }
 </script>
-<script src="https://maps.googleapis.com/maps/api/js?key=""" + gkey + """&callback=initMap" async defer></script>
+<script src="https://maps.googleapis.com/maps/api/js?key=""" + gkey + """&callback=initMap" async></script>
 </body></html>"""
 
 def run_daily_research_scan():
