@@ -815,6 +815,17 @@ def pathfinder_tick_inner():
             if not nxt:
                 dist = max(0.0, min(edge["len"], dist))
                 move_remaining = 0
+                # A genuine dead end in the cached graph doesn't throw an exception -
+                # it just quietly stops advancing, which is exactly why this looked
+                # like repeated 'successful' ticks while total_km stayed frozen. There
+                # was no recovery mechanism at all here, unlike Drive Mode's own
+                # dead-end handling. Fetch a fresh region around the current position
+                # so a LATER tick has real data to continue with, and log this plainly
+                # so it's visible on the page instead of indistinguishable from
+                # genuine, uneventful success.
+                stuck_pos = pf_edge_point_at(edge, dist)
+                pf_log_event(f"Stuck at a graph dead end near ({stuck_pos['lat']:.3f}, {stuck_pos['lon']:.3f}) - fetching more roads")
+                pf_fetch_and_cache_region(stuck_pos["lat"], stuck_pos["lon"], PF_REGION_FETCH_PAD_KM)
                 break
             recently_visited.add(at_key)
             best_edge_idx = nxt["edge_idx"]
