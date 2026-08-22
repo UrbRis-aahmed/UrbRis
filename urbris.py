@@ -586,7 +586,17 @@ def pf_choose_next_edge(graph, at_key, arriving_from_edge_idx, current_heading, 
     # road as a fallback so it can never get stuck with zero options.
     candidates = [c for c in graph["intersections"].get(at_key, []) if c["edge_idx"] != arriving_from_edge_idx]
     if not candidates:
-        return None
+        # A real dead end (a genuine cul-de-sac, not just a data gap) has no other
+        # option at all - a real rider would simply turn around and ride back the
+        # way they came, not stand still forever. The exclusion above is correct for
+        # every normal junction (never immediately reverse when a real choice exists),
+        # but as a last resort, backtracking is the only honest way to actually
+        # recover from a genuine dead end rather than depending entirely on a fresh
+        # region fetch that may never reveal a road that doesn't exist.
+        fallback = [c for c in graph["intersections"].get(at_key, []) if c["edge_idx"] == arriving_from_edge_idx]
+        if not fallback:
+            return None
+        candidates = fallback
     scored = []
     for c in candidates:
         edge = graph["edges"][c["edge_idx"]]
