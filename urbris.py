@@ -941,6 +941,52 @@ function initMap() {
     path: initialTrail.map(p => ({lat: p.lat, lng: p.lon})),
     strokeColor: '#f1844e', strokeOpacity: 0.55, strokeWeight: 3, map
   });
+
+  // Smooth playback instead of teleporting once per poll: the backend only advances
+  // once every PF_TICK_SECONDS (180s), producing one real chunk of new trail points
+  // per tick. Replaying that chunk at the real PF_SPEED_MPS pace means the animation
+  // naturally takes about 180s to finish - arriving right as the next poll brings the
+  // next chunk, same technique as Drive Mode's own frame-by-frame movement, just
+  // walking pre-computed trail points instead of live graph choices.
+  const PF_SPEED_MPS = 20, EARTH_R = 6371000;
+  function havM(a, b) {
+    // Points here are always built with .lng (matching Google Maps' own
+    // getPosition().lng() naming), not .lon - this function must match that
+    // consistently, or segDist silently comes out NaN and every segment snaps
+    // instantly instead of animating. Caught via a real interpolation test before
+    // this ever shipped, not found live.
+    const p1=a.lat*Math.PI/180, p2=b.lat*Math.PI/180, dp=(b.lat-a.lat)*Math.PI/180, dl=(b.lng-a.lng)*Math.PI/180;
+    const h = Math.sin(dp/2)**2 + Math.cos(p1)*Math.cos(p2)*Math.sin(dl/2)**2;
+    return 2*EARTH_R*Math.asin(Math.sqrt(h));
+  }
+  let displayedCount = initialTrail.length;   // trail points already fully played
+  let queue = [];                             // newly-arrived points not yet animated
+  let segFrom = null, segTo = null, segDist = 0, segProgress = 0, lastFrameTs = null;
+
+  function animFrame(ts) {
+    if (lastFrameTs == null) lastFrameTs = ts;
+    const dt = Math.min(0.5, (ts - lastFrameTs) / 1000);
+    lastFrameTs = ts;
+
+    if (!segTo && queue.length) {
+      segFrom = segFrom || {lat: marker.getPosition().lat(), lng: marker.getPosition().lng()};
+      const next = queue.shift();
+      segTo = {lat: next.lat, lng: next.lon};
+      segDist = havM(segFrom, segTo);
+      segProgress = 0;
+    }
+    if (segTo) {
+      segProgress += PF_SPEED_MPS * dt;
+      const f = segDist > 0 ? Math.min(1, segProgress / segDist) : 1;
+      const pos = { lat: segFrom.lat + (segTo.lat - segFrom.lat) * f, lng: segFrom.lng + (segTo.lng - segFrom.lng) * f };
+      marker.setPosition(pos);
+      map.panTo(pos);
+      if (f >= 1) { segFrom = segTo; segTo = null; }
+    }
+    requestAnimationFrame(animFrame);
+  }
+  requestAnimationFrame(animFrame);
+
   setInterval(async () => {
     try {
       const r = await fetch('/pathfinder/status', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'});
@@ -948,10 +994,16 @@ function initMap() {
       if (d.state) {
         document.getElementById('stateText').textContent = d.state.state || 'unknown';
         document.getElementById('kmText').textContent = Math.round(d.state.total_km || 0).toLocaleString() + ' km traveled, no fixed home';
-        marker.setPosition({lat: d.state.lat, lng: d.state.lon});
-        map.panTo({lat: d.state.lat, lng: d.state.lon});
         if (Array.isArray(d.state.trail)) {
           trailLine.setPath(d.state.trail.map(p => ({lat: p.lat, lng: p.lon})));
+          // Only queue genuinely NEW points beyond what's already displayed or queued -
+          // never re-animate a segment that already played, and never skip a point a
+          // poll happened to catch mid-flight.
+          const alreadyQueued = displayedCount + queue.length;
+          if (d.state.trail.length > alreadyQueued) {
+            queue.push(...d.state.trail.slice(alreadyQueued));
+          }
+          displayedCount = d.state.trail.length - queue.length;
         }
         const diagBox = document.getElementById('diagBox');
         const ts = (d.state.last_tick_at || '').slice(0, 19).replace('T', ' ');
