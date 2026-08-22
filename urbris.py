@@ -486,6 +486,411 @@ def refresh_hamilton_roads_cache():
     print(f"  [hamilton-roads] cache refreshed - {element_count} elements")
     return {"ok": True, "elementCount": element_count, "fetchedAt": now_iso()}
 
+
+# ============================================================================
+# Pathfinder - an autonomous rider exploring the road graph indefinitely, no
+# home base, with simulated human constraints (sleeps at night, refuels,
+# rests when hungry/fatigued, stops for maintenance). Runs continuously via
+# the existing poller loop, gated by an explicit start/stop flag stored in
+# Supabase - deliberately NOT auto-starting on deploy, since this is meant to
+# run unsupervised indefinitely, and starting something with real ongoing API
+# calls automatically the moment it deploys is the wrong default for a system
+# nobody is actively watching yet.
+#
+# The graph/movement functions below are a direct port of Drive Mode's
+# already-tested JS (buildDriveGraph, edgePointAt, edgeBearingAt,
+# chooseNextEdge) - ported rather than reimplemented specifically to inherit
+# the correctness already proven by Drive Mode's own tests tonight. Re-tested
+# here in Python against the same synthetic scenarios (4-way intersection,
+# dead-end handling) before ever being wired into anything live.
+# ============================================================================
+
+def pf_coord_key(lat, lon):
+    return (round(lat * 1e6), round(lon * 1e6))
+
+def pf_bearing(a, b):
+    lat1, lat2 = math.radians(a["lat"]), math.radians(b["lat"])
+    dlon = math.radians(b["lon"] - a["lon"])
+    x = math.sin(dlon) * math.cos(lat2)
+    y = math.cos(lat1) * math.sin(lat2) - math.sin(lat1) * math.cos(lat2) * math.cos(dlon)
+    return (math.degrees(math.atan2(x, y)) + 360) % 360
+
+def pf_ang_diff(a, b):
+    return (b - a + 540) % 360 - 180
+
+def pf_build_graph(overpass_data):
+    ways = [el for el in overpass_data.get("elements", []) if el.get("type") == "way" and el.get("geometry")]
+    coord_ways = {}
+    for wi, w in enumerate(ways):
+        for pt in w["geometry"]:
+            k = pf_coord_key(pt["lat"], pt["lon"])
+            coord_ways.setdefault(k, set()).add(wi)
+    intersection_keys = {k for k, wset in coord_ways.items() if len(wset) >= 2}
+
+    edges, intersections = [], {}
+    for w in ways:
+        geom = w["geometry"]
+        seg_start = 0
+        for i in range(1, len(geom)):
+            k = pf_coord_key(geom[i]["lat"], geom[i]["lon"])
+            is_end = i == len(geom) - 1
+            if k in intersection_keys or is_end:
+                pts = geom[seg_start:i + 1]
+                if len(pts) >= 2:
+                    start_key = pf_coord_key(pts[0]["lat"], pts[0]["lon"])
+                    end_key = pf_coord_key(pts[-1]["lat"], pts[-1]["lon"])
+                    cum = [0.0]
+                    length = 0.0
+                    for j in range(1, len(pts)):
+                        length += haversine_km(pts[j-1]["lat"], pts[j-1]["lon"], pts[j]["lat"], pts[j]["lon"]) * 1000
+                        cum.append(length)
+                    edge_idx = len(edges)
+                    edges.append({
+                        "pts": pts, "cum": cum, "len": length,
+                        "start_key": start_key, "end_key": end_key,
+                        "name": (w.get("tags") or {}).get("name"),
+                        "highway": (w.get("tags") or {}).get("highway"),
+                    })
+                    intersections.setdefault(start_key, []).append({"edge_idx": edge_idx, "dir": 1})
+                    intersections.setdefault(end_key, []).append({"edge_idx": edge_idx, "dir": -1})
+                seg_start = i
+    return {"edges": edges, "intersections": intersections}
+
+def pf_edge_point_at(edge, dist):
+    dist = max(0.0, min(edge["len"], dist))
+    for i in range(1, len(edge["cum"])):
+        if dist <= edge["cum"][i]:
+            seg_len = edge["cum"][i] - edge["cum"][i-1]
+            f = (dist - edge["cum"][i-1]) / seg_len if seg_len > 0 else 0
+            a, b = edge["pts"][i-1], edge["pts"][i]
+            return {"lat": a["lat"] + (b["lat"] - a["lat"]) * f, "lon": a["lon"] + (b["lon"] - a["lon"]) * f}
+    return edge["pts"][-1]
+
+def pf_edge_bearing_at(edge, dist, direction):
+    d = max(2.0, min(max(edge["len"] - 2, 2.0), dist))
+    p1 = pf_edge_point_at(edge, d - 2 if direction == 1 else d + 2)
+    p2 = pf_edge_point_at(edge, d + 2 if direction == 1 else d - 2)
+    return pf_bearing(p1, p2)
+
+PF_ROAD_QUALITY = {
+    "motorway": 1, "trunk": 2, "primary": 3, "motorway_link": 3, "trunk_link": 3,
+    "secondary": 5, "primary_link": 4, "secondary_link": 5,
+    "tertiary": 7, "tertiary_link": 7, "unclassified": 6, "residential": 6, "track": 2,
+}
+
+def pf_choose_next_edge(graph, at_key, arriving_from_edge_idx, current_heading, recently_visited):
+    # Cheap, metadata-only scoring - deliberately no per-junction AI vision call, per
+    # tonight's own cost-discipline conversation about exactly this tradeoff. Prefers
+    # not-recently-visited roads (so it actually explores instead of looping one
+    # block) and mildly prefers nicer road classes, while always allowing any real
+    # road as a fallback so it can never get stuck with zero options.
+    candidates = [c for c in graph["intersections"].get(at_key, []) if c["edge_idx"] != arriving_from_edge_idx]
+    if not candidates:
+        return None
+    scored = []
+    for c in candidates:
+        edge = graph["edges"][c["edge_idx"]]
+        start_dist = 0 if c["dir"] == 1 else edge["len"]
+        b = pf_edge_bearing_at(edge, start_dist, c["dir"])
+        turn = pf_ang_diff(current_heading, b)
+        quality = PF_ROAD_QUALITY.get(edge.get("highway"), 5)
+        far_key = edge["end_key"] if c["dir"] == 1 else edge["start_key"]
+        visited_penalty = 3 if far_key in recently_visited else 0
+        score = quality - visited_penalty - abs(turn) / 90.0
+        scored.append({**c, "score": score, "bearing": b})
+    return max(scored, key=lambda s: s["score"])
+
+PF_SPEED_MPS = 20            # ~72 km/h average, real-world-ish pace, not Drive Mode's arcade speed
+PF_TICK_SECONDS = 180         # advances once per poller cycle (3 min) - conservative on purpose
+PF_FUEL_RANGE_KM = 280
+PF_RIDE_HOURS_BEFORE_REST = 2.5
+PF_KM_BEFORE_MAINTENANCE = 4000
+PF_RIDING_START_HOUR = 7      # local hour, rough - not timezone-precise for v1
+PF_RIDING_END_HOUR = 19
+PF_REGION_FETCH_PAD_KM = 5    # extra margin beyond the day's plausible reach
+
+def pf_get_state():
+    rows = supabase_request("GET", "pathfinder_state?id=eq.1&limit=1")
+    return rows[0] if rows else None
+
+def pf_save_state(state):
+    state["updated_at"] = now_iso()
+    supabase_request("PATCH", "pathfinder_state?id=eq.1", body=state)
+
+def pf_log_event(message):
+    try:
+        supabase_request("POST", "pathfinder_log", body={"message": message, "created_at": now_iso()})
+    except Exception as e:
+        print("  [pathfinder] could not write log event:", e)
+
+def pf_check_weather_ok(lat, lon):
+    # Open-Meteo, same free no-key service the client already uses for route weather -
+    # here just a current-conditions check, not the full hourly forecast that feature
+    # pulls for planning a specific route.
+    try:
+        url = ("https://api.open-meteo.com/v1/forecast?latitude=%f&longitude=%f"
+               "&current=precipitation,wind_speed_10m,weather_code") % (lat, lon)
+        with urllib.request.urlopen(url, timeout=15) as r:
+            data = json.loads(r.read())
+        cur = data.get("current", {})
+        precip = cur.get("precipitation", 0) or 0
+        wind = cur.get("wind_speed_10m", 0) or 0
+        return precip < 0.5 and wind < 40  # light rain/wind is fine, real storms are not
+    except Exception as e:
+        print("  [pathfinder] weather check failed, defaulting to OK:", e)
+        return True  # a failed weather check shouldn't permanently strand the rider
+
+def pf_find_cached_region(lat, lon):
+    try:
+        rows = supabase_request("GET", "pathfinder_regions?select=id,minlat,minlon,maxlat,maxlon,data,fetched_at")
+    except Exception:
+        return None
+    for row in rows or []:
+        if row["minlat"] <= lat <= row["maxlat"] and row["minlon"] <= lon <= row["maxlon"]:
+            return row
+    return None
+
+def pf_fetch_and_cache_region(lat, lon, radius_km):
+    m_lat, m_lon = meters_per_deg(lat)
+    pad_m = radius_km * 1000
+    minlat, maxlat = lat - pad_m / m_lat, lat + pad_m / m_lat
+    minlon, maxlon = lon - pad_m / m_lon, lon + pad_m / m_lon
+    query = (
+        '[out:json][timeout:55];'
+        'way["highway"~"^(motorway|trunk|primary|secondary|tertiary|'
+        'unclassified|residential|track|motorway_link|trunk_link|'
+        'primary_link|secondary_link|tertiary_link)$"]'
+        '["access"!~"^(no|private)$"](%f,%f,%f,%f);'
+        'out geom;'
+    ) % (minlat, minlon, maxlat, maxlon)
+    body_result, err = fetch_overpass(query)
+    if body_result is None:
+        pf_log_event("Region fetch failed: " + str(err))
+        return None
+    try:
+        parsed = json.loads(body_result)
+    except Exception as e:
+        pf_log_event("Region fetch returned malformed JSON: " + str(e))
+        return None
+    supabase_request("POST", "pathfinder_regions", body={
+        "minlat": minlat, "minlon": minlon, "maxlat": maxlat, "maxlon": maxlon,
+        "data": parsed, "fetched_at": now_iso()
+    })
+    pf_log_event(f"Cached a new region ({len(parsed.get('elements', []))} roads) around ({lat:.3f}, {lon:.3f})")
+    return parsed
+
+def pathfinder_tick():
+    if not supabase_configured():
+        return
+    state = pf_get_state()
+    if not state or not state.get("active"):
+        return
+
+    lat, lon, heading = state["lat"], state["lon"], state.get("heading", 0)
+    now = datetime.now(timezone.utc)
+    # A rider with no fixed home spans multiple time zones - raw UTC hour would mean
+    # the same moment reads as daytime in one place and night in another. Longitude
+    # gives a real, cheap approximation of local solar time (15deg of longitude is
+    # roughly 1 hour) without needing a timezone-database lookup or new dependency.
+    # Caught this as a genuine bug via a test failure, not just a theoretical caveat -
+    # worth fixing properly rather than leaving the UTC-only version in place.
+    local_hour = (now.hour + lon / 15) % 24
+
+    # --- Decide whether "riding" is even allowed right now ---
+    within_hours = PF_RIDING_START_HOUR <= local_hour < PF_RIDING_END_HOUR
+    weather_ok = pf_check_weather_ok(lat, lon) if within_hours else True
+    current_pf_state = state.get("state", "sleeping")
+
+    if not within_hours or not weather_ok:
+        if current_pf_state != "sleeping":
+            pf_log_event("Stopping for the night" if not within_hours else "Weather looks bad - pulling over to wait it out")
+        state["state"] = "sleeping"
+        pf_save_state(state)
+        return
+
+    # --- Fuel / hunger / maintenance checks take priority over riding ---
+    fuel_remaining = state.get("fuel_km_remaining", PF_FUEL_RANGE_KM)
+    ride_hours_since_rest = state.get("ride_hours_since_rest", 0)
+    km_since_service = state.get("km_since_service", 0)
+
+    if km_since_service >= PF_KM_BEFORE_MAINTENANCE and current_pf_state != "maintenance":
+        state["state"] = "maintenance"
+        state["km_since_service"] = 0
+        pf_save_state(state)
+        pf_log_event(f"Pulling in for scheduled maintenance near ({lat:.3f}, {lon:.3f}) - {km_since_service:.0f} km since last service")
+        return
+    if fuel_remaining <= 30 and current_pf_state != "fueling":
+        state["state"] = "fueling"
+        state["fuel_km_remaining"] = PF_FUEL_RANGE_KM
+        pf_save_state(state)
+        pf_log_event(f"Stopping for fuel near ({lat:.3f}, {lon:.3f})")
+        return
+    if ride_hours_since_rest >= PF_RIDE_HOURS_BEFORE_REST and current_pf_state != "eating":
+        state["state"] = "eating"
+        state["ride_hours_since_rest"] = 0
+        pf_save_state(state)
+        pf_log_event(f"Taking a break near ({lat:.3f}, {lon:.3f})")
+        return
+
+    # A stop (fueling/eating/maintenance) that was already triggered gets one tick to
+    # "rest", then resumes riding - deliberately simple for v1, not a real Places
+    # lookup for a specific named stop yet (see build notes).
+    if current_pf_state in ("fueling", "eating", "maintenance"):
+        state["state"] = "riding"
+        pf_save_state(state)
+        return
+
+    # --- Actually ride ---
+    region = pf_find_cached_region(lat, lon)
+    if not region:
+        pf_log_event(f"No cached roads here yet - fetching live around ({lat:.3f}, {lon:.3f})")
+        parsed = pf_fetch_and_cache_region(lat, lon, PF_REGION_FETCH_PAD_KM)
+        if not parsed:
+            return  # try again next tick
+        graph = pf_build_graph(parsed)
+    else:
+        graph = pf_build_graph(region["data"])
+
+    if not graph["edges"]:
+        pf_log_event("No roads found in this area - stuck, needs manual repositioning")
+        return
+
+    # Snap current position to the nearest point on the graph
+    best_edge_idx, best_dist, best_gap = None, 0.0, float("inf")
+    for ei, edge in enumerate(graph["edges"]):
+        for i, pt in enumerate(edge["pts"]):
+            d = haversine_km(lat, lon, pt["lat"], pt["lon"]) * 1000
+            if d < best_gap:
+                best_gap, best_edge_idx, best_dist = d, ei, edge["cum"][i]
+    if best_edge_idx is None:
+        return
+    edge = graph["edges"][best_edge_idx]
+    direction = 1
+    dist = best_dist
+    move_remaining = PF_SPEED_MPS * PF_TICK_SECONDS
+    recently_visited = set(state.get("recent_keys", []))
+
+    while move_remaining > 0:
+        dist += move_remaining * direction
+        if dist >= edge["len"] or dist <= 0:
+            arrived_at_start = dist <= 0
+            at_key = edge["start_key"] if arrived_at_start else edge["end_key"]
+            overshoot = abs(dist - edge["len"]) if not arrived_at_start else abs(dist)
+            nxt = pf_choose_next_edge(graph, at_key, best_edge_idx, heading, recently_visited)
+            if not nxt:
+                dist = max(0.0, min(edge["len"], dist))
+                move_remaining = 0
+                break
+            recently_visited.add(at_key)
+            best_edge_idx = nxt["edge_idx"]
+            edge = graph["edges"][best_edge_idx]
+            direction = nxt["dir"]
+            dist = 0 if direction == 1 else edge["len"]
+            heading = nxt["bearing"]
+            move_remaining = overshoot
+        else:
+            move_remaining = 0
+
+    pos = pf_edge_point_at(edge, dist)
+    km_moved = haversine_km(lat, lon, pos["lat"], pos["lon"])
+
+    state["lat"], state["lon"], state["heading"] = pos["lat"], pos["lon"], heading
+    state["state"] = "riding"
+    state["fuel_km_remaining"] = max(0, fuel_remaining - km_moved)
+    state["ride_hours_since_rest"] = ride_hours_since_rest + (PF_TICK_SECONDS / 3600)
+    state["km_since_service"] = km_since_service + km_moved
+    state["total_km"] = state.get("total_km", 0) + km_moved
+    recent_list = list(recently_visited)[-20:]  # cap so this never grows unbounded
+    state["recent_keys"] = [list(k) for k in recent_list]
+    pf_save_state(state)
+
+def pathfinder_nightly_precache():
+    # Runs once per night while the rider is asleep - computes how far it could
+    # plausibly ride tomorrow (speed x riding-window hours) and pre-fetches that area
+    # in the background, so tomorrow's live riding never has to wait on a slow Overpass
+    # call mid-ride - the exact failure mode Drive Mode fought with earlier tonight.
+    state = pf_get_state()
+    if not state or not state.get("active"):
+        return
+    if state.get("state") != "sleeping":
+        return
+    today_key = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    if state.get("last_precache_date") == today_key:
+        return
+    plausible_km = (PF_SPEED_MPS * 3.6) * (PF_RIDING_END_HOUR - PF_RIDING_START_HOUR)
+    pf_fetch_and_cache_region(state["lat"], state["lon"], plausible_km + PF_REGION_FETCH_PAD_KM)
+    state["last_precache_date"] = today_key
+    pf_save_state(state)
+
+def render_pathfinder_page(state, log_entries, gkey):
+    lat = state["lat"] if state else 43.25
+    lon = state["lon"] if state else -79.87
+    pf_state = state.get("state", "unknown") if state else "not started"
+    total_km = state.get("total_km", 0) if state else 0
+    log_html = "".join(
+        '<div class="entry">%s <span class="ts">%s</span></div>' % (
+            (e.get("message") or "").replace("&", "&amp;").replace("<", "&lt;"),
+            (e.get("created_at") or "")[:19].replace("T", " ")
+        ) for e in log_entries
+    ) or '<div class="entry" style="color:#69736c">No activity yet.</div>'
+
+    return """<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pathfinder — Urbris</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { width:100%; height:100%; background:#0b0e0d; overflow:hidden; font-family:-apple-system,'Segoe UI',sans-serif; }
+  #map { width:100vw; height:100vh; }
+  #overlay {
+    position:fixed; top:24px; left:24px; z-index:10; max-width:340px;
+    background:rgba(18,23,21,0.85); backdrop-filter:blur(8px);
+    border:1px solid rgba(229,235,229,.12); border-radius:14px;
+    padding:20px 24px; color:#f0f2ec;
+  }
+  #overlay .title { font-family:ui-monospace,monospace; font-size:11px; color:#dd6a32; letter-spacing:.08em; text-transform:uppercase; margin-bottom:8px; }
+  #overlay .state { font-size:24px; font-weight:700; text-transform:capitalize; margin-bottom:4px; }
+  #overlay .km { font-size:13px; color:#8d9890; margin-bottom:16px; }
+  #log { position:fixed; bottom:24px; left:24px; right:24px; max-height:160px; overflow-y:auto;
+    background:rgba(18,23,21,0.85); backdrop-filter:blur(8px); border:1px solid rgba(229,235,229,.12);
+    border-radius:14px; padding:14px 18px; font-family:ui-monospace,monospace; font-size:11.5px; color:#8d9890; }
+  #log .entry { margin-bottom:6px; color:#f0f2ec }
+  #log .ts { color:#69736c; margin-left:8px }
+</style></head>
+<body>
+<div id="map"></div>
+<div id="overlay">
+  <div class="title">Pathfinder</div>
+  <div class="state" id="stateText">""" + pf_state + """</div>
+  <div class="km" id="kmText">""" + f"{total_km:,.0f}" + """ km traveled, no fixed home</div>
+</div>
+<div id="log">""" + log_html + """</div>
+<script>
+function initMap() {
+  const map = new google.maps.Map(document.getElementById('map'), {
+    center: {lat: """ + str(lat) + """, lng: """ + str(lon) + """}, zoom: 12,
+    disableDefaultUI: true, styles: [{elementType:'geometry',stylers:[{color:'#0b0e0d'}]},{elementType:'labels.text.fill',stylers:[{color:'#8d9890'}]},{elementType:'labels.text.stroke',stylers:[{color:'#0b0e0d'}]},{featureType:'road',elementType:'geometry',stylers:[{color:'#18201d'}]},{featureType:'water',elementType:'geometry',stylers:[{color:'#0f1614'}]}]
+  });
+  const marker = new google.maps.Marker({
+    map, position: {lat: """ + str(lat) + """, lng: """ + str(lon) + """},
+    icon: {path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW, scale: 6, fillColor: '#f1844e', fillOpacity: 1, strokeColor: '#0b0e0d', strokeWeight: 1}
+  });
+  setInterval(async () => {
+    try {
+      const r = await fetch('/pathfinder/status', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'});
+      const d = await r.json();
+      if (d.state) {
+        document.getElementById('stateText').textContent = d.state.state || 'unknown';
+        document.getElementById('kmText').textContent = Math.round(d.state.total_km || 0).toLocaleString() + ' km traveled, no fixed home';
+        marker.setPosition({lat: d.state.lat, lng: d.state.lon});
+        map.panTo({lat: d.state.lat, lng: d.state.lon});
+      }
+    } catch (e) { /* silent - a missed poll just tries again next interval */ }
+  }, 20000);
+}
+</script>
+<script src="https://maps.googleapis.com/maps/api/js?key=""" + gkey + """&callback=initMap" async defer></script>
+</body></html>"""
+
 def run_daily_research_scan():
     # Reuses ANTHROPIC_API_KEY (already required for the batch-completion poller) and
     # Claude's own server-side web_search tool - one Messages API call executes the
@@ -1357,6 +1762,33 @@ class H(BaseHTTPRequestHandler):
             self.wfile.write(render_research_page(feed_items, search_q=search_q, search_type=search_type).encode("utf-8"))
             return
 
+        if self.path == "/pathfinder":
+            gkey = os.environ.get("GOOGLE_MAPS_PUBLIC_KEY", "")
+            if not gkey:
+                self.send_response(500)
+                self.send_header("Content-Type", "text/plain")
+                self.end_headers()
+                self.wfile.write(b"GOOGLE_MAPS_PUBLIC_KEY not set on the server.")
+                return
+            if not supabase_configured():
+                self.send_response(500)
+                self.end_headers()
+                return
+            try:
+                state = pf_get_state()
+                log_entries = supabase_request("GET", "pathfinder_log?select=message,created_at&order=created_at.desc&limit=15") or []
+            except Exception as e:
+                self.send_response(500)
+                self.send_header("Content-Type", "text/plain")
+                self.end_headers()
+                self.wfile.write(("Could not load Pathfinder state: " + str(e)).encode())
+                return
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html")
+            self.end_headers()
+            self.wfile.write(render_pathfinder_page(state, log_entries, gkey).encode())
+            return
+
         if self.path == "/log":
             gkey = os.environ.get("GOOGLE_MAPS_PUBLIC_KEY", "")
             if not gkey:
@@ -1763,6 +2195,58 @@ class H(BaseHTTPRequestHandler):
                 self._json({"elements": rows[0]["data"].get("elements", []), "fetchedAt": rows[0]["fetched_at"]})
             except Exception as e:
                 self._json({"error": "Could not load cached Hamilton roads: " + str(e)}, code=500)
+            return
+
+        if self.path == "/pathfinder/status":
+            if not supabase_configured():
+                self._json({"error": "Supabase not configured"}, code=500)
+                return
+            try:
+                self._json({"state": pf_get_state()})
+            except Exception as e:
+                self._json({"error": "Could not load state: " + str(e)}, code=500)
+            return
+
+        if self.path == "/admin/pathfinder/start":
+            # Seeds the singleton state row if it doesn't exist yet (starting point
+            # defaults to Hamilton, same as everything else tonight), then flips the
+            # active flag. Deliberately explicit and manual - this starts something
+            # that runs indefinitely with real ongoing API calls, so it should never
+            # happen silently on its own.
+            if not supabase_configured():
+                self._json({"error": "Supabase not configured"}, code=500)
+                return
+            try:
+                existing = pf_get_state()
+                start_lat = data.get("lat", 43.2557)
+                start_lon = data.get("lon", -79.8711)
+                if not existing:
+                    supabase_request("POST", "pathfinder_state", body={
+                        "id": 1, "lat": start_lat, "lon": start_lon, "heading": 0,
+                        "state": "sleeping", "active": True, "total_km": 0,
+                        "fuel_km_remaining": PF_FUEL_RANGE_KM, "ride_hours_since_rest": 0,
+                        "km_since_service": 0, "recent_keys": [], "updated_at": now_iso()
+                    })
+                else:
+                    pf_save_state({**existing, "active": True})
+                pf_log_event("Pathfinder started")
+                self._json({"ok": True})
+            except Exception as e:
+                self._json({"error": "Could not start: " + str(e)}, code=500)
+            return
+
+        if self.path == "/admin/pathfinder/stop":
+            if not supabase_configured():
+                self._json({"error": "Supabase not configured"}, code=500)
+                return
+            try:
+                existing = pf_get_state()
+                if existing:
+                    pf_save_state({**existing, "active": False, "state": "sleeping"})
+                pf_log_event("Pathfinder stopped")
+                self._json({"ok": True})
+            except Exception as e:
+                self._json({"error": "Could not stop: " + str(e)}, code=500)
             return
 
         if self.path == "/admin/refresh-hamilton-roads":
@@ -2223,6 +2707,14 @@ def poll_pending_batches_loop():
                 refresh_hamilton_roads_cache()
         except Exception as e:
             print("  [hamilton-roads] loop error:", e)
+        try:
+            pathfinder_tick()
+        except Exception as e:
+            print("  [pathfinder] tick error:", e)
+        try:
+            pathfinder_nightly_precache()
+        except Exception as e:
+            print("  [pathfinder] precache error:", e)
 
 if __name__ == "__main__":
     load_towers()
