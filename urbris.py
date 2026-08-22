@@ -768,7 +768,13 @@ def pathfinder_tick():
     direction = 1
     dist = best_dist
     move_remaining = PF_SPEED_MPS * PF_TICK_SECONDS
-    recently_visited = set(state.get("recent_keys", []))
+    # recent_keys round-trips through Supabase as JSON, which turns the original
+    # (lat_int, lon_int) tuples into lists - loading them straight into set() throws
+    # (lists aren't hashable), which is exactly why this only ever worked on the very
+    # first tick and silently failed every tick after. Converting back to tuples here
+    # is the actual fix - confirmed by reproducing the exact TypeError before writing
+    # this line, not just reasoning about it.
+    recently_visited = set(tuple(k) for k in state.get("recent_keys", []))
 
     while move_remaining > 0:
         dist += move_remaining * direction
