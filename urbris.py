@@ -650,6 +650,17 @@ def pf_check_weather_ok(lat, lon):
         print("  [pathfinder] weather check failed, defaulting to OK:", e)
         return True  # a failed weather check shouldn't permanently strand the rider
 
+def pf_load_hamilton_cache():
+    # Same query as the /hamilton-roads endpoint - reused directly rather than
+    # duplicated, so both stay in sync automatically if that endpoint's logic ever
+    # changes. Returns the parsed Overpass-shaped data, or None if not yet seeded.
+    try:
+        rows = supabase_request("GET", "hamilton_roads_cache?select=data,fetched_at&order=fetched_at.desc&limit=1")
+        return rows[0]["data"] if rows else None
+    except Exception as e:
+        print("  [pathfinder] could not load Hamilton cache:", e)
+        return None
+
 def pf_find_cached_region(lat, lon):
     # Was returning the FIRST matching region with no ordering at all - after a full
     # night of ticks (plus dead-end recovery fetches, which insert new rows), multiple
@@ -794,15 +805,26 @@ def pathfinder_tick_inner():
         return "waiting: resumed riding, moves next tick"
 
     # --- Actually ride ---
-    region = pf_find_cached_region(lat, lon)
-    if not region:
-        pf_log_event(f"No cached roads here yet - fetching live around ({lat:.3f}, {lon:.3f})")
-        parsed = pf_fetch_and_cache_region(lat, lon, PF_REGION_FETCH_PAD_KM)
-        if not parsed:
-            return "stuck: live region fetch failed"
-        graph = pf_build_graph(parsed)
+    # Prefer the already-populated Hamilton cache (same one Drive Mode uses) whenever
+    # the rider is actually within Hamilton's bbox - it's already proven working, has
+    # real road data, and completely sidesteps the live-Overpass-timeout problem that
+    # kept causing the stuck-recovery-fetch failures logged tonight. Falls back to the
+    # accumulating pathfinder_regions/live-fetch system once it roams beyond Hamilton,
+    # which is the whole point of a rider with no fixed home.
+    in_hamilton = HAMILTON_BBOX[0] <= lat <= HAMILTON_BBOX[2] and HAMILTON_BBOX[1] <= lon <= HAMILTON_BBOX[3]
+    hamilton_data = pf_load_hamilton_cache() if in_hamilton else None
+    if hamilton_data:
+        graph = pf_build_graph(hamilton_data)
     else:
-        graph = pf_build_graph(region["data"])
+        region = pf_find_cached_region(lat, lon)
+        if not region:
+            pf_log_event(f"No cached roads here yet - fetching live around ({lat:.3f}, {lon:.3f})")
+            parsed = pf_fetch_and_cache_region(lat, lon, PF_REGION_FETCH_PAD_KM)
+            if not parsed:
+                return "stuck: live region fetch failed"
+            graph = pf_build_graph(parsed)
+        else:
+            graph = pf_build_graph(region["data"])
 
     if not graph["edges"]:
         pf_log_event("No roads found in this area - stuck, needs manual repositioning")
