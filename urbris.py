@@ -641,14 +641,23 @@ def pf_check_weather_ok(lat, lon):
         return True  # a failed weather check shouldn't permanently strand the rider
 
 def pf_find_cached_region(lat, lon):
+    # Was returning the FIRST matching region with no ordering at all - after a full
+    # night of ticks (plus dead-end recovery fetches, which insert new rows), multiple
+    # overlapping regions can genuinely exist for the same area. An old, small, or
+    # sparse region could keep getting picked over a better one, which would explain
+    # exactly the symptom found: the rider snapping onto a thin fragment of road with
+    # nowhere real to go, landing back at the same point every tick. Now prefers
+    # whichever matching region actually has the most road data - a much better proxy
+    # for 'will this let the rider keep moving' than which row happened to be first.
     try:
         rows = supabase_request("GET", "pathfinder_regions?select=id,minlat,minlon,maxlat,maxlon,data,fetched_at")
     except Exception:
         return None
-    for row in rows or []:
-        if row["minlat"] <= lat <= row["maxlat"] and row["minlon"] <= lon <= row["maxlon"]:
-            return row
-    return None
+    candidates = [row for row in (rows or [])
+                  if row["minlat"] <= lat <= row["maxlat"] and row["minlon"] <= lon <= row["maxlon"]]
+    if not candidates:
+        return None
+    return max(candidates, key=lambda row: len(row.get("data", {}).get("elements", [])))
 
 def pf_fetch_and_cache_region(lat, lon, radius_km):
     m_lat, m_lon = meters_per_deg(lat)
@@ -840,6 +849,14 @@ def pathfinder_tick_inner():
     pos = pf_edge_point_at(edge, dist)
     tick_points.append(pos)
     km_moved = haversine_km(lat, lon, pos["lat"], pos["lon"])
+    # Expected distance this tick, given no stop/dead-end interrupted it - a genuine
+    # near-zero result despite that is exactly the failure mode found tonight (landing
+    # back at the same point every tick, no error, no dead-end log). Flagging it
+    # explicitly means this is visible on the page immediately if it ever recurs,
+    # instead of needing another raw state dump to diagnose.
+    expected_km = (PF_SPEED_MPS * PF_TICK_SECONDS) / 1000
+    if km_moved < expected_km * 0.05:
+        pf_log_event(f"Barely moved this tick ({km_moved*1000:.0f}m of ~{expected_km*1000:.0f}m expected) - possible thin/degenerate cached region near ({pos['lat']:.3f}, {pos['lon']:.3f})")
 
     state["lat"], state["lon"], state["heading"] = pos["lat"], pos["lon"], heading
     state["state"] = "riding"
