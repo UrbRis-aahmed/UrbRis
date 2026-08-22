@@ -1123,8 +1123,10 @@ function initMap() {
   let lastKnownPoint = initialTrail.length ? initialTrail[initialTrail.length - 1] : null;
   let queue = [];                             // newly-arrived points not yet animated
   let segFrom = null, segTo = null, segDist = 0, segProgress = 0, lastFrameTs = null;
+  let frameCount = 0;
 
   function animFrame(ts) {
+    frameCount++;
     if (lastFrameTs == null) lastFrameTs = ts;
     const dt = Math.min(0.5, (ts - lastFrameTs) / 1000);
     lastFrameTs = ts;
@@ -1144,6 +1146,15 @@ function initMap() {
       map.panTo(pos);
       if (f >= 1) { segFrom = segTo; segTo = null; }
     }
+    // Debug exposure - the animation's internal state was otherwise trapped inside
+    // this closure, invisible from the console. Run window.pfDebug() to see exactly
+    // what's happening instead of guessing: is the loop even running (frameCount
+    // climbing?), is anything queued, is a segment actively in progress.
+    window.pfDebug = () => ({
+      frameCount, queueLength: queue.length, lastKnownPoint,
+      segFrom, segTo, segDist, segProgress,
+      markerPos: marker.getPosition() ? {lat: marker.getPosition().lat(), lng: marker.getPosition().lng()} : null
+    });
     requestAnimationFrame(animFrame);
   }
   requestAnimationFrame(animFrame);
