@@ -537,10 +537,15 @@ body[data-workspace-mode="library"] .main{background:radial-gradient(circle at 7
   <div id="driveMap" style="width:100%;height:100%"></div>
   <div style="position:absolute;top:18px;left:18px;right:18px;display:flex;justify-content:space-between;align-items:flex-start;pointer-events:none">
     <div style="background:rgba(24,32,29,.85);border:1px solid rgba(229,235,229,.16);border-radius:8px;padding:10px 16px;color:#f0f2ec;font-size:12.5px;font-family:ui-monospace,monospace;pointer-events:auto">
-      Arrow keys to steer · click the map to set a starting point<br/>
+      Left/right to steer · up/down for speed · click the map to set a starting point<br/>
       <span id="driveStatus" style="color:#8d9890">Click a starting point on the map</span>
     </div>
-    <button onclick="stopDriveMode(false)" style="background:rgba(24,32,29,.85);border:1px solid rgba(229,235,229,.16);color:#f0f2ec;border-radius:50%;width:38px;height:38px;font-size:18px;cursor:pointer;pointer-events:auto">&times;</button>
+    <div style="display:flex;align-items:flex-start;gap:10px;pointer-events:auto">
+      <div style="background:rgba(24,32,29,.85);border:1px solid rgba(229,235,229,.16);border-radius:8px;padding:10px 16px;color:#f1844e;font-size:20px;font-weight:700;font-family:ui-monospace,monospace;text-align:right">
+        <span id="driveSpeedKmh">0</span><span style="font-size:11px;color:#8d9890;font-weight:400"> km/h</span>
+      </div>
+      <button onclick="stopDriveMode(false)" style="background:rgba(24,32,29,.85);border:1px solid rgba(229,235,229,.16);color:#f0f2ec;border-radius:50%;width:38px;height:38px;font-size:18px;cursor:pointer">&times;</button>
+    </div>
   </div>
   <button onclick="stopDriveMode(true)" id="finishDriveBtn" style="display:none;position:absolute;bottom:24px;left:50%;transform:translateX(-50%);background:#dd6a32;border:none;color:#fff;border-radius:980px;padding:14px 32px;font-size:14px;font-weight:600;cursor:pointer">Stop &amp; use this route</button>
 </div>
@@ -3605,9 +3610,12 @@ function chooseNextEdge(graph, atKey, arrivingFromEdgeIdx, currentHeading, key) 
 let driveGraph = null, driveEdgeIdx = null, driveDist = 0, driveDir = 1, driveHeading = 0;
 let driveHeldKey = null, driveTracedPath = [], driveActive = false, driveMap = null, driveMarker = null, drivePathLine = null;
 let driveAnimHandle = null, driveLastTs = 0;
-const DRIVE_SPEED_MPS = 35; // arcade pace, not literal real-world speed - this is a
-// game-feel control scheme, not a riding simulator, and at a legible zoom level 18
-// felt too slow to be fun or intersections too far apart to react to comfortably
+const DRIVE_MIN_SPEED_MPS = 3, DRIVE_MAX_SPEED_MPS = 60, DRIVE_DEFAULT_SPEED_MPS = 35;
+const DRIVE_ACCEL_MPS2 = 25; // how quickly holding up/down changes speed - tuned for
+// a responsive but not twitchy feel at the existing 60fps animation loop
+let driveSpeed = DRIVE_DEFAULT_SPEED_MPS; // mutable now - up/down arrows control this
+// live, separate from left/right which stay dedicated to steering at intersections
+let driveUpHeld = false, driveDownHeld = false;
 let driveLastKey = null, driveLastKeyTs = 0; // most recent key press, with a timestamp -
 // see chooseNextEdge's caller below for why this replaces "whatever's held at the
 // exact instant of crossing"
@@ -3618,6 +3626,7 @@ async function startDriveMode() {
   driveActive = true;
   driveGraph = null; driveEdgeIdx = null; driveTracedPath = [];
   driveExpanding = false; driveExpandedKeys.clear();
+  driveSpeed = DRIVE_DEFAULT_SPEED_MPS; driveUpHeld = false; driveDownHeld = false;
   $('driveOverlay').style.display = '';
   $('driveStatus').textContent = 'Click a starting point on the map';
   $('finishDriveBtn').style.display = 'none';
@@ -3717,7 +3726,9 @@ async function onDriveMapClick(e) {
 
 function onDriveKeyDown(e) {
   if (!driveActive) return;
-  if (['ArrowUp', 'ArrowLeft', 'ArrowRight', 'ArrowDown'].includes(e.key)) {
+  if (e.key === 'ArrowUp') { driveUpHeld = true; e.preventDefault(); return; }
+  if (e.key === 'ArrowDown') { driveDownHeld = true; e.preventDefault(); return; }
+  if (['ArrowLeft', 'ArrowRight'].includes(e.key)) {
     driveHeldKey = e.key;
     driveLastKey = e.key; driveLastKeyTs = performance.now(); // remembered separately from
     // driveHeldKey - a quick tap that's released before the exact transition frame should
@@ -3727,6 +3738,8 @@ function onDriveKeyDown(e) {
   }
 }
 function onDriveKeyUp(e) {
+  if (e.key === 'ArrowUp') { driveUpHeld = false; return; }
+  if (e.key === 'ArrowDown') { driveDownHeld = false; return; }
   if (e.key === driveHeldKey) driveHeldKey = null;
 }
 let driveDebugLastKeyEver = null, driveDebugLastChoice = null, driveFrameCount = 0, driveLastPannedHeading = null;
@@ -3770,8 +3783,14 @@ function driveTick(ts) {
   const dt = Math.min(0.1, (ts - driveLastTs) / 1000); // clamp so a tab-switch pause doesn't jump the marker
   driveLastTs = ts;
   driveFrameCount++;
+  // Up/down control speed directly, like a throttle/brake - continuous acceleration
+  // while held, not a fixed step per press, for a more natural feel. Left/right stay
+  // purely for steering at intersections, unaffected by this.
+  if (driveUpHeld) driveSpeed = Math.min(DRIVE_MAX_SPEED_MPS, driveSpeed + DRIVE_ACCEL_MPS2 * dt);
+  if (driveDownHeld) driveSpeed = Math.max(DRIVE_MIN_SPEED_MPS, driveSpeed - DRIVE_ACCEL_MPS2 * dt);
+  $('driveSpeedKmh').textContent = Math.round(driveSpeed * 3.6); // m/s -> km/h, the unit a rider actually reads
   const edge = driveGraph.edges[driveEdgeIdx];
-  driveDist += DRIVE_SPEED_MPS * dt * driveDir;
+  driveDist += driveSpeed * dt * driveDir;
 
   // Proactive prefetch, checked every ~30 frames (not every frame - this is cheap but
   // no need to run it 60x/sec). The reactive dead-end expansion added earlier was still
