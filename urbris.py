@@ -598,6 +598,47 @@ def pf_edge_curviness(edge):
         prev_bearing = b
     return total_change / (edge["len"] / 1000.0)  # degrees of heading change per km
 
+PF_LOOKAHEAD_DEPTH = 3  # hops ahead to explore - bounded so this stays cheap even at
+# a busy junction; deep enough to see past a locally-plain connector into a genuinely
+# good stretch just beyond it
+
+def pf_lookahead_score(graph, start_edge_idx, start_dir, depth=PF_LOOKAHEAD_DEPTH):
+    # Bounded BFS outward from a candidate edge, so the choice isn't made blind to
+    # what's just past it - a plain-looking connector that leads straight into a
+    # genuinely winding backroad two hops ahead should be recognized as a good
+    # choice, not dismissed for looking unremarkable right at the junction.
+    visited_edges = {start_edge_idx}
+    frontier = [(start_edge_idx, start_dir, 0)]
+    first_edge = graph["edges"][start_edge_idx]
+    best_curviness = pf_edge_curviness(first_edge)
+    quality_sum = PF_ROAD_QUALITY.get(first_edge.get("highway"), 5)
+    edge_count = 1
+    intersections_seen = set()
+    while frontier:
+        edge_idx, direction, hop = frontier.pop(0)
+        if hop >= depth:
+            continue
+        edge = graph["edges"][edge_idx]
+        far_key = edge["end_key"] if direction == 1 else edge["start_key"]
+        intersections_seen.add(far_key)
+        for c in graph["intersections"].get(far_key, []):
+            if c["edge_idx"] in visited_edges:
+                continue
+            visited_edges.add(c["edge_idx"])
+            next_edge = graph["edges"][c["edge_idx"]]
+            best_curviness = max(best_curviness, pf_edge_curviness(next_edge))
+            quality_sum += PF_ROAD_QUALITY.get(next_edge.get("highway"), 5)
+            edge_count += 1
+            frontier.append((c["edge_idx"], c["dir"], hop + 1))
+    avg_quality = quality_sum / edge_count
+    # Intersection density as a real, computable-now proxy for city traffic - no new
+    # data source needed. A busy urban grid packs many cross-streets into a small
+    # area (frequent stop signs/lights, stop-and-go riding); a genuine rural backroad
+    # has comparatively few over the same reach. Capped so one extreme case can't
+    # dominate the whole score.
+    urban_penalty = min(len(intersections_seen) / 2.0, 6.0)
+    return best_curviness, avg_quality, urban_penalty
+
 def pf_choose_next_edge(graph, at_key, arriving_from_edge_idx, current_heading, recently_visited):
     # Metadata + geometry-based scoring - deliberately no per-junction AI vision call,
     # per tonight's own cost-discipline conversation about exactly this tradeoff.
@@ -639,7 +680,19 @@ def pf_choose_next_edge(graph, at_key, arriving_from_edge_idx, current_heading, 
         # re-picked even when already marked visited, defeating the anti-backtracking
         # fix entirely. Curviness should influence the choice, not override novelty.
         curviness_bonus = min(curviness / 15.0, 5.0)
-        score = quality - visited_penalty - abs(turn) / 180.0 + curviness_bonus
+        # Real lookahead, not just this one segment - a locally-plain connector that
+        # leads into a great winding backroad a couple hops ahead should be
+        # recognized, and a locally-fine road that heads straight into a dense,
+        # traffic-heavy grid should be avoided even though it looks OK right here.
+        lookahead_curviness, lookahead_quality, urban_penalty = pf_lookahead_score(graph, c["edge_idx"], c["dir"])
+        lookahead_bonus = min(lookahead_curviness / 20.0, 4.0)
+        # Both bonuses come from curvature (immediate + lookahead) - caught in testing
+        # that capping them independently wasn't enough: their SUM could still exceed
+        # the visited-penalty ceiling, letting a sufficiently curvy road get re-picked
+        # even when already visited, the exact problem fixed once already tonight for
+        # curviness alone. Capping the combined total closes that gap for real.
+        curve_total = min(curviness_bonus + lookahead_bonus, 5.0)
+        score = quality - visited_penalty - abs(turn) / 180.0 + curve_total - urban_penalty
         scored.append({**c, "score": score, "bearing": b})
     return max(scored, key=lambda s: s["score"])
 
