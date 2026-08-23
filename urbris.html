@@ -3646,6 +3646,7 @@ async function startDriveMode() {
 }
 
 const HAMILTON_BBOX_JS = { minLat: 43.13, minLon: -80.15, maxLat: 43.35, maxLon: -79.70 }; // must match HAMILTON_BBOX in urbris.py
+const SO_BBOX_JS = { minLat: 41.9, minLon: -83.1, maxLat: 45.5, maxLon: -75.0 }; // must match SOUTHERN_ONTARIO_BBOX in urbris.py
 let driveUsingCache = false; // true when running on the full-city Hamilton cache -
 // skips the proactive/reactive expansion logic entirely, since the whole city is
 // already loaded and there's nothing meaningful to expand into
@@ -3656,6 +3657,8 @@ async function onDriveMapClick(e) {
   driveUsingCache = false;
   const inHamilton = lat >= HAMILTON_BBOX_JS.minLat && lat <= HAMILTON_BBOX_JS.maxLat
     && lon >= HAMILTON_BBOX_JS.minLon && lon <= HAMILTON_BBOX_JS.maxLon;
+  const inSouthernOntario = lat >= SO_BBOX_JS.minLat && lat <= SO_BBOX_JS.maxLat
+    && lon >= SO_BBOX_JS.minLon && lon <= SO_BBOX_JS.maxLon;
 
   $('driveStatus').textContent = inHamilton ? 'Loading Hamilton road data...' : 'Loading nearby roads...';
   try {
@@ -3668,6 +3671,23 @@ async function onDriveMapClick(e) {
       // anything in this app's own code.
       try {
         const cr = await fetch('/hamilton-roads', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+        if (cr.ok) {
+          const cached = await cr.json();
+          if (!cached.error && cached.elements && cached.elements.length) {
+            overpassData = cached;
+            driveUsingCache = true;
+          }
+        }
+      } catch (cacheErr) { /* fall through below */ }
+    }
+
+    if (!overpassData && inSouthernOntario) {
+      // Second priority: the tiled Southern Ontario cache, still being populated
+      // gradually in the background - a tile that's already fetched works exactly
+      // like Hamilton's cache; one not yet reached just falls through to live
+      // Overpass below, same as always.
+      try {
+        const cr = await fetch('/ontario-tile-roads', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lat, lon }) });
         if (cr.ok) {
           const cached = await cr.json();
           if (!cached.error && cached.elements && cached.elements.length) {

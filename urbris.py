@@ -440,6 +440,91 @@ def should_run_daily_research_scan():
 # handles it, unlike a whole-province fetch which would need real tiling.
 HAMILTON_BBOX = (43.13, -80.15, 43.35, -79.70)  # (minlat, minlon, maxlat, maxlon)
 
+# Southern Ontario, roughly Windsor to the Quebec border, up to the Muskoka/Georgian
+# Bay line. Deliberately tiled into a grid of smaller regions rather than one giant
+# fetch - a single query this large would hit the same Overpass timeout risk already
+# encountered tonight, just at a much bigger scale. 136 tiles, processed a couple at
+# a time per poller cycle - a genuine multi-hour background process, not instant,
+# though many tiles are open water (Erie, Ontario, Huron/Georgian Bay) with little to
+# no road data and should return quickly.
+SOUTHERN_ONTARIO_BBOX = (41.9, -83.1, 45.5, -75.0)
+SO_TILE_SIZE_DEG = 0.5
+SO_TILES_PER_CYCLE = 2  # conservative, to avoid overloading the same free Overpass
+# service that's already shown real reliability issues tonight
+
+def so_generate_tiles():
+    minlat, minlon, maxlat, maxlon = SOUTHERN_ONTARIO_BBOX
+    tiles = []
+    lat = minlat
+    while lat < maxlat:
+        lon = minlon
+        while lon < maxlon:
+            tiles.append((lat, lon, min(lat + SO_TILE_SIZE_DEG, maxlat), min(lon + SO_TILE_SIZE_DEG, maxlon)))
+            lon += SO_TILE_SIZE_DEG
+        lat += SO_TILE_SIZE_DEG
+    return tiles
+
+def so_seed_tiles():
+    # Only inserts tiles that don't already exist - safe to call more than once
+    # without duplicating rows.
+    existing = supabase_request("GET", "southern_ontario_tiles?select=minlat,minlon")
+    existing_keys = {(round(r["minlat"], 4), round(r["minlon"], 4)) for r in (existing or [])}
+    inserted = 0
+    for minlat, minlon, maxlat, maxlon in so_generate_tiles():
+        key = (round(minlat, 4), round(minlon, 4))
+        if key in existing_keys:
+            continue
+        supabase_request("POST", "southern_ontario_tiles", body={
+            "minlat": minlat, "minlon": minlon, "maxlat": maxlat, "maxlon": maxlon,
+            "status": "pending"
+        })
+        inserted += 1
+    return inserted
+
+def so_process_next_tiles():
+    if not supabase_configured():
+        return
+    try:
+        pending = supabase_request("GET", "southern_ontario_tiles?status=eq.pending&select=id,minlat,minlon,maxlat,maxlon&limit=" + str(SO_TILES_PER_CYCLE))
+    except Exception as e:
+        print("  [so-tiles] could not fetch pending tiles:", e)
+        return
+    for tile in (pending or []):
+        query = (
+            '[out:json][timeout:55];'
+            'way["highway"~"^(motorway|trunk|primary|secondary|tertiary|'
+            'unclassified|residential|track|motorway_link|trunk_link|'
+            'primary_link|secondary_link|tertiary_link)$"]'
+            '["access"!~"^(no|private)$"](%f,%f,%f,%f);'
+            'out geom;'
+        ) % (tile["minlat"], tile["minlon"], tile["maxlat"], tile["maxlon"])
+        body_result, err = fetch_overpass(query)
+        if body_result is None:
+            print(f"  [so-tiles] tile {tile['id']} failed: {err}")
+            supabase_request("PATCH", f"southern_ontario_tiles?id=eq.{tile['id']}", body={"status": "failed"})
+            continue
+        try:
+            parsed = json.loads(body_result)
+        except Exception as e:
+            print(f"  [so-tiles] tile {tile['id']} malformed response: {e}")
+            supabase_request("PATCH", f"southern_ontario_tiles?id=eq.{tile['id']}", body={"status": "failed"})
+            continue
+        supabase_request("PATCH", f"southern_ontario_tiles?id=eq.{tile['id']}", body={
+            "status": "fetched", "data": parsed, "fetched_at": now_iso(),
+            "element_count": len(parsed.get("elements", []))
+        })
+        print(f"  [so-tiles] tile {tile['id']} cached - {len(parsed.get('elements', []))} roads")
+
+def so_find_cached_tile(lat, lon):
+    try:
+        rows = supabase_request("GET", "southern_ontario_tiles?status=eq.fetched&select=minlat,minlon,maxlat,maxlon,data")
+    except Exception:
+        return None
+    for row in (rows or []):
+        if row["minlat"] <= lat <= row["maxlat"] and row["minlon"] <= lon <= row["maxlon"]:
+            return row["data"]
+    return None
+
 def should_run_hamilton_roads_refresh():
     if not supabase_configured():
         return False
@@ -2697,6 +2782,29 @@ class H(BaseHTTPRequestHandler):
                 self._json({"error": "Could not load cached Hamilton roads: " + str(e)}, code=500)
             return
 
+        if self.path == "/ontario-tile-roads":
+            # Same idea as /hamilton-roads, but for whichever Southern Ontario tile
+            # (if any) has already been fetched and covers this specific point - the
+            # tile grid fills in gradually via the poller loop, so this correctly
+            # returns an error for a not-yet-reached tile, and the client falls back
+            # to live Overpass exactly as it always has.
+            if not supabase_configured():
+                self._json({"error": "Supabase not configured"}, code=500)
+                return
+            lat, lon = data.get("lat"), data.get("lon")
+            if lat is None or lon is None:
+                self._json({"error": "lat/lon required"}, code=400)
+                return
+            try:
+                tile_data = so_find_cached_tile(lat, lon)
+                if not tile_data:
+                    self._json({"error": "No cached tile covers this point yet"}, code=404)
+                    return
+                self._json({"elements": tile_data.get("elements", [])})
+            except Exception as e:
+                self._json({"error": "Could not load cached tile: " + str(e)}, code=500)
+            return
+
         if self.path == "/pathfinder/status":
             if not supabase_configured():
                 self._json({"error": "Supabase not configured"}, code=500)
@@ -2747,6 +2855,38 @@ class H(BaseHTTPRequestHandler):
                 self._json({"ok": True})
             except Exception as e:
                 self._json({"error": "Could not stop: " + str(e)}, code=500)
+            return
+
+        if self.path == "/admin/start-ontario-caching":
+            # Seeds the tile grid (safe to call more than once - only inserts tiles
+            # that don't already exist) and lets the existing poller loop process a
+            # couple per cycle from here on. Returns immediately - this does NOT
+            # block waiting for tiles to actually fetch, same reasoning as the
+            # Hamilton refresh fix earlier (a genuinely slow operation running inside
+            # the request/response cycle is what caused real 502s tonight).
+            if not supabase_configured():
+                self._json({"error": "Supabase not configured"}, code=500)
+                return
+            try:
+                inserted = so_seed_tiles()
+                self._json({"ok": True, "tilesSeeded": inserted, "totalTiles": len(so_generate_tiles()),
+                             "message": "Tiles will be processed a couple at a time via the existing poller loop - check /admin/ontario-tile-status for progress."})
+            except Exception as e:
+                self._json({"error": "Could not seed tiles: " + str(e)}, code=500)
+            return
+
+        if self.path == "/admin/ontario-tile-status":
+            if not supabase_configured():
+                self._json({"error": "Supabase not configured"}, code=500)
+                return
+            try:
+                all_tiles = supabase_request("GET", "southern_ontario_tiles?select=status") or []
+                counts = {}
+                for t in all_tiles:
+                    counts[t["status"]] = counts.get(t["status"], 0) + 1
+                self._json({"total": len(all_tiles), "byStatus": counts})
+            except Exception as e:
+                self._json({"error": "Could not check status: " + str(e)}, code=500)
             return
 
         if self.path == "/admin/refresh-hamilton-roads":
@@ -3215,6 +3355,10 @@ def poll_pending_batches_loop():
             pathfinder_nightly_precache()
         except Exception as e:
             print("  [pathfinder] precache error:", e)
+        try:
+            so_process_next_tiles()
+        except Exception as e:
+            print("  [so-tiles] loop error:", e)
 
 if __name__ == "__main__":
     load_towers()
