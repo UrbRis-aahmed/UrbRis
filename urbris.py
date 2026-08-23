@@ -890,7 +890,15 @@ def pathfinder_tick_inner():
     # first tick and silently failed every tick after. Converting back to tuples here
     # is the actual fix - confirmed by reproducing the exact TypeError before writing
     # this line, not just reasoning about it.
-    recently_visited = set(tuple(k) for k in state.get("recent_keys", []))
+    #
+    # Using a dict instead of a plain set here, deliberately - a Python set has NO
+    # guaranteed order at all (not insertion order, not recency), so 'keep the most
+    # recent 500' via list(some_set)[-500:] was never actually correct - it could
+    # silently keep an arbitrary mix of old and new visited spots instead of genuinely
+    # the most recent ones. A dict (ordered since Python 3.7) gives the same O(1)
+    # membership test as a set while actually preserving real insertion order, so the
+    # cap at save time means what it's supposed to.
+    recently_visited = dict.fromkeys(tuple(k) for k in state.get("recent_keys", []))
     tick_points = [{"lat": lat, "lon": lon}]  # the actual path this tick traces, not
     # just start->end - captured at each real edge transition, same idea as Drive
     # Mode's frame-by-frame path but at tick granularity instead of animation frames
@@ -920,7 +928,7 @@ def pathfinder_tick_inner():
                 pf_log_event(f"Stuck at a graph dead end near ({stuck_pos['lat']:.3f}, {stuck_pos['lon']:.3f}) - fetching more roads")
                 pf_fetch_and_cache_region(stuck_pos["lat"], stuck_pos["lon"], PF_REGION_FETCH_PAD_KM)
                 break
-            recently_visited.add(at_key)
+            recently_visited[at_key] = None
             best_edge_idx = nxt["edge_idx"]
             edge = graph["edges"][best_edge_idx]
             direction = nxt["dir"]
@@ -952,8 +960,10 @@ def pathfinder_tick_inner():
     # 20 was far too small a memory to mean anything over a real distance - after
     # even 21km, well over 20 intersections had already been crossed, so the oldest
     # ones had already aged out and become fair game to loop back over again. 500
-    # gives real, meaningful novelty-tracking across a genuine day's ride while still
-    # capped so this never grows unbounded.
+    # gives real, meaningful novelty-tracking across a genuine day's ride. Now that
+    # recently_visited is a dict (see above), list() on it genuinely returns keys in
+    # true insertion order - this slice is now an actual 'most recent 500', not the
+    # arbitrary-order slice a plain set would have silently produced.
     recent_list = list(recently_visited)[-500:]
     state["recent_keys"] = [list(k) for k in recent_list]
     # Rolling trail, capped the same way recent_keys is - a rider with no home and no
