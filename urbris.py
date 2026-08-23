@@ -784,6 +784,65 @@ def pf_log_event(message):
     except Exception as e:
         print("  [pathfinder] could not write log event:", e)
 
+def pf_places_nearby_search(lat, lon, place_type, gkey, keyword=None, radius_m=5000):
+    # Raw wrapper around Google's real Places Nearby Search REST endpoint. Requires
+    # the same kind of IP-restricted server-side key already needed for Roads API
+    # snapping - the browser-referrer-locked GOOGLE_MAPS_PUBLIC_KEY can't be used for
+    # a server-side call like this either. One new key can serve both needs.
+    try:
+        params = {"location": f"{lat},{lon}", "radius": radius_m, "type": place_type, "key": gkey}
+        if keyword:
+            params["keyword"] = keyword
+        url = "https://maps.googleapis.com/maps/api/place/nearbysearch/json?" + urllib.parse.urlencode(params)
+        with urllib.request.urlopen(url, timeout=15) as r:
+            data = json.loads(r.read())
+        if data.get("status") not in ("OK", "ZERO_RESULTS"):
+            print("  [pathfinder] Places API error:", data.get("status"), data.get("error_message"))
+            return []
+        return data.get("results", [])
+    except Exception as e:
+        print("  [pathfinder] Places API call failed:", e)
+        return []
+
+def pf_find_best_rated_place(lat, lon, place_type, gkey, keyword=None, min_rating=4.0, min_reviews=20):
+    # 'Really good spots,' not just the nearest one - filters out anything under a
+    # real quality bar (both rating AND a minimum review count, so a single 5-star
+    # review from someone's cousin doesn't outrank a genuinely well-reviewed place),
+    # then picks the highest-rated of what's left. Falls back to the single best
+    # available option if nothing clears the bar, rather than stranding the rider
+    # with no stop at all.
+    results = pf_places_nearby_search(lat, lon, place_type, gkey, keyword=keyword)
+    if not results:
+        return None
+    qualified = [r for r in results if (r.get("rating") or 0) >= min_rating and (r.get("user_ratings_total") or 0) >= min_reviews]
+    pool = qualified if qualified else results
+    best = max(pool, key=lambda r: (r.get("rating") or 0, r.get("user_ratings_total") or 0))
+    loc = best.get("geometry", {}).get("location", {})
+    return {
+        "name": best.get("name"), "rating": best.get("rating"),
+        "user_ratings_total": best.get("user_ratings_total"),
+        "lat": loc.get("lat"), "lon": loc.get("lng"),
+        "vicinity": best.get("vicinity"), "met_quality_bar": bool(qualified),
+    }
+
+def pf_find_food_stop(lat, lon, gkey):
+    return pf_find_best_rated_place(lat, lon, "restaurant", gkey)
+
+def pf_find_lodging_stop(lat, lon, gkey):
+    return pf_find_best_rated_place(lat, lon, "lodging", gkey)
+
+def pf_find_esso_station(lat, lon, gkey):
+    # Brand-restricted on purpose, per the actual requirement - not just any gas
+    # station. Google Places' 'keyword' parameter filters within the place-type
+    # search rather than needing a separate brand-matching pass after the fact.
+    results = pf_places_nearby_search(lat, lon, "gas_station", gkey, keyword="Esso", radius_m=15000)
+    esso_only = [r for r in results if "esso" in (r.get("name") or "").lower()]
+    if not esso_only:
+        return None
+    closest = esso_only[0]  # Places API already returns results ranked by proximity
+    loc = closest.get("geometry", {}).get("location", {})
+    return {"name": closest.get("name"), "lat": loc.get("lat"), "lon": loc.get("lng"), "vicinity": closest.get("vicinity")}
+
 def pf_check_weather_ok(lat, lon):
     # Open-Meteo, same free no-key service the client already uses for route weather -
     # here just a current-conditions check, not the full hourly forecast that feature
