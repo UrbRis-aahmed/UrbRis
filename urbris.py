@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import json, urllib.request, urllib.error, urllib.parse, webbrowser, os, sys, csv, math, uuid, base64, re, time, threading
+import json, urllib.request, urllib.error, urllib.parse, webbrowser, os, sys, csv, math, uuid, base64, re, time, threading, heapq
 from datetime import datetime, timezone
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from concurrent.futures import ThreadPoolExecutor
@@ -638,6 +638,71 @@ def pf_lookahead_score(graph, start_edge_idx, start_dir, depth=PF_LOOKAHEAD_DEPT
     # dominate the whole score.
     urban_penalty = min(len(intersections_seen) / 2.0, 6.0)
     return best_curviness, avg_quality, urban_penalty
+
+def pf_edge_scenic_cost(edge):
+    # Inverted quality -> cost, so Dijkstra (which finds MINIMUM total cost) naturally
+    # prefers scenic roads even when they're geometrically longer than the direct
+    # route. Base cost is the edge's real length - distance still matters, a scenic
+    # detour has to be genuinely worth it, not infinitely preferred regardless of how
+    # far out of the way it goes - scaled by a quality multiplier: low (cheap) for
+    # curvy/quiet roads, high (expensive) for straight/busy ones.
+    length_km = edge["len"] / 1000
+    quality = PF_ROAD_QUALITY.get(edge.get("highway"), 5)  # 1 (motorway) to 7 (tertiary/residential)
+    curviness = pf_edge_curviness(edge)
+    curviness_credit = min(curviness / 100.0, 1.5)
+    quality_credit = (quality - 1) / 6.0
+    multiplier = max(0.2, 3.0 - curviness_credit - quality_credit)
+    return length_km * multiplier
+
+def pf_plan_scenic_route(graph, start_key, end_key, max_iterations=50000):
+    # Classical Dijkstra, using the inverted scenic-quality edge cost above instead
+    # of raw distance - this is what actually finds the most winding/scenic path
+    # between two known points, not just the shortest one. With a fixed start AND
+    # end (unlike the earlier open-ended exploration attempt, which was solving the
+    # wrong problem), this is a well-defined shortest-path problem with a real,
+    # provably optimal solution - not an approximation.
+    if start_key not in graph["intersections"] or end_key not in graph["intersections"]:
+        return None
+
+    dist = {start_key: 0.0}
+    prev = {}
+    visited = set()
+    heap = [(0.0, start_key)]
+    iterations = 0
+
+    while heap:
+        iterations += 1
+        if iterations > max_iterations:
+            return None  # safety valve against pathological/huge graphs
+        cost, key = heapq.heappop(heap)
+        if key in visited:
+            continue
+        visited.add(key)
+        if key == end_key:
+            break
+        for c in graph["intersections"].get(key, []):
+            edge = graph["edges"][c["edge_idx"]]
+            far_key = edge["end_key"] if c["dir"] == 1 else edge["start_key"]
+            new_cost = cost + pf_edge_scenic_cost(edge)
+            if far_key not in dist or new_cost < dist[far_key]:
+                dist[far_key] = new_cost
+                prev[far_key] = (c["edge_idx"], c["dir"], key)
+                heapq.heappush(heap, (new_cost, far_key))
+
+    if start_key != end_key and end_key not in prev:
+        return None  # genuinely unreachable in this graph
+
+    path = []
+    cur = end_key
+    while cur != start_key:
+        if cur not in prev:
+            return None
+        edge_idx, direction, from_key = prev[cur]
+        edge = graph["edges"][edge_idx]
+        path.append({"edge_idx": edge_idx, "dir": direction, "km": edge["len"] / 1000})
+        cur = from_key
+    path.reverse()
+    return path
 
 def pf_choose_next_edge(graph, at_key, arriving_from_edge_idx, current_heading, recently_visited):
     # Metadata + geometry-based scoring - deliberately no per-junction AI vision call,
