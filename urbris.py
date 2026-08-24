@@ -565,9 +565,18 @@ def refresh_hamilton_roads_cache():
     except Exception as e:
         return {"error": "Overpass returned malformed JSON: " + str(e)}
     element_count = len(parsed.get("elements", []))
-    supabase_request("POST", "hamilton_roads_cache", body={
-        "data": parsed, "fetched_at": now_iso(), "element_count": element_count
-    })
+    # Fixed id=1 row, upserted in place - was previously a plain POST (insert) every
+    # refresh, which never actually replaced the old row. Reads were always correct
+    # regardless (order by fetched_at desc, limit 1 always found the newest one), but
+    # every monthly auto-refresh plus every manual /admin/refresh-hamilton-roads call
+    # left the old row behind forever - an unbounded, silent storage leak with no
+    # cleanup. Same single-row pattern pathfinder_state already uses correctly.
+    existing = supabase_request("GET", "hamilton_roads_cache?select=id&limit=1")
+    body = {"data": parsed, "fetched_at": now_iso(), "element_count": element_count}
+    if existing:
+        supabase_request("PATCH", f"hamilton_roads_cache?id=eq.{existing[0]['id']}", body=body)
+    else:
+        supabase_request("POST", "hamilton_roads_cache", body=body)
     print(f"  [hamilton-roads] cache refreshed - {element_count} elements")
     return {"ok": True, "elementCount": element_count, "fetchedAt": now_iso()}
 
