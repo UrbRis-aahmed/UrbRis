@@ -2898,6 +2898,26 @@ class H(BaseHTTPRequestHandler):
                 self._json({"error": "Could not check status: " + str(e)}, code=500)
             return
 
+        if self.path == "/admin/process-ontario-tiles":
+            # Manual, on-demand trigger - lets tile processing happen right now
+            # instead of depending on the background poller loop's own health/
+            # scheduling. Runs in a background thread rather than blocking this
+            # request directly: 2 tiles x up to 55s each could run close to 2 minutes
+            # worst case, and a long-blocking request handler is exactly what caused
+            # real 502s with the Hamilton refresh endpoint earlier tonight - same
+            # fix applied here proactively instead of waiting to hit the same issue.
+            if not supabase_configured():
+                self._json({"error": "Supabase not configured"}, code=500)
+                return
+            def _run():
+                try:
+                    so_process_next_tiles()
+                except Exception as e:
+                    print("  [so-tiles] manual trigger error:", e)
+            threading.Thread(target=_run, daemon=True).start()
+            self._json({"ok": True, "message": "Processing up to " + str(SO_TILES_PER_CYCLE) + " tiles now in the background - check /admin/ontario-tile-status in a minute or two."})
+            return
+
         if self.path == "/admin/refresh-hamilton-roads":
             # Runs in a background thread rather than blocking this HTTP request/
             # response cycle - fetching Hamilton's entire road network genuinely takes
