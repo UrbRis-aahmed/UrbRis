@@ -364,20 +364,6 @@ body[data-workspace-mode="library"] .main{background:radial-gradient(circle at 7
 <div class="hint" style="margin-top:8px">Or import any GPX file - your own saved rides, or a route pulled from Scenic/Kurviger/REVER - and score it, whether you've ridden it or not.</div>
 <input accept=".gpx" id="gpxImportInput" style="margin-top:6px" type="file"/>
 <div class="hint" id="gpxImportStatus" style="margin-top:6px"></div>
-<div class="hint" style="margin-top:8px">Or find nearby roads worth riding - scored on curviness and scenic elevation change, not traffic (that's a timing call, not a road property).</div>
-<button class="savebtn" id="discoverBtn" onclick="discoverWindyRoutes()" style="margin-top:6px">Find windy routes near map center</button>
-<div id="discoverStatus" class="hint" style="margin-top:6px"></div>
-<div id="discoverResults" style="margin-top:8px"></div>
-<button class="savebtn" id="recordVideoBtn" onclick="openCameraRecorder()" style="margin-top:8px">Record with phone camera</button>
-<div id="cameraRecorder" style="display:none;margin-top:8px">
-<video autoplay="" id="cameraPreview" muted="" playsinline="" style="width:100%;border-radius:8px;background:#000;display:block"></video>
-<div style="display:flex;gap:8px;margin-top:6px">
-<button class="vb" id="startRecBtn" onclick="startRecording()">Start Recording</button>
-<button class="vb" disabled="" id="stopRecBtn" onclick="stopRecording()">Stop Recording</button>
-<button class="vb" id="cancelRecBtn" onclick="closeCameraRecorder()">Cancel</button>
-</div>
-<div class="hint" id="recStatus" style="margin-top:6px"></div>
-</div>
 <div id="fn" style="font-size:11px;color:var(--ok);margin-top:6px"></div>
 <div style="margin-top:4px"><a href="#" onclick="saveCurrentRoute(); return false;" style="font-size:11px;color:var(--ac2)">Save current route now</a></div>
 <button class="savebtn" id="sendPhone" style="margin-top:8px;display:none">Send to phone (Google Maps)</button>
@@ -1327,91 +1313,6 @@ function parseGPXPoints(xmlText) {
   return pts;
 }
 
-// Discovery is entirely deterministic (Overpass geometry + the same curvature math
-// already used elsewhere + Elevation for scenic scoring) - no Claude/vision calls
-// anywhere in this path, kept that way deliberately per the cost conversation: broad
-// scanning stays cheap, vision analysis stays reserved for verifying a route someone
-// has actually chosen to ride.
-let discoveredRoutes = [];
-
-async function discoverWindyRoutes() {
-  const gk = $('gkey').value.trim();
-  if (!gk) { log('Enter your Google Maps key first', 'er'); return; }
-  if (!gmap) { log('Load the map first (draw or import a route once) before searching nearby', 'er'); return; }
-
-  const center = gmap.getCenter();
-  const status = $('discoverStatus');
-  const results = $('discoverResults');
-  status.textContent = 'Scanning a 50km radius for curvy, scenic roads - this can take a bit...';
-  results.innerHTML = '';
-  $('discoverBtn').disabled = true;
-
-  try {
-    const resp = await fetch('/discover-routes', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ lat: center.lat(), lon: center.lng(), radius_km: 50, gkey: gk })
-    });
-    const raw = await resp.text();
-    if (!resp.ok) {
-      let msg = 'HTTP ' + resp.status;
-      try { const e = JSON.parse(raw); msg = e.error || msg; } catch {}
-      throw new Error(msg);
-    }
-    const d = JSON.parse(raw);
-    discoveredRoutes = d.routes || [];
-    if (!discoveredRoutes.length) {
-      status.textContent = 'No genuinely curvy roads found in this area - try a different map location.';
-      return;
-    }
-    status.textContent = discoveredRoutes.length + ' candidate(s) found, ranked by curviness + scenic elevation change:';
-    results.innerHTML = discoveredRoutes.map((r, i) =>
-      '<div style="background:var(--sf2);border-radius:8px;padding:10px;margin-top:6px">'
-      + '<b>' + (r.name || 'Unnamed road') + '</b>'
-      + '<div class="hint">' + r.length_km + ' km &middot; score ' + Math.round(r.score * 100) + '%'
-      + (r.elev_variation ? ' &middot; ' + Math.round(r.elev_variation) + 'm elevation change' : '') + '</div>'
-      + '<button class="vb" style="margin-top:6px;font-size:11px" onclick="useDiscoveredRoute(' + i + ')">Use this route</button>'
-      + '</div>'
-    ).join('');
-  } catch (e) {
-    status.textContent = '';
-    log('Discovery failed: ' + e.message, 'er');
-  } finally {
-    $('discoverBtn').disabled = false;
-  }
-}
-
-async function useDiscoveredRoute(idx) {
-  const route = discoveredRoutes[idx];
-  if (!route) return;
-  const gk = $('gkey').value.trim();
-  const rawPts = route.points.map(p => ({ lat: p[0], lon: p[1] }));
-
-  // Same 20m thinning already used for GPX import, before road-snapping - avoids
-  // sending excessive points to the Roads API for what's often already dense OSM geometry.
-  const thinned = [];
-  let last = null;
-  for (const p of rawPts) {
-    if (!last || hav(last, p) >= 20) { thinned.push(p); last = p; }
-  }
-
-  log('Loading "' + (route.name || 'discovered route') + '" (' + route.length_km + ' km)...', '');
-  ensureMaps(gk, async () => {
-    initDrawMap();
-    try {
-      const dense = await snapDrawnRoute(thinned, gk);
-      if (!dense.length) throw new Error('No points returned from road snapping');
-      rp = dense;
-      drawMode = false;
-      currentSavedRouteId = null;
-      google.maps.event.clearListeners(gmap, 'click');
-      finishDraw();
-      log('Route loaded - Pull Images to continue verifying it for real', 'ok');
-    } catch (e) {
-      log('Could not load this route: ' + e.message, 'er');
-    }
-  });
-}
-
 async function importRouteFromGPX(file) {
   const gk = $('gkey').value.trim();
   if (!gk) { log('Enter Google API key first', 'er'); return; }
@@ -1634,81 +1535,6 @@ async function buildRouteFromVideoAndTelemetry(file, telemetry, sourceLabel, dis
       log('Failed to import route from ' + displayName + ': ' + e.message, 'er');
     }
   });
-}
-
-let cameraStream = null, mediaRecorder = null, recordedChunks = [], recordStartMs = 0, gpsWatchId = null, recordedTelemetry = [];
-
-// A video recorded live in the browser has no embedded GPS at all - unlike GoPro,
-// which writes location into the file itself via dedicated hardware, browser
-// recording APIs only capture raw video. So GPS is captured separately, in parallel,
-// using the phone's own location while MediaRecorder runs, then paired with the
-// recording afterward and fed into the exact same route-building pipeline used for
-// GoPro/DJI telemetry.
-async function openCameraRecorder() {
-  try {
-    cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
-    $('cameraPreview').srcObject = cameraStream;
-    $('cameraRecorder').style.display = '';
-    $('recStatus').textContent = 'Camera ready - mount the phone facing forward, then tap Start Recording once you\'re moving.';
-  } catch (e) {
-    log('Could not access camera: ' + e.message, 'er');
-  }
-}
-
-function closeCameraRecorder() {
-  if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
-  if (gpsWatchId != null) { navigator.geolocation.clearWatch(gpsWatchId); gpsWatchId = null; }
-  if (cameraStream) { cameraStream.getTracks().forEach(t => t.stop()); cameraStream = null; }
-  $('cameraRecorder').style.display = 'none';
-  $('startRecBtn').disabled = false;
-  $('stopRecBtn').disabled = true;
-}
-
-function startRecording() {
-  if (!cameraStream) return;
-  if (!navigator.geolocation) { log('This device/browser has no location access - cannot build a route from a live recording', 'er'); return; }
-  recordedChunks = [];
-  recordedTelemetry = [];
-  recordStartMs = Date.now();
-  const mimeType = MediaRecorder.isTypeSupported('video/mp4') ? 'video/mp4' : 'video/webm';
-  mediaRecorder = new MediaRecorder(cameraStream, { mimeType });
-  mediaRecorder.ondataavailable = e => { if (e.data.size) recordedChunks.push(e.data); };
-  mediaRecorder.start();
-  gpsWatchId = navigator.geolocation.watchPosition(
-    pos => {
-      const entry = { timeSec: (Date.now() - recordStartMs) / 1000, lat: pos.coords.latitude, lon: pos.coords.longitude };
-      if (pos.coords.altitude != null) entry.altitude = pos.coords.altitude; // not every device/browser provides this
-      recordedTelemetry.push(entry);
-      $('recStatus').textContent = 'Recording - ' + recordedTelemetry.length + ' GPS point(s) captured so far.';
-    },
-    err => log('GPS error while recording: ' + err.message, 'wn'),
-    { enableHighAccuracy: true, maximumAge: 0 }
-  );
-  $('startRecBtn').disabled = true;
-  $('stopRecBtn').disabled = false;
-  $('recStatus').textContent = 'Recording...';
-}
-
-async function stopRecording() {
-  if (!mediaRecorder) return;
-  const mimeType = mediaRecorder.mimeType;
-  const stopped = new Promise(resolve => { mediaRecorder.onstop = resolve; });
-  mediaRecorder.stop();
-  if (gpsWatchId != null) { navigator.geolocation.clearWatch(gpsWatchId); gpsWatchId = null; }
-  await stopped;
-  if (cameraStream) { cameraStream.getTracks().forEach(t => t.stop()); cameraStream = null; }
-  $('cameraRecorder').style.display = 'none';
-
-  if (recordedTelemetry.length < 2) {
-    log('Not enough GPS points captured during recording to build a route - try recording for longer, outdoors, with location permission granted', 'er');
-    return;
-  }
-  const blob = new Blob(recordedChunks, { type: mimeType });
-  const ext = mimeType.includes('mp4') ? 'mp4' : 'webm';
-  const file = new File([blob], 'recorded-route.' + ext, { type: mimeType });
-  $('videoImportStatus').textContent = 'Building route from recording (' + recordedTelemetry.length + ' GPS point(s))...';
-  log('Recording finished - ' + recordedTelemetry.length + ' GPS point(s) captured, building route...', '');
-  await buildRouteFromVideoAndTelemetry(file, recordedTelemetry, 'phone-recording', 'live recording');
 }
 
 $('videoImportInput').addEventListener('change', e => {
