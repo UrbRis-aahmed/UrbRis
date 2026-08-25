@@ -439,11 +439,6 @@ body[data-workspace-mode="library"] .main{background:radial-gradient(circle at 7
 <button class="savebtn" id="paintBtn" onclick="showPaintByRide()" style="margin-top:8px">Show painted map</button>
 <div class="hint" id="paintStatus" style="margin-top:6px"></div>
 </div><div>
-<div class="sl">Coverage gaps</div>
-<div class="hint">Click a point on the map to scan every road within an area for Street View gaps - a fast way to find where to point a GoPro instead of checking one route at a time.</div>
-<div class="or" style="margin-top:8px"><label>Area (sq km)</label><input id="scanArea" max="50" min="1" step="1" style="width:60px" type="number" value="10"/></div>
-<button class="btn" id="scanBtn" onclick="startScan()" style="margin-top:8px">Scan area for gaps</button>
-</div><div>
 <div class="sl">Field verification</div>
 <div class="hint">Drop photos or video from a drone/GoPro flight - matched to the nearest point by GPS automatically. Fills points marked "No Street View coverage", and attaches as a separate validation image on points that already have coverage, so you can compare what was actually seen against the Street View baseline.</div>
 <div class="dz" style="margin-top:8px">
@@ -1043,12 +1038,6 @@ function startDraw() {
   if (dtb) { dtb.textContent = 'Pan/zoom mode - tap to draw'; dtb.classList.remove('on'); }
   $('sendPhone').style.display = 'none';
   $('phonePanel').style.display = 'none';
-  scanMode = false;
-  if (scanRect) { scanRect.setMap(null); scanRect = null; }
-  scanPolys.forEach(p => p.setMap(null));
-  scanPolys = [];
-  const oldScanPanel2 = $('scanResults');
-  if (oldScanPanel2) oldScanPanel2.remove();
   $('empty').style.display = 'none';
   $('rw').style.display = '';
   $('rt').textContent = 'Draw your route';
@@ -1246,28 +1235,6 @@ async function routeThroughPoints(points, gk) {
   return out;
 }
 
-let scanMode = false, scanRect = null, scanPolys = [], scanResults = [];
-
-function startScan() {
-  const gk = $('gkey').value.trim();
-  if (!gk) { log('Enter Google API key first', 'er'); return; }
-  scanMode = true;
-  $('empty').style.display = 'none';
-  $('rw').style.display = '';
-  $('rt').textContent = 'Click a point on the map to set the scan center';
-  $('vg').style.display = 'none';
-  $('vbr').style.display = 'none';
-  $('vm').style.display = '';
-  $('bg').className = 'vb';
-  $('bm').className = 'vb on';
-  $('bbt').className = 'vb';
-  $('drawBar').style.display = 'none';
-  const old = $('scanResults');
-  if (old) old.remove();
-  log('Scan mode - click a point on the map to set the scan center', '');
-  ensureMaps(gk, initScanMap);
-}
-
 function initScanMap() {
   if (!gmap) {
     gmap = new google.maps.Map($('gmap'), {
@@ -1283,129 +1250,10 @@ function initScanMap() {
     if ($('traffic').checked) toggleTraffic();
   }
   google.maps.event.clearListeners(gmap, 'click');
-  gmap.addListener('click', onScanClick);
-}
-
-function bboxFromCenter(lat, lon, sqKm) {
-  const halfSideKm = Math.sqrt(sqKm) / 2;
-  const latOff = halfSideKm / 111.32;
-  const lonOff = halfSideKm / (111.32 * Math.cos(lat * Math.PI / 180));
-  return { south: lat - latOff, north: lat + latOff, west: lon - lonOff, east: lon + lonOff };
-}
-
-async function onScanClick(e) {
-  if (!scanMode) return;
-  scanMode = false;
-  google.maps.event.clearListeners(gmap, 'click');
-
-  const lat = e.latLng.lat(), lon = e.latLng.lng();
-  const sqKm = +$('scanArea').value || 10;
-  const bbox = bboxFromCenter(lat, lon, sqKm);
-
-  scanPolys.forEach(p => p.setMap(null));
-  scanPolys = [];
-  scanResults = [];
-  const oldPanel = $('scanResults');
-  if (oldPanel) oldPanel.remove();
-
-  if (scanRect) scanRect.setMap(null);
-  scanRect = new google.maps.Rectangle({
-    bounds: { north: bbox.north, south: bbox.south, east: bbox.east, west: bbox.west },
-    strokeColor: '#4f9d76', strokeWeight: 2, fillOpacity: 0.05, fillColor: '#4f9d76', map: gmap, clickable: false
-  });
-  gmap.fitBounds(scanRect.getBounds());
-
-  log('Fetching road network for ' + sqKm + ' sq km area...', '');
-  try {
-    const bboxStr = bbox.south.toFixed(6) + ',' + bbox.west.toFixed(6) + ',' + bbox.north.toFixed(6) + ',' + bbox.east.toFixed(6);
-    const resp = await fetch('/roadsinarea', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ bbox: bboxStr })
-    });
-    const data = await resp.json();
-    if (data.error) { log(data.error, 'er'); $('rt').textContent = 'Scan failed - click elsewhere to try again'; return; }
-    const ways = (data.elements || []).filter(el => el.type === 'way' && el.geometry && el.geometry.length > 1);
-    if (!ways.length) { log('No roads found in this area', 'wn'); $('rt').textContent = 'No roads found - click elsewhere to try again'; return; }
-    log('Found ' + ways.length + ' road segments - checking coverage...', '');
-    await scanWays(ways);
-  } catch (err) {
-    log('Scan failed: ' + err.message, 'er');
-  }
-}
-
-async function scanWays(ways) {
-  const gk = $('gkey').value.trim();
-  let done = 0;
-  $('pw').style.display = '';
-  $('pl').textContent = 'Scanning';
-  $('pf').style.width = '0%';
-  $('pp').textContent = '0%';
-
-  for (const way of ways) {
-    const pts = way.geometry.map(p => ({ lat: p.lat, lon: p.lon }));
-    const name = (way.tags && way.tags.name) || 'Unnamed road';
-
-    const samplePts = [pts[0]];
-    let acc = 0;
-    for (let i = 1; i < pts.length; i++) {
-      acc += hav(pts[i - 1], pts[i]);
-      if (acc >= 300) { samplePts.push(pts[i]); acc = 0; }
-    }
-    if (samplePts[samplePts.length - 1] !== pts[pts.length - 1]) samplePts.push(pts[pts.length - 1]);
-
-    let covered = 0;
-    for (const p of samplePts) {
-      const ok = await chk(gk, p.lat, p.lon);
-      if (ok) covered++;
-    }
-    const pct = Math.round((covered / samplePts.length) * 100);
-    let lengthKm = 0;
-    for (let i = 1; i < pts.length; i++) lengthKm += hav(pts[i - 1], pts[i]) / 1000;
-
-    scanResults.push({ name, pct, lengthKm, pts });
-
-    const color = pct >= 80 ? '#97c459' : pct >= 40 ? '#ef9f27' : '#f09595';
-    scanPolys.push(new google.maps.Polyline({
-      path: pts.map(p => ({ lat: p.lat, lng: p.lon })),
-      strokeColor: color, strokeWeight: 4, strokeOpacity: 0.85, map: gmap
-    }));
-
-    done++;
-    $('pf').style.width = Math.round(done / ways.length * 100) + '%';
-    $('pp').textContent = Math.round(done / ways.length * 100) + '%';
-  }
-  $('pw').style.display = 'none';
-
-  scanResults.sort((a, b) => a.pct - b.pct);
-  renderScanResults();
-  const gaps = scanResults.filter(r => r.pct < 80).length;
-  $('rt').textContent = 'Coverage scan - ' + scanResults.length + ' roads, ' + gaps + ' with gaps';
-  log('Scan complete - ' + scanResults.length + ' roads checked, ' + gaps + ' flagged with gaps', gaps ? 'wn' : 'ok');
-}
-
-function renderScanResults() {
-  const gaps = scanResults.filter(r => r.pct < 80).length;
-  let rows = scanResults.map(r => {
-    const color = r.pct >= 80 ? 'var(--ok)' : r.pct >= 40 ? 'var(--wn)' : 'var(--er)';
-    return '<tr><td style="padding:5px 8px;border-top:.5px solid var(--b)">' + r.name + '</td><td style="padding:5px 8px;border-top:.5px solid var(--b)">' + r.lengthKm.toFixed(1) + ' km</td><td style="padding:5px 8px;border-top:.5px solid var(--b);color:' + color + '">' + r.pct + '%</td></tr>';
-  }).join('');
-  let panel = $('scanResults');
-  if (!panel) {
-    panel = document.createElement('div');
-    panel.id = 'scanResults';
-    panel.style.marginTop = '16px';
-    $('vm').appendChild(panel);
-  }
-  panel.innerHTML = '<div style="font-size:13px;font-weight:500;margin-bottom:8px">Coverage by road (' + scanResults.length + ' total, ' + gaps + ' with gaps &lt;80%)</div>'
-    + '<div style="font-size:11px;color:var(--mu);margin-bottom:8px;display:flex;gap:16px">'
-    + '<span><span style="color:var(--ok)">&#9679;</span> 80%+ covered</span>'
-    + '<span><span style="color:var(--wn)">&#9679;</span> 40-79%</span>'
-    + '<span><span style="color:var(--er)">&#9679;</span> under 40% - best filming targets</span>'
-    + '</div>'
-    + '<table style="width:100%;border-collapse:collapse;font-size:12px">'
-    + '<tr><th style="text-align:left;padding:5px 8px;color:var(--mu)">Road</th><th style="text-align:left;padding:5px 8px;color:var(--mu)">Length</th><th style="text-align:left;padding:5px 8px;color:var(--mu)">Coverage</th></tr>'
-    + rows + '</table>';
+  // The scan-specific click handler that used to be wired up here was removed along
+  // with the rest of Coverage Gaps scanning - this function is kept because Paint by
+  // Ride also calls it (for base map init + light pollution/radar/traffic toggles),
+  // immediately clearing the click listener right after anyway.
 }
 
 async function finishDraw() {
@@ -4316,7 +4164,7 @@ async function saveCurrentRoute() {
   // before it goes to the server. Drone photo data: URLs have no key and pass through untouched.
   const safeRes = res.map(r => ({ ...r, imageUrl: redactKeyFromUrl(r.imageUrl) }));
   const name = currentSavedRouteId ? undefined : await nextRouteName();
-  const payload = { id: currentSavedRouteId || undefined, name, meta, data: { res: safeRes, scanResults: (typeof scanResults !== 'undefined' ? scanResults : []), pendingBatch } };
+  const payload = { id: currentSavedRouteId || undefined, name, meta, data: { res: safeRes, pendingBatch } };
   try {
     const resp = await fetch('/routes/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
     const out = await resp.json();
@@ -4432,7 +4280,6 @@ async function loadSavedRoute(id) {
     const entry = await resp.json();
     if (entry.error) { log(entry.error, 'er'); return; }
     res = (entry.data && entry.data.res) || [];
-    if (entry.data && entry.data.scanResults) scanResults = entry.data.scanResults;
     // Street View image URLs were saved with their key redacted - re-add the key
     // currently typed into this session so images can actually load, without ever
     // having stored it on the server.
