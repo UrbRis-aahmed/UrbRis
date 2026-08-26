@@ -763,6 +763,16 @@ def render_hamilton_search_page(elements, fetched_at):
   .notag { color:#69736c; font-size:11px; font-style:italic; }
   .coordBtn { background:none; border:1px solid rgba(229,235,229,.2); color:#8d9890; border-radius:6px; padding:3px 8px; font-size:10.5px; cursor:pointer; }
   .coords { display:none; margin-top:6px; max-height:140px; overflow-y:auto; font-family:ui-monospace,monospace; font-size:10px; color:#8d9890; background:#0f1412; border-radius:6px; padding:6px 8px; }
+  .mapBtn { background:none; border:1px solid rgba(221,106,50,.4); color:#dd6a32; border-radius:6px; padding:3px 8px; font-size:10.5px; cursor:pointer; margin-left:6px; }
+  #gkeyRow { padding:0 24px 14px; }
+  #gkey { width:100%; max-width:480px; background:#161b19; border:1px solid rgba(229,235,229,.16); border-radius:8px; padding:9px 14px; color:#f0f2ec; font-size:12.5px; }
+  #gkeyHint { font-size:11px; color:#69736c; margin-top:5px; }
+  #mapModal { display:none; position:fixed; inset:0; z-index:100; background:rgba(0,0,0,.6); }
+  #mapModalInner { position:absolute; top:5%; left:5%; right:5%; bottom:5%; background:#0b0e0d; border-radius:12px; border:1px solid rgba(229,235,229,.16); overflow:hidden; display:flex; flex-direction:column; }
+  #mapModalHead { padding:14px 18px; border-bottom:1px solid rgba(229,235,229,.12); display:flex; justify-content:space-between; align-items:center; }
+  #mapModalClose { background:none; border:1px solid rgba(229,235,229,.2); color:#f0f2ec; border-radius:6px; width:28px; height:28px; cursor:pointer; }
+  #modalMap { flex:1; }
+  #modalStatus { font-size:11px; color:#8d9890; font-family:ui-monospace,monospace; padding:0 18px 10px; }
 </style></head>
 <body>
 <header>
@@ -778,6 +788,10 @@ def render_hamilton_search_page(elements, fetched_at):
   <span>smoothness tagged: <b>""" + str(coverage["smoothness"]) + """%</b></span>
   <span>sidewalk tagged: <b>""" + str(coverage["sidewalk"]) + """%</b></span>
 </div>
+<div id="gkeyRow">
+  <input id="gkey" type="text" placeholder="Google Maps API key (needs Roads API + Maps JavaScript API enabled) - only needed for 'Show on map'" />
+  <div id="gkeyHint">Used only in your browser to draw and snap a road on the map - never sent anywhere except Google's own APIs.</div>
+</div>
 <div class="controls">
   <input id="q" type="text" placeholder="Search by road name or any attribute (e.g. asphalt, 50, residential)..." />
   <select id="hwFilter"><option value="">All road types</option></select>
@@ -787,6 +801,16 @@ def render_hamilton_search_page(elements, fetched_at):
   <thead><tr><th>Road</th><th>Type</th><th>Attributes</th></tr></thead>
   <tbody id="rows"></tbody>
 </table>
+<div id="mapModal">
+  <div id="mapModalInner">
+    <div id="mapModalHead">
+      <div id="mapModalTitle" style="font-weight:600"></div>
+      <button id="mapModalClose" onclick="closeMapModal()">&times;</button>
+    </div>
+    <div id="modalStatus"></div>
+    <div id="modalMap"></div>
+  </div>
+</div>
 <script>
 const ROADS = """ + data_json + """;
 const hwTypes = [...new Set(ROADS.map(r => r.highway).filter(Boolean))].sort();
@@ -801,6 +825,8 @@ function matches(road, q) {
   return hay.includes(q);
 }
 
+let currentShown = [];
+
 function render() {
   const q = document.getElementById('q').value.trim().toLowerCase();
   const hw = hwSel.value;
@@ -810,9 +836,9 @@ function render() {
   // Cap rendered rows for real responsiveness at Hamilton's actual scale (several
   // thousand roads) - narrowing the search is the intended way to see more, not
   // rendering every row at once regardless of relevance.
-  const shown = filtered.slice(0, 500);
+  currentShown = filtered.slice(0, 500);
   const rows = document.getElementById('rows');
-  rows.innerHTML = shown.map((r, i) => {
+  rows.innerHTML = currentShown.map((r, i) => {
     const tagEntries = Object.entries(r.tags).filter(([k]) => k !== 'name' && k !== 'highway');
     const tagsHtml = tagEntries.length
       ? tagEntries.map(([k,v]) => '<span class="tag">' + esc(k) + '=' + esc(v) + '</span>').join('')
@@ -822,6 +848,7 @@ function render() {
       + '<td class="rtype">' + esc(r.highway || '-') + '</td>'
       + '<td>' + tagsHtml
       + '<br/><button class="coordBtn" onclick="toggleCoords(\\'' + coordId + '\\')">' + r.geometry.length + ' points &middot; view coordinates</button>'
+      + '<button class="mapBtn" onclick="showOnMap(' + i + ')">Show on map (snapped)</button>'
       + '<div class="coords" id="' + coordId + '">' + r.geometry.map(p => p.lat.toFixed(6) + ', ' + p.lon.toFixed(6)).join('<br/>') + '</div>'
       + '</td></tr>';
   }).join('');
@@ -830,6 +857,89 @@ function render() {
 function toggleCoords(id) {
   const el = document.getElementById(id);
   el.style.display = el.style.display === 'block' ? 'none' : 'block';
+}
+
+// --- Map modal: a single, reused Google Map instance rather than one per row -
+// lazily loads the Maps JS API on first use, since most searches never open the map
+// at all. Draws the raw OSM geometry (thin, muted) alongside the Roads-API-snapped
+// version (orange, matching Urbris's accent colour throughout the rest of the app) -
+// same snapping approach and 100-point chunking already proven in Drive Mode.
+let modalMap = null, modalRawLine = null, modalSnapLine = null, mapsLoading = null;
+
+function loadGoogleMaps(key) {
+  if (window.google && window.google.maps) return Promise.resolve();
+  if (mapsLoading) return mapsLoading;
+  mapsLoading = new Promise((resolve, reject) => {
+    window.__onGmapsLoaded = resolve;
+    const s = document.createElement('script');
+    s.src = 'https://maps.googleapis.com/maps/api/js?key=' + encodeURIComponent(key) + '&callback=__onGmapsLoaded';
+    s.onerror = () => reject(new Error('Failed to load Google Maps - check the API key'));
+    document.head.appendChild(s);
+  });
+  return mapsLoading;
+}
+
+async function snapPoints(points, gkey) {
+  const B = 100; // Roads API's own per-request point limit
+  const chunks = [];
+  for (let i = 0; i < points.length; i += B) chunks.push(points.slice(i, i + B));
+  let out = [];
+  for (const chunk of chunks) {
+    const path = chunk.map(p => p.lat + ',' + p.lon).join('|');
+    const resp = await fetch('/snap', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path, gkey, interpolate: true })
+    });
+    const d = await resp.json();
+    if (!d.snappedPoints || !d.snappedPoints.length) {
+      throw new Error('Roads API returned no snapped points for this stretch');
+    }
+    d.snappedPoints.forEach(s => out.push({ lat: s.location.latitude, lng: s.location.longitude }));
+  }
+  return out;
+}
+
+async function showOnMap(idx) {
+  const road = currentShown[idx];
+  if (!road) return;
+  const gkey = document.getElementById('gkey').value.trim();
+  if (!gkey) { alert('Enter a Google Maps API key first (needs Roads API + Maps JavaScript API enabled)'); return; }
+
+  document.getElementById('mapModal').style.display = 'block';
+  document.getElementById('mapModalTitle').textContent = road.name + (road.highway ? ' (' + road.highway + ')' : '');
+  const status = document.getElementById('modalStatus');
+  status.textContent = 'Loading map...';
+
+  try {
+    await loadGoogleMaps(gkey);
+    if (!modalMap) {
+      modalMap = new google.maps.Map(document.getElementById('modalMap'), {
+        center: { lat: road.geometry[0].lat, lng: road.geometry[0].lon }, zoom: 15,
+        styles: [{elementType:'geometry',stylers:[{color:'#0b0e0d'}]},{elementType:'labels.text.fill',stylers:[{color:'#8d9890'}]},{elementType:'labels.text.stroke',stylers:[{color:'#0b0e0d'}]},{featureType:'road',elementType:'geometry',stylers:[{color:'#18201d'}]},{featureType:'water',elementType:'geometry',stylers:[{color:'#0f1614'}]}]
+      });
+    }
+    if (modalRawLine) modalRawLine.setMap(null);
+    if (modalSnapLine) modalSnapLine.setMap(null);
+
+    // Raw OSM geometry first, thin and muted - shows what was actually pulled,
+    // before any correction.
+    const rawPath = road.geometry.map(p => ({ lat: p.lat, lng: p.lon }));
+    modalRawLine = new google.maps.Polyline({ path: rawPath, strokeColor: '#8d9890', strokeOpacity: 0.5, strokeWeight: 2, map: modalMap });
+    const bounds = new google.maps.LatLngBounds();
+    rawPath.forEach(p => bounds.extend(p));
+    modalMap.fitBounds(bounds);
+
+    status.textContent = 'Snapping to Google\\'s road data (' + road.geometry.length + ' points)...';
+    const snapped = await snapPoints(road.geometry, gkey);
+    modalSnapLine = new google.maps.Polyline({ path: snapped, strokeColor: '#dd6a32', strokeOpacity: 0.9, strokeWeight: 5, map: modalMap });
+    status.textContent = 'Orange = snapped to Google\\'s roads (' + snapped.length + ' points) · grey = raw OSM geometry (' + road.geometry.length + ' points)';
+  } catch (e) {
+    status.textContent = 'Could not load/snap this road: ' + e.message;
+  }
+}
+
+function closeMapModal() {
+  document.getElementById('mapModal').style.display = 'none';
 }
 
 document.getElementById('q').addEventListener('input', render);
