@@ -1398,6 +1398,55 @@ $('gpxImportInput').addEventListener('change', e => {
   e.target.value = '';
 });
 
+// Picks up a road handed off from the Hamilton road database's "Pull Street View
+// images" button - same underlying pipeline as GPX import (snap, build res/sp,
+// enable Pull Images), just arriving via localStorage instead of a file, since
+// that page is a separate document with no other way to hand data directly here.
+async function loadStagedRoute(points, gk, label) {
+  ensureMaps(gk, async () => {
+    initDrawMap();
+    log('Snapping road from ' + label + ' (' + points.length + ' points)...', '');
+    try {
+      const dense = await snapDrawnRoute(points, gk);
+      if (!dense.length) throw new Error('No points returned from road snapping');
+      rp = dense;
+      drawMode = false;
+      currentSavedRouteId = null;
+      google.maps.event.clearListeners(gmap, 'click');
+      drawMarkers.forEach(m => m.setMap(null));
+      drawMarkers = [];
+      if (drawPoly) {
+        drawPoly.setPath(dense.map(p => ({ lat: p.lat, lng: p.lon })));
+        drawPoly.setOptions({ strokeColor: '#4f9d76', strokeWeight: 4 });
+        const bounds = new google.maps.LatLngBounds();
+        dense.forEach(p => bounds.extend({ lat: p.lat, lng: p.lon }));
+        gmap.fitBounds(bounds);
+      }
+      $('drawBar').style.display = 'none';
+      $('empty').style.display = 'none';
+      $('rw').style.display = '';
+      $('fn').textContent = '+ From ' + label + ' (' + dense.length + ' road points)';
+      $('sendPhone').style.display = '';
+      $('legsBtn').style.display = '';
+      $('conditionsBtn').style.display = '';
+      $('gpxBtn').style.display = '';
+      $('gpxLinkBtn').style.display = '';
+      ust();
+      $('run').disabled = false;
+      $('run').textContent = 'Pull Images';
+      setRouteNextStep('images');
+      res = sp.map(pt => ({ km: pt.distKm, lat: pt.lat, lon: pt.lon, heading: pt.heading, imageUrl: '', hasCoverage: false, etaSec: 0 }));
+      $('xw').style.display = '';
+      rebuildViewFromRes();
+      sv('map');
+      saveCurrentRoute();
+      log('Road loaded from ' + label + ': ' + (td(rp) / 1000).toFixed(1) + ' km - click Pull Images to continue', 'ok');
+    } catch (e) {
+      log('Failed to load road from ' + label + ': ' + e.message, 'er');
+    }
+  });
+}
+
 // Builds a route directly from a video's own GPS track instead of hand-drawing it -
 // reuses the same telemetry parsers built for Field Media (GPMF for GoPro, .SRT for
 // DJI) and the same true road-snapping used for freehand strokes, so the result is
@@ -5079,6 +5128,26 @@ function setWorkspaceMode(mode) {
 window.addEventListener('load', () => {
   const savedMode = localStorage.getItem('urbris_workspaceMode');
   setWorkspaceMode(WORKSPACE_MODE_META[savedMode] ? savedMode : 'routes');
+
+  // A road staged from the Hamilton road database's "Pull Street View images"
+  // button arrives here via localStorage - cleared immediately so a later normal
+  // reload of this page never re-triggers an old staged road.
+  const staged = localStorage.getItem('urbris_staged_route');
+  if (staged) {
+    localStorage.removeItem('urbris_staged_route');
+    try {
+      const parsed = JSON.parse(staged);
+      if (parsed.gkey && !$('gkey').value.trim()) $('gkey').value = parsed.gkey;
+      const gk = $('gkey').value.trim();
+      if (gk && parsed.points && parsed.points.length >= 2) {
+        loadStagedRoute(parsed.points, gk, parsed.label || 'Hamilton road database');
+      } else if (!gk) {
+        log('A road was sent from the Hamilton database, but no Google API key is set - enter one and reload to load it', 'wn');
+      }
+    } catch (e) {
+      console.warn('Could not load staged route:', e);
+    }
+  }
 });
 </script></body>
 </html>

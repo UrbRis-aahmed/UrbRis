@@ -858,6 +858,7 @@ function render() {
       + '<td>' + tagsHtml
       + '<br/><button class="coordBtn" onclick="toggleCoords(\\'' + coordId + '\\')">' + r.geometry.length + ' points &middot; view coordinates</button>'
       + '<button class="mapBtn" onclick="showOnMap(' + i + ')">' + mapLabel + '</button>'
+      + '<button class="mapBtn" onclick="pullStreetViewImages(' + i + ')">Pull Street View images</button>'
       + '<div class="coords" id="' + coordId + '">' + r.geometry.map(p => p.lat.toFixed(6) + ', ' + p.lon.toFixed(6)).join('<br/>') + '</div>'
       + '</td></tr>';
   }).join('');
@@ -908,18 +909,22 @@ async function snapPoints(points, gkey) {
   return out;
 }
 
+// Shared by both 'Show on map' and 'Pull Street View images' - a single named
+// street is genuinely split into many separate OSM ways, so any action on one
+// segment should act on the whole street. 'Unnamed road' is OSM's placeholder for
+// any way with no name tag - many genuinely unrelated roads share that literal
+// string, so those are deliberately never combined with each other.
+function getSegmentsFor(road) {
+  return road.name === 'Unnamed road' ? [road] : ROADS.filter(r => r.name === road.name);
+}
+
 async function showOnMap(idx) {
   const road = currentShown[idx];
   if (!road) return;
   const gkey = document.getElementById('gkey').value.trim();
   if (!gkey) { alert('Enter a Google Maps API key first (needs Roads API + Maps JavaScript API enabled)'); return; }
 
-  // A single named street is split into many separate OSM ways (segments) - combine
-  // every segment sharing this exact name into one visual, rather than showing
-  // whichever arbitrary segment happened to be clicked. 'Unnamed road' is a special
-  // case: many genuinely different, unrelated roads share that literal placeholder,
-  // so those are never combined - only this one segment is shown.
-  const segments = road.name === 'Unnamed road' ? [road] : ROADS.filter(r => r.name === road.name);
+  const segments = getSegmentsFor(road);
 
   document.getElementById('mapModal').style.display = 'block';
   document.getElementById('mapModalTitle').textContent = road.name + (road.highway ? ' (' + road.highway + ')' : '') + (segments.length > 1 ? ' \\u2014 ' + segments.length + ' segments' : '');
@@ -973,6 +978,31 @@ async function showOnMap(idx) {
 
 function closeMapModal() {
   document.getElementById('mapModal').style.display = 'none';
+}
+
+// Hands the road off to Urbris's real Pull Images pipeline - this page has no
+// Street View / risk-coding logic of its own, and shouldn't duplicate the
+// existing, already-proven pipeline in the main app. localStorage is the handoff
+// (shared across pages on the same origin), read once on the main app's load and
+// cleared immediately so a later normal reload never replays an old handoff.
+// Honest limitation: segments are combined in whatever order they appear in the
+// data, not stitched by geographic proximity - the resulting km markers along a
+// multi-segment road may not be perfectly sequential, though each point's actual
+// Street View pull and risk coding is unaffected by that ordering.
+function pullStreetViewImages(idx) {
+  const road = currentShown[idx];
+  if (!road) return;
+  const gkey = document.getElementById('gkey').value.trim();
+  if (!gkey) { alert('Enter a Google Maps API key first - it will carry over to the main app automatically'); return; }
+
+  const segments = getSegmentsFor(road);
+  const points = segments.flatMap(s => s.geometry.map(p => ({ lat: p.lat, lon: p.lon })));
+  if (points.length < 2) { alert('Not enough points on this road to build a route'); return; }
+
+  localStorage.setItem('urbris_staged_route', JSON.stringify({
+    points, gkey, label: road.name + (segments.length > 1 ? ' (' + segments.length + ' segments)' : '')
+  }));
+  window.location.href = '/';
 }
 
 document.getElementById('q').addEventListener('input', render);
