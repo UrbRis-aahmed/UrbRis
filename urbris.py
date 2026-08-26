@@ -729,11 +729,22 @@ def render_hamilton_search_page(elements, fetched_at):
     # kept (that's the actual point), but Overpass's own internal bookkeeping fields
     # (bounds, nodes list, etc.) aren't, to keep the embedded payload reasonable at
     # Hamilton's real scale (several thousand roads).
+    def segment_length_m(geometry):
+        # There's no fixed rule for how long a segment "should" be - OSM splits ways
+        # wherever an attribute changes, at bridges/tunnels, commonly at junctions,
+        # or just however a mapper chose to trace/edit it. The only honest way to
+        # know a given segment's real length is to actually measure it.
+        pts = geometry or []
+        total_m = 0.0
+        for i in range(1, len(pts)):
+            total_m += haversine_km(pts[i - 1]["lat"], pts[i - 1]["lon"], pts[i]["lat"], pts[i]["lon"]) * 1000
+        return round(total_m)
     slim = [{
         "id": e.get("id"), "name": (e.get("tags") or {}).get("name", "Unnamed road"),
         "highway": (e.get("tags") or {}).get("highway", ""),
         "tags": e.get("tags") or {},
         "geometry": [{"lat": p["lat"], "lon": p["lon"]} for p in (e.get("geometry") or [])],
+        "lengthM": segment_length_m(e.get("geometry")),
     } for e in elements]
     data_json = json.dumps(slim)
     fetched_str = (fetched_at or "unknown")[:19].replace("T", " ")
@@ -826,8 +837,16 @@ hwTypes.forEach(t => { const o = document.createElement('option'); o.value = t; 
 // render/search - real streets are typically split into many separate OSM ways
 // (a speed change, a lane change, or just how different mappers traced it over
 // time), so this is genuine, expected structure, not duplication.
-const segmentCounts = {};
-ROADS.forEach(r => { if (r.name !== 'Unnamed road') segmentCounts[r.name] = (segmentCounts[r.name] || 0) + 1; });
+const segmentCounts = {}, roadTotalLengthM = {};
+ROADS.forEach(r => {
+  if (r.name === 'Unnamed road') return;
+  segmentCounts[r.name] = (segmentCounts[r.name] || 0) + 1;
+  roadTotalLengthM[r.name] = (roadTotalLengthM[r.name] || 0) + r.lengthM;
+});
+
+function fmtLength(m) {
+  return m >= 1000 ? (m / 1000).toFixed(2) + ' km' : Math.round(m) + ' m';
+}
 
 function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
@@ -862,8 +881,11 @@ function render() {
     const segCount = segmentCounts[r.name] || 1;
     const mapLabel = segCount > 1 ? 'Show whole road on map (' + segCount + ' segments, snapped)' : 'Show on map (snapped)';
     const checked = selectedIds.has(r.id) ? ' checked' : '';
+    const lengthLine = segCount > 1
+      ? fmtLength(r.lengthM) + ' this segment &middot; ' + fmtLength(roadTotalLengthM[r.name]) + ' total across ' + segCount + ' segments'
+      : fmtLength(r.lengthM);
     return '<tr><td><input type="checkbox" class="selChk"' + checked + ' onchange="toggleSelect(' + i + ', this.checked)" /></td>'
-      + '<td class="rname">' + esc(r.name) + '</td>'
+      + '<td class="rname">' + esc(r.name) + '<div style="font-size:10.5px;color:#69736c;font-weight:400;margin-top:2px">' + lengthLine + '</div></td>'
       + '<td class="rtype">' + esc(r.highway || '-') + '</td>'
       + '<td>' + tagsHtml
       + '<br/><button class="coordBtn" onclick="toggleCoords(\\'' + coordId + '\\')">' + r.geometry.length + ' points &middot; view coordinates</button>'
