@@ -1056,15 +1056,57 @@ function stageAndGo(points, gkey, label) {
   window.location.href = '/';
 }
 
+// Approximate distance for segment ORDERING only (not the actual Street View pull
+// or risk scoring, which use real haversine elsewhere) - doesn't need high
+// precision, just needs to consistently rank which segment is nearer.
+function approxDist(a, b) {
+  const dLat = a.lat - b.lat, dLon = a.lon - b.lon;
+  return Math.sqrt(dLat * dLat + dLon * dLon);
+}
+
+// Real fix for a real, confirmed problem: segments used to get combined in
+// whatever order they happened to appear in the data, which could connect two
+// genuinely distant, unrelated points with a straight line cutting across the map
+// that follows no real road at all - seen directly in a screenshot of the actual
+// result. Greedy nearest-neighbor chaining, considering each remaining segment in
+// both its original and reversed direction, dramatically reduces this - not a
+// perfect global optimum (that's a much harder problem for little practical gain
+// here), but a real, meaningful improvement over arbitrary order.
+function orderSegmentsByProximity(segments) {
+  if (segments.length <= 1) return { ordered: segments, maxGapDeg: 0 };
+  const remaining = segments.slice();
+  const ordered = [remaining.shift()];
+  let maxGapDeg = 0;
+  while (remaining.length) {
+    const tail = ordered[ordered.length - 1];
+    const tailPoint = tail.geometry[tail.geometry.length - 1];
+    let bestIdx = 0, bestDist = Infinity, bestReversed = false;
+    for (let i = 0; i < remaining.length; i++) {
+      const seg = remaining[i];
+      const distToStart = approxDist(tailPoint, seg.geometry[0]);
+      const distToEnd = approxDist(tailPoint, seg.geometry[seg.geometry.length - 1]);
+      if (distToStart < bestDist) { bestDist = distToStart; bestIdx = i; bestReversed = false; }
+      if (distToEnd < bestDist) { bestDist = distToEnd; bestIdx = i; bestReversed = true; }
+    }
+    maxGapDeg = Math.max(maxGapDeg, bestDist);
+    const next = remaining.splice(bestIdx, 1)[0];
+    ordered.push(bestReversed ? { ...next, geometry: [...next.geometry].reverse() } : next);
+  }
+  return { ordered, maxGapDeg };
+}
+
 function pullStreetViewImages(idx) {
   const road = currentShown[idx];
   if (!road) return;
   const gkey = document.getElementById('gkey').value.trim();
   if (!gkey) { alert('Enter a Google Maps API key first - it will carry over to the main app automatically'); return; }
-  const segments = getSegmentsFor(road);
-  const points = segments.flatMap(s => s.geometry.map(p => ({ lat: p.lat, lon: p.lon })));
+  const { ordered, maxGapDeg } = orderSegmentsByProximity(getSegmentsFor(road));
+  const points = ordered.flatMap(s => s.geometry.map(p => ({ lat: p.lat, lon: p.lon })));
   if (points.length < 2) { alert('Not enough points on this road to build a route'); return; }
-  stageAndGo(points, gkey, road.name + (segments.length > 1 ? ' (' + segments.length + ' segments)' : ''));
+  // ~0.002 degrees is roughly 200m at Hamilton's latitude - a real, meaningful cutoff
+  // for 'this genuinely isn't one continuous road', not just normal intersection gaps.
+  const gapWarning = maxGapDeg > 0.002 ? ' \\u26a0 includes a real gap between disconnected sections' : '';
+  stageAndGo(points, gkey, road.name + (ordered.length > 1 ? ' (' + ordered.length + ' segments)' : '') + gapWarning);
 }
 
 function toggleSelect(idx, checked) {
@@ -1100,10 +1142,12 @@ function pullSelectedRoads() {
   const gkey = document.getElementById('gkey').value.trim();
   if (!gkey) { alert('Enter a Google Maps API key first - it will carry over to the main app automatically'); return; }
   const roads = ROADS.filter(r => selectedIds.has(r.id));
-  const points = roads.flatMap(r => r.geometry.map(p => ({ lat: p.lat, lon: p.lon })));
+  const { ordered, maxGapDeg } = orderSegmentsByProximity(roads);
+  const points = ordered.flatMap(r => r.geometry.map(p => ({ lat: p.lat, lon: p.lon })));
   if (points.length < 2) { alert('Not enough points across the selected roads to build a route'); return; }
   const names = [...new Set(roads.map(r => r.name))];
-  const label = names.length <= 3 ? names.join(', ') : names.length + ' selected roads';
+  const gapWarning = maxGapDeg > 0.002 ? ' \\u26a0 includes real gaps between disconnected roads' : '';
+  const label = (names.length <= 3 ? names.join(', ') : names.length + ' selected roads') + gapWarning;
   stageAndGo(points, gkey, label);
 }
 
