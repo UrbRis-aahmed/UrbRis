@@ -796,9 +796,14 @@ def render_hamilton_search_page(elements, fetched_at):
   <input id="q" type="text" placeholder="Search by road name or any attribute (e.g. asphalt, 50, residential)..." />
   <select id="hwFilter"><option value="">All road types</option></select>
 </div>
+<div id="selBar" style="display:none;padding:0 24px 12px;align-items:center;gap:12px">
+  <span id="selCount" style="font-size:12px;color:#8d9890;font-family:ui-monospace,monospace"></span>
+  <button class="mapBtn" onclick="pullSelectedRoads()">Pull Street View images for selected roads</button>
+  <button class="coordBtn" onclick="clearSelection()">Clear selection</button>
+</div>
 <div id="resultCount"></div>
 <table>
-  <thead><tr><th>Road</th><th>Type</th><th>Attributes</th></tr></thead>
+  <thead><tr><th></th><th>Road</th><th>Type</th><th>Attributes</th></tr></thead>
   <tbody id="rows"></tbody>
 </table>
 <div id="mapModal">
@@ -833,6 +838,9 @@ function matches(road, q) {
 }
 
 let currentShown = [];
+let selectedIds = new Set(); // tracks by actual road id, not name - 'Unnamed road' is
+// a shared placeholder string across many genuinely different, unrelated roads, so
+// name-based tracking would incorrectly collapse them into one fake selection.
 
 function render() {
   const q = document.getElementById('q').value.trim().toLowerCase();
@@ -853,7 +861,9 @@ function render() {
     const coordId = 'coords' + i;
     const segCount = segmentCounts[r.name] || 1;
     const mapLabel = segCount > 1 ? 'Show whole road on map (' + segCount + ' segments, snapped)' : 'Show on map (snapped)';
-    return '<tr><td class="rname">' + esc(r.name) + '</td>'
+    const checked = selectedIds.has(r.id) ? ' checked' : '';
+    return '<tr><td><input type="checkbox" class="selChk"' + checked + ' onchange="toggleSelect(' + i + ', this.checked)" /></td>'
+      + '<td class="rname">' + esc(r.name) + '</td>'
       + '<td class="rtype">' + esc(r.highway || '-') + '</td>'
       + '<td>' + tagsHtml
       + '<br/><button class="coordBtn" onclick="toggleCoords(\\'' + coordId + '\\')">' + r.geometry.length + ' points &middot; view coordinates</button>'
@@ -980,29 +990,81 @@ function closeMapModal() {
   document.getElementById('mapModal').style.display = 'none';
 }
 
-// Hands the road off to Urbris's real Pull Images pipeline - this page has no
+// Hands road(s) off to Urbris's real Pull Images pipeline - this page has no
 // Street View / risk-coding logic of its own, and shouldn't duplicate the
 // existing, already-proven pipeline in the main app. localStorage is the handoff
 // (shared across pages on the same origin), read once on the main app's load and
 // cleared immediately so a later normal reload never replays an old handoff.
-// Honest limitation: segments are combined in whatever order they appear in the
-// data, not stitched by geographic proximity - the resulting km markers along a
-// multi-segment road may not be perfectly sequential, though each point's actual
-// Street View pull and risk coding is unaffected by that ordering.
+// Honest limitation: segments/roads are combined in whatever order they appear in
+// the data, not stitched by geographic proximity - the resulting km markers may not
+// be perfectly sequential, though each point's actual Street View pull and risk
+// coding is unaffected by that ordering.
+function stageAndGo(points, gkey, label) {
+  const payload = JSON.stringify({ points, gkey, label });
+  localStorage.setItem('urbris_staged_route', payload);
+  // Read back before navigating rather than trusting the write silently succeeded -
+  // a previous version of this handoff failed with no visible cause, so this
+  // confirms the actual data that will be picked up on the other side, and fails
+  // loudly here (where there's still a page to show an error on) instead of
+  // silently on the main app after the redirect already happened.
+  const readBack = localStorage.getItem('urbris_staged_route');
+  if (readBack !== payload) {
+    alert('Could not stage this route (localStorage write did not verify) - try again, or check if the browser is blocking storage for this site.');
+    return;
+  }
+  console.log('[hamilton-search] staged', points.length, 'points for "' + label + '", verified in localStorage, navigating to /');
+  window.location.href = '/';
+}
+
 function pullStreetViewImages(idx) {
   const road = currentShown[idx];
   if (!road) return;
   const gkey = document.getElementById('gkey').value.trim();
   if (!gkey) { alert('Enter a Google Maps API key first - it will carry over to the main app automatically'); return; }
-
   const segments = getSegmentsFor(road);
   const points = segments.flatMap(s => s.geometry.map(p => ({ lat: p.lat, lon: p.lon })));
   if (points.length < 2) { alert('Not enough points on this road to build a route'); return; }
+  stageAndGo(points, gkey, road.name + (segments.length > 1 ? ' (' + segments.length + ' segments)' : ''));
+}
 
-  localStorage.setItem('urbris_staged_route', JSON.stringify({
-    points, gkey, label: road.name + (segments.length > 1 ? ' (' + segments.length + ' segments)' : '')
-  }));
-  window.location.href = '/';
+function toggleSelect(idx, checked) {
+  const road = currentShown[idx];
+  if (!road) return;
+  // Checking one segment selects the whole road (all its sibling segments) for
+  // named roads, matching how 'Show on map'/'Pull images' already treat a road as
+  // a whole - but only for genuinely named roads. 'Unnamed road' is a placeholder
+  // shared by many unrelated roads, so only that one specific segment is affected.
+  const group = road.name === 'Unnamed road' ? [road] : getSegmentsFor(road);
+  group.forEach(seg => { if (checked) selectedIds.add(seg.id); else selectedIds.delete(seg.id); });
+  updateSelBar();
+  render();
+}
+
+function clearSelection() {
+  selectedIds.clear();
+  updateSelBar();
+  render();
+}
+
+function updateSelBar() {
+  const bar = document.getElementById('selBar');
+  if (selectedIds.size === 0) { bar.style.display = 'none'; return; }
+  bar.style.display = 'flex';
+  const roads = ROADS.filter(r => selectedIds.has(r.id));
+  const names = [...new Set(roads.map(r => r.name))];
+  document.getElementById('selCount').textContent = names.length + ' road(s) selected, ' + roads.length + ' total segment(s)';
+}
+
+function pullSelectedRoads() {
+  if (selectedIds.size === 0) return;
+  const gkey = document.getElementById('gkey').value.trim();
+  if (!gkey) { alert('Enter a Google Maps API key first - it will carry over to the main app automatically'); return; }
+  const roads = ROADS.filter(r => selectedIds.has(r.id));
+  const points = roads.flatMap(r => r.geometry.map(p => ({ lat: p.lat, lon: p.lon })));
+  if (points.length < 2) { alert('Not enough points across the selected roads to build a route'); return; }
+  const names = [...new Set(roads.map(r => r.name))];
+  const label = names.length <= 3 ? names.join(', ') : names.length + ' selected roads';
+  stageAndGo(points, gkey, label);
 }
 
 document.getElementById('q').addEventListener('input', render);

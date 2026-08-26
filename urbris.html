@@ -1403,11 +1403,15 @@ $('gpxImportInput').addEventListener('change', e => {
 // enable Pull Images), just arriving via localStorage instead of a file, since
 // that page is a separate document with no other way to hand data directly here.
 async function loadStagedRoute(points, gk, label) {
+  console.log('[staged-route] loadStagedRoute() started, calling ensureMaps()...');
   ensureMaps(gk, async () => {
+    console.log('[staged-route] ensureMaps() callback fired - Maps JS API ready');
     initDrawMap();
     log('Snapping road from ' + label + ' (' + points.length + ' points)...', '');
     try {
+      console.log('[staged-route] snapping', points.length, 'points via Roads API...');
       const dense = await snapDrawnRoute(points, gk);
+      console.log('[staged-route] snap complete -', dense.length, 'points returned');
       if (!dense.length) throw new Error('No points returned from road snapping');
       rp = dense;
       drawMode = false;
@@ -5131,22 +5135,34 @@ window.addEventListener('load', () => {
 
   // A road staged from the Hamilton road database's "Pull Street View images"
   // button arrives here via localStorage - cleared immediately so a later normal
-  // reload of this page never re-triggers an old staged road.
+  // reload of this page never re-triggers an old staged road. Logs its own progress
+  // at each real step - a previous version of this handoff failed with no visible
+  // cause, so this makes every stage of the pickup traceable in the console instead
+  // of silently succeeding or failing.
+  console.log('[staged-route] checking for a handoff from the Hamilton road database...');
   const staged = localStorage.getItem('urbris_staged_route');
   if (staged) {
+    console.log('[staged-route] found staged data (' + staged.length + ' chars), clearing it now');
     localStorage.removeItem('urbris_staged_route');
     try {
       const parsed = JSON.parse(staged);
+      console.log('[staged-route] parsed OK -', (parsed.points || []).length, 'points, label:', parsed.label);
       if (parsed.gkey && !$('gkey').value.trim()) $('gkey').value = parsed.gkey;
       const gk = $('gkey').value.trim();
       if (gk && parsed.points && parsed.points.length >= 2) {
+        console.log('[staged-route] calling loadStagedRoute()...');
         loadStagedRoute(parsed.points, gk, parsed.label || 'Hamilton road database');
       } else if (!gk) {
+        console.warn('[staged-route] no Google API key available - cannot proceed');
         log('A road was sent from the Hamilton database, but no Google API key is set - enter one and reload to load it', 'wn');
+      } else {
+        console.warn('[staged-route] not enough points to build a route:', (parsed.points || []).length);
       }
     } catch (e) {
-      console.warn('Could not load staged route:', e);
+      console.warn('[staged-route] failed to parse staged data:', e);
     }
+  } else {
+    console.log('[staged-route] nothing staged - normal page load');
   }
 });
 </script></body>
