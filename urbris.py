@@ -817,6 +817,13 @@ const hwTypes = [...new Set(ROADS.map(r => r.highway).filter(Boolean))].sort();
 const hwSel = document.getElementById('hwFilter');
 hwTypes.forEach(t => { const o = document.createElement('option'); o.value = t; o.textContent = t; hwSel.appendChild(o); });
 
+// Segment counts per road name, computed once rather than rescanned on every
+// render/search - real streets are typically split into many separate OSM ways
+// (a speed change, a lane change, or just how different mappers traced it over
+// time), so this is genuine, expected structure, not duplication.
+const segmentCounts = {};
+ROADS.forEach(r => { if (r.name !== 'Unnamed road') segmentCounts[r.name] = (segmentCounts[r.name] || 0) + 1; });
+
 function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
 function matches(road, q) {
@@ -844,11 +851,13 @@ function render() {
       ? tagEntries.map(([k,v]) => '<span class="tag">' + esc(k) + '=' + esc(v) + '</span>').join('')
       : '<span class="notag">no additional attributes tagged</span>';
     const coordId = 'coords' + i;
+    const segCount = segmentCounts[r.name] || 1;
+    const mapLabel = segCount > 1 ? 'Show whole road on map (' + segCount + ' segments, snapped)' : 'Show on map (snapped)';
     return '<tr><td class="rname">' + esc(r.name) + '</td>'
       + '<td class="rtype">' + esc(r.highway || '-') + '</td>'
       + '<td>' + tagsHtml
       + '<br/><button class="coordBtn" onclick="toggleCoords(\\'' + coordId + '\\')">' + r.geometry.length + ' points &middot; view coordinates</button>'
-      + '<button class="mapBtn" onclick="showOnMap(' + i + ')">Show on map (snapped)</button>'
+      + '<button class="mapBtn" onclick="showOnMap(' + i + ')">' + mapLabel + '</button>'
       + '<div class="coords" id="' + coordId + '">' + r.geometry.map(p => p.lat.toFixed(6) + ', ' + p.lon.toFixed(6)).join('<br/>') + '</div>'
       + '</td></tr>';
   }).join('');
@@ -864,7 +873,7 @@ function toggleCoords(id) {
 // at all. Draws the raw OSM geometry (thin, muted) alongside the Roads-API-snapped
 // version (orange, matching Urbris's accent colour throughout the rest of the app) -
 // same snapping approach and 100-point chunking already proven in Drive Mode.
-let modalMap = null, modalRawLine = null, modalSnapLine = null, mapsLoading = null;
+let modalMap = null, modalRawLines = [], modalSnapLines = [], mapsLoading = null;
 
 function loadGoogleMaps(key) {
   if (window.google && window.google.maps) return Promise.resolve();
@@ -905,8 +914,15 @@ async function showOnMap(idx) {
   const gkey = document.getElementById('gkey').value.trim();
   if (!gkey) { alert('Enter a Google Maps API key first (needs Roads API + Maps JavaScript API enabled)'); return; }
 
+  // A single named street is split into many separate OSM ways (segments) - combine
+  // every segment sharing this exact name into one visual, rather than showing
+  // whichever arbitrary segment happened to be clicked. 'Unnamed road' is a special
+  // case: many genuinely different, unrelated roads share that literal placeholder,
+  // so those are never combined - only this one segment is shown.
+  const segments = road.name === 'Unnamed road' ? [road] : ROADS.filter(r => r.name === road.name);
+
   document.getElementById('mapModal').style.display = 'block';
-  document.getElementById('mapModalTitle').textContent = road.name + (road.highway ? ' (' + road.highway + ')' : '');
+  document.getElementById('mapModalTitle').textContent = road.name + (road.highway ? ' (' + road.highway + ')' : '') + (segments.length > 1 ? ' \\u2014 ' + segments.length + ' segments' : '');
   const status = document.getElementById('modalStatus');
   status.textContent = 'Loading map...';
 
@@ -918,21 +934,38 @@ async function showOnMap(idx) {
         styles: [{elementType:'geometry',stylers:[{color:'#0b0e0d'}]},{elementType:'labels.text.fill',stylers:[{color:'#8d9890'}]},{elementType:'labels.text.stroke',stylers:[{color:'#0b0e0d'}]},{featureType:'road',elementType:'geometry',stylers:[{color:'#18201d'}]},{featureType:'water',elementType:'geometry',stylers:[{color:'#0f1614'}]}]
       });
     }
-    if (modalRawLine) modalRawLine.setMap(null);
-    if (modalSnapLine) modalSnapLine.setMap(null);
+    (modalRawLines || []).forEach(l => l.setMap(null));
+    (modalSnapLines || []).forEach(l => l.setMap(null));
+    modalRawLines = [];
+    modalSnapLines = [];
 
-    // Raw OSM geometry first, thin and muted - shows what was actually pulled,
-    // before any correction.
-    const rawPath = road.geometry.map(p => ({ lat: p.lat, lng: p.lon }));
-    modalRawLine = new google.maps.Polyline({ path: rawPath, strokeColor: '#8d9890', strokeOpacity: 0.5, strokeWeight: 2, map: modalMap });
     const bounds = new google.maps.LatLngBounds();
-    rawPath.forEach(p => bounds.extend(p));
+    let totalRawPoints = 0, totalSnappedPoints = 0;
+
+    // Raw geometry for every segment first, drawn immediately (thin, muted) so the
+    // whole road is visible right away, before spending time on snapping each piece.
+    for (const seg of segments) {
+      const rawPath = seg.geometry.map(p => ({ lat: p.lat, lng: p.lon }));
+      modalRawLines.push(new google.maps.Polyline({ path: rawPath, strokeColor: '#8d9890', strokeOpacity: 0.5, strokeWeight: 2, map: modalMap }));
+      rawPath.forEach(p => bounds.extend(p));
+      totalRawPoints += rawPath.length;
+    }
     modalMap.fitBounds(bounds);
 
-    status.textContent = 'Snapping to Google\\'s road data (' + road.geometry.length + ' points)...';
-    const snapped = await snapPoints(road.geometry, gkey);
-    modalSnapLine = new google.maps.Polyline({ path: snapped, strokeColor: '#dd6a32', strokeOpacity: 0.9, strokeWeight: 5, map: modalMap });
-    status.textContent = 'Orange = snapped to Google\\'s roads (' + snapped.length + ' points) · grey = raw OSM geometry (' + road.geometry.length + ' points)';
+    // Snap each segment separately, not all points pooled into one request - segments
+    // of the same named street aren't necessarily one continuous path (real gaps,
+    // disconnected sections), and Roads API's snapToRoads expects a contiguous route.
+    for (let i = 0; i < segments.length; i++) {
+      status.textContent = 'Snapping segment ' + (i + 1) + ' of ' + segments.length + ' (' + segments[i].geometry.length + ' points)...';
+      try {
+        const snapped = await snapPoints(segments[i].geometry, gkey);
+        modalSnapLines.push(new google.maps.Polyline({ path: snapped, strokeColor: '#dd6a32', strokeOpacity: 0.9, strokeWeight: 5, map: modalMap }));
+        totalSnappedPoints += snapped.length;
+      } catch (segErr) {
+        console.warn('Segment ' + i + ' failed to snap:', segErr.message); // one bad segment shouldn't stop the rest
+      }
+    }
+    status.textContent = 'Orange = snapped to Google\\'s roads (' + totalSnappedPoints + ' points across ' + segments.length + ' segment(s)) · grey = raw OSM geometry (' + totalRawPoints + ' points)';
   } catch (e) {
     status.textContent = 'Could not load/snap this road: ' + e.message;
   }
