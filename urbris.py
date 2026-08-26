@@ -809,6 +809,7 @@ def render_hamilton_search_page(elements, fetched_at):
 </div>
 <div id="selBar" style="display:none;padding:0 24px 12px;align-items:center;gap:12px">
   <span id="selCount" style="font-size:12px;color:#8d9890;font-family:ui-monospace,monospace"></span>
+  <button class="mapBtn" onclick="showSelectedOnMap()">Show selected on map (snapped)</button>
   <button class="mapBtn" onclick="pullSelectedRoads()">Pull Street View images for selected roads</button>
   <button class="coordBtn" onclick="clearSelection()">Clear selection</button>
 </div>
@@ -950,16 +951,10 @@ function getSegmentsFor(road) {
   return road.name === 'Unnamed road' ? [road] : ROADS.filter(r => r.name === road.name);
 }
 
-async function showOnMap(idx) {
-  const road = currentShown[idx];
-  if (!road) return;
-  const gkey = document.getElementById('gkey').value.trim();
-  if (!gkey) { alert('Enter a Google Maps API key first (needs Roads API + Maps JavaScript API enabled)'); return; }
-
-  const segments = getSegmentsFor(road);
-
+async function showSegmentsOnMap(segments, title, gkey) {
+  if (!segments.length) return;
   document.getElementById('mapModal').style.display = 'block';
-  document.getElementById('mapModalTitle').textContent = road.name + (road.highway ? ' (' + road.highway + ')' : '') + (segments.length > 1 ? ' \\u2014 ' + segments.length + ' segments' : '');
+  document.getElementById('mapModalTitle').textContent = title;
   const status = document.getElementById('modalStatus');
   status.textContent = 'Loading map...';
 
@@ -967,7 +962,7 @@ async function showOnMap(idx) {
     await loadGoogleMaps(gkey);
     if (!modalMap) {
       modalMap = new google.maps.Map(document.getElementById('modalMap'), {
-        center: { lat: road.geometry[0].lat, lng: road.geometry[0].lon }, zoom: 15,
+        center: { lat: segments[0].geometry[0].lat, lng: segments[0].geometry[0].lon }, zoom: 15,
         styles: [{elementType:'geometry',stylers:[{color:'#0b0e0d'}]},{elementType:'labels.text.fill',stylers:[{color:'#8d9890'}]},{elementType:'labels.text.stroke',stylers:[{color:'#0b0e0d'}]},{featureType:'road',elementType:'geometry',stylers:[{color:'#18201d'}]},{featureType:'water',elementType:'geometry',stylers:[{color:'#0f1614'}]}]
       });
     }
@@ -979,8 +974,10 @@ async function showOnMap(idx) {
     const bounds = new google.maps.LatLngBounds();
     let totalRawPoints = 0, totalSnappedPoints = 0;
 
-    // Raw geometry for every segment first, drawn immediately (thin, muted) so the
-    // whole road is visible right away, before spending time on snapping each piece.
+    // Raw geometry for every segment first, drawn immediately (thin, muted) so
+    // everything selected is visible right away, before spending time snapping
+    // each piece - works identically whether these segments belong to one road
+    // or several different selected roads together.
     for (const seg of segments) {
       const rawPath = seg.geometry.map(p => ({ lat: p.lat, lng: p.lon }));
       modalRawLines.push(new google.maps.Polyline({ path: rawPath, strokeColor: '#8d9890', strokeOpacity: 0.5, strokeWeight: 2, map: modalMap }));
@@ -989,9 +986,10 @@ async function showOnMap(idx) {
     }
     modalMap.fitBounds(bounds);
 
-    // Snap each segment separately, not all points pooled into one request - segments
-    // of the same named street aren't necessarily one continuous path (real gaps,
-    // disconnected sections), and Roads API's snapToRoads expects a contiguous route.
+    // Snap each segment separately, not all points pooled into one request -
+    // segments (whether of the same street or different selected roads entirely)
+    // aren't necessarily one continuous path, and Roads API's snapToRoads expects
+    // a contiguous route.
     for (let i = 0; i < segments.length; i++) {
       status.textContent = 'Snapping segment ' + (i + 1) + ' of ' + segments.length + ' (' + segments[i].geometry.length + ' points)...';
       try {
@@ -1004,8 +1002,28 @@ async function showOnMap(idx) {
     }
     status.textContent = 'Orange = snapped to Google\\'s roads (' + totalSnappedPoints + ' points across ' + segments.length + ' segment(s)) · grey = raw OSM geometry (' + totalRawPoints + ' points)';
   } catch (e) {
-    status.textContent = 'Could not load/snap this road: ' + e.message;
+    status.textContent = 'Could not load/snap: ' + e.message;
   }
+}
+
+async function showOnMap(idx) {
+  const road = currentShown[idx];
+  if (!road) return;
+  const gkey = document.getElementById('gkey').value.trim();
+  if (!gkey) { alert('Enter a Google Maps API key first (needs Roads API + Maps JavaScript API enabled)'); return; }
+  const segments = getSegmentsFor(road);
+  const title = road.name + (road.highway ? ' (' + road.highway + ')' : '') + (segments.length > 1 ? ' \\u2014 ' + segments.length + ' segments' : '');
+  await showSegmentsOnMap(segments, title, gkey);
+}
+
+async function showSelectedOnMap() {
+  if (selectedIds.size === 0) return;
+  const gkey = document.getElementById('gkey').value.trim();
+  if (!gkey) { alert('Enter a Google Maps API key first (needs Roads API + Maps JavaScript API enabled)'); return; }
+  const segments = ROADS.filter(r => selectedIds.has(r.id));
+  const names = [...new Set(segments.map(r => r.name))];
+  const title = (names.length <= 3 ? names.join(', ') : names.length + ' selected roads') + ' \\u2014 ' + segments.length + ' segments';
+  await showSegmentsOnMap(segments, title, gkey);
 }
 
 function closeMapModal() {
