@@ -709,6 +709,135 @@ def run_daily_research_scan():
         send_research_email(new_research, new_incidents)
     print("  [research-scan] found %d new research item(s), %d new incident(s)" % (len(new_research), len(new_incidents)))
 
+def render_hamilton_search_page(elements, fetched_at):
+    # Coverage stats computed server-side once, not client-side per search - honest,
+    # real numbers about what's actually populated in Hamilton's own data, not the
+    # global averages from the earlier OSM-completeness research. Matches the same
+    # "don't overstate what's actually known" principle used throughout the rest of
+    # Urbris's risk scoring.
+    total = len(elements)
+    def pct_with(tag):
+        if total == 0:
+            return 0
+        return round(100 * sum(1 for e in elements if (e.get("tags") or {}).get(tag)) / total)
+    coverage = {
+        "surface": pct_with("surface"), "maxspeed": pct_with("maxspeed"),
+        "lanes": pct_with("lanes"), "lit": pct_with("lit"),
+        "smoothness": pct_with("smoothness"), "sidewalk": pct_with("sidewalk"),
+    }
+    # Trim each element to just what the UI actually needs - the full geometry is
+    # kept (that's the actual point), but Overpass's own internal bookkeeping fields
+    # (bounds, nodes list, etc.) aren't, to keep the embedded payload reasonable at
+    # Hamilton's real scale (several thousand roads).
+    slim = [{
+        "id": e.get("id"), "name": (e.get("tags") or {}).get("name", "Unnamed road"),
+        "highway": (e.get("tags") or {}).get("highway", ""),
+        "tags": e.get("tags") or {},
+        "geometry": [{"lat": p["lat"], "lon": p["lon"]} for p in (e.get("geometry") or [])],
+    } for e in elements]
+    data_json = json.dumps(slim)
+    fetched_str = (fetched_at or "unknown")[:19].replace("T", " ")
+
+    return """<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Hamilton Road Database — Urbris</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:#0b0e0d; color:#f0f2ec; font-family:-apple-system,'Segoe UI',sans-serif; }
+  header { padding:20px 24px; border-bottom:1px solid rgba(229,235,229,.12); }
+  header .title { font-family:ui-monospace,monospace; font-size:11px; color:#dd6a32; letter-spacing:.08em; text-transform:uppercase; margin-bottom:6px; }
+  header h1 { font-size:22px; margin-bottom:4px; }
+  header .meta { font-size:12px; color:#8d9890; }
+  .stats { display:flex; gap:18px; flex-wrap:wrap; padding:14px 24px; border-bottom:1px solid rgba(229,235,229,.08); font-family:ui-monospace,monospace; font-size:11.5px; color:#8d9890; }
+  .stats b { color:#f0f2ec; }
+  .controls { padding:16px 24px; display:flex; gap:10px; flex-wrap:wrap; }
+  #q { flex:1; min-width:220px; background:#161b19; border:1px solid rgba(229,235,229,.16); border-radius:8px; padding:10px 14px; color:#f0f2ec; font-size:14px; }
+  #hwFilter { background:#161b19; border:1px solid rgba(229,235,229,.16); border-radius:8px; padding:10px 14px; color:#f0f2ec; font-size:13px; }
+  #resultCount { padding:0 24px 10px; font-size:12px; color:#8d9890; font-family:ui-monospace,monospace; }
+  table { width:100%; border-collapse:collapse; font-size:12.5px; }
+  th { text-align:left; padding:8px 24px; color:#8d9890; font-weight:500; border-bottom:1px solid rgba(229,235,229,.12); position:sticky; top:0; background:#0b0e0d; }
+  td { padding:8px 24px; border-bottom:1px solid rgba(229,235,229,.06); vertical-align:top; }
+  .rname { font-weight:600; }
+  .rtype { color:#dd6a32; font-family:ui-monospace,monospace; font-size:11px; }
+  .tag { display:inline-block; background:rgba(229,235,229,.08); border-radius:5px; padding:2px 7px; margin:2px 4px 2px 0; font-family:ui-monospace,monospace; font-size:10.5px; color:#c9d0c8; }
+  .notag { color:#69736c; font-size:11px; font-style:italic; }
+  .coordBtn { background:none; border:1px solid rgba(229,235,229,.2); color:#8d9890; border-radius:6px; padding:3px 8px; font-size:10.5px; cursor:pointer; }
+  .coords { display:none; margin-top:6px; max-height:140px; overflow-y:auto; font-family:ui-monospace,monospace; font-size:10px; color:#8d9890; background:#0f1412; border-radius:6px; padding:6px 8px; }
+</style></head>
+<body>
+<header>
+  <div class="title">Urbris</div>
+  <h1>Hamilton Road Database</h1>
+  <div class="meta">""" + str(total) + """ roads &middot; cached """ + fetched_str + """</div>
+</header>
+<div class="stats">
+  <span>surface tagged: <b>""" + str(coverage["surface"]) + """%</b></span>
+  <span>maxspeed tagged: <b>""" + str(coverage["maxspeed"]) + """%</b></span>
+  <span>lanes tagged: <b>""" + str(coverage["lanes"]) + """%</b></span>
+  <span>lit tagged: <b>""" + str(coverage["lit"]) + """%</b></span>
+  <span>smoothness tagged: <b>""" + str(coverage["smoothness"]) + """%</b></span>
+  <span>sidewalk tagged: <b>""" + str(coverage["sidewalk"]) + """%</b></span>
+</div>
+<div class="controls">
+  <input id="q" type="text" placeholder="Search by road name or any attribute (e.g. asphalt, 50, residential)..." />
+  <select id="hwFilter"><option value="">All road types</option></select>
+</div>
+<div id="resultCount"></div>
+<table>
+  <thead><tr><th>Road</th><th>Type</th><th>Attributes</th></tr></thead>
+  <tbody id="rows"></tbody>
+</table>
+<script>
+const ROADS = """ + data_json + """;
+const hwTypes = [...new Set(ROADS.map(r => r.highway).filter(Boolean))].sort();
+const hwSel = document.getElementById('hwFilter');
+hwTypes.forEach(t => { const o = document.createElement('option'); o.value = t; o.textContent = t; hwSel.appendChild(o); });
+
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function matches(road, q) {
+  if (!q) return true;
+  const hay = (road.name + ' ' + road.highway + ' ' + Object.entries(road.tags).map(([k,v]) => k+' '+v).join(' ')).toLowerCase();
+  return hay.includes(q);
+}
+
+function render() {
+  const q = document.getElementById('q').value.trim().toLowerCase();
+  const hw = hwSel.value;
+  const filtered = ROADS.filter(r => matches(r, q) && (!hw || r.highway === hw));
+  document.getElementById('resultCount').textContent = filtered.length.toLocaleString() + ' of ' + ROADS.length.toLocaleString() + ' roads';
+
+  // Cap rendered rows for real responsiveness at Hamilton's actual scale (several
+  // thousand roads) - narrowing the search is the intended way to see more, not
+  // rendering every row at once regardless of relevance.
+  const shown = filtered.slice(0, 500);
+  const rows = document.getElementById('rows');
+  rows.innerHTML = shown.map((r, i) => {
+    const tagEntries = Object.entries(r.tags).filter(([k]) => k !== 'name' && k !== 'highway');
+    const tagsHtml = tagEntries.length
+      ? tagEntries.map(([k,v]) => '<span class="tag">' + esc(k) + '=' + esc(v) + '</span>').join('')
+      : '<span class="notag">no additional attributes tagged</span>';
+    const coordId = 'coords' + i;
+    return '<tr><td class="rname">' + esc(r.name) + '</td>'
+      + '<td class="rtype">' + esc(r.highway || '-') + '</td>'
+      + '<td>' + tagsHtml
+      + '<br/><button class="coordBtn" onclick="toggleCoords(\\'' + coordId + '\\')">' + r.geometry.length + ' points &middot; view coordinates</button>'
+      + '<div class="coords" id="' + coordId + '">' + r.geometry.map(p => p.lat.toFixed(6) + ', ' + p.lon.toFixed(6)).join('<br/>') + '</div>'
+      + '</td></tr>';
+  }).join('');
+}
+
+function toggleCoords(id) {
+  const el = document.getElementById(id);
+  el.style.display = el.style.display === 'block' ? 'none' : 'block';
+}
+
+document.getElementById('q').addEventListener('input', render);
+hwSel.addEventListener('change', render);
+render();
+</script>
+</body></html>"""
+
 def render_research_page(feed_items=None, search_q="", search_type=""):
     feed_items = feed_items or []
     is_search = bool(search_q or search_type)
@@ -1518,6 +1647,34 @@ class H(BaseHTTPRequestHandler):
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.end_headers()
             self.wfile.write(render_research_page(feed_items, search_q=search_q, search_type=search_type).encode("utf-8"))
+            return
+
+        if self.path == "/hamilton-roads-search":
+            # A real, searchable view into everything actually in the Hamilton cache -
+            # every road, every populated OSM attribute, every coordinate - not just
+            # the road-existence data other features consume. Reuses the exact same
+            # cached snapshot /hamilton-roads already serves; this only adds a real
+            # search UI on top of data that was already being pulled.
+            if not supabase_configured():
+                self.send_response(500)
+                self.send_header("Content-Type", "text/plain")
+                self.end_headers()
+                self.wfile.write(b"Supabase not configured")
+                return
+            try:
+                rows = supabase_request("GET", "hamilton_roads_cache?select=data,fetched_at&order=fetched_at.desc&limit=1")
+                elements = rows[0]["data"].get("elements", []) if rows else []
+                fetched_at = rows[0]["fetched_at"] if rows else None
+            except Exception as e:
+                self.send_response(500)
+                self.send_header("Content-Type", "text/plain")
+                self.end_headers()
+                self.wfile.write(("Could not load cached Hamilton roads: " + str(e)).encode())
+                return
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(render_hamilton_search_page(elements, fetched_at).encode("utf-8"))
             return
 
         if self.path == "/log":
