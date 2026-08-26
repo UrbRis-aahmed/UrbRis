@@ -745,6 +745,14 @@ def render_hamilton_search_page(elements, fetched_at):
         "tags": e.get("tags") or {},
         "geometry": [{"lat": p["lat"], "lon": p["lon"]} for p in (e.get("geometry") or [])],
         "lengthM": segment_length_m(e.get("geometry")),
+        # Same curvature-per-km measure already built and tested for the scenic
+        # router - degrees of heading change per km along the road's own geometry,
+        # not the turn needed to enter it. A straight road scores near zero; a
+        # genuinely winding one scores high. Reusing pf_edge_curviness directly
+        # rather than reimplementing the same math a second time.
+        "curviness": round(pf_edge_curviness({
+            "pts": e.get("geometry") or [], "len": segment_length_m(e.get("geometry"))
+        }), 1),
     } for e in elements]
     data_json = json.dumps(slim)
     fetched_str = (fetched_at or "unknown")[:19].replace("T", " ")
@@ -764,6 +772,7 @@ def render_hamilton_search_page(elements, fetched_at):
   .controls { padding:16px 24px; display:flex; gap:10px; flex-wrap:wrap; }
   #q { flex:1; min-width:220px; background:#161b19; border:1px solid rgba(229,235,229,.16); border-radius:8px; padding:10px 14px; color:#f0f2ec; font-size:14px; }
   #hwFilter { background:#161b19; border:1px solid rgba(229,235,229,.16); border-radius:8px; padding:10px 14px; color:#f0f2ec; font-size:13px; }
+  #sortSel { background:#161b19; border:1px solid rgba(229,235,229,.16); border-radius:8px; padding:10px 14px; color:#f0f2ec; font-size:13px; }
   #resultCount { padding:0 24px 10px; font-size:12px; color:#8d9890; font-family:ui-monospace,monospace; }
   table { width:100%; border-collapse:collapse; font-size:12.5px; }
   th { text-align:left; padding:8px 24px; color:#8d9890; font-weight:500; border-bottom:1px solid rgba(229,235,229,.12); position:sticky; top:0; background:#0b0e0d; }
@@ -806,6 +815,13 @@ def render_hamilton_search_page(elements, fetched_at):
 <div class="controls">
   <input id="q" type="text" placeholder="Search by road name or any attribute (e.g. asphalt, 50, residential)..." />
   <select id="hwFilter"><option value="">All road types</option></select>
+  <select id="sortSel">
+    <option value="">Default order</option>
+    <option value="curviness-desc">Curviest first</option>
+    <option value="curviness-asc">Straightest first</option>
+    <option value="length-desc">Longest first</option>
+    <option value="length-asc">Shortest first</option>
+  </select>
 </div>
 <div id="selBar" style="display:none;padding:0 24px 12px;align-items:center;gap:12px">
   <span id="selCount" style="font-size:12px;color:#8d9890;font-family:ui-monospace,monospace"></span>
@@ -865,7 +881,12 @@ let selectedIds = new Set(); // tracks by actual road id, not name - 'Unnamed ro
 function render() {
   const q = document.getElementById('q').value.trim().toLowerCase();
   const hw = hwSel.value;
-  const filtered = ROADS.filter(r => matches(r, q) && (!hw || r.highway === hw));
+  const sortMode = document.getElementById('sortSel').value;
+  let filtered = ROADS.filter(r => matches(r, q) && (!hw || r.highway === hw));
+  if (sortMode === 'curviness-desc') filtered = filtered.slice().sort((a, b) => b.curviness - a.curviness);
+  else if (sortMode === 'curviness-asc') filtered = filtered.slice().sort((a, b) => a.curviness - b.curviness);
+  else if (sortMode === 'length-desc') filtered = filtered.slice().sort((a, b) => b.lengthM - a.lengthM);
+  else if (sortMode === 'length-asc') filtered = filtered.slice().sort((a, b) => a.lengthM - b.lengthM);
   document.getElementById('resultCount').textContent = filtered.length.toLocaleString() + ' of ' + ROADS.length.toLocaleString() + ' roads';
 
   // Cap rendered rows for real responsiveness at Hamilton's actual scale (several
@@ -882,9 +903,9 @@ function render() {
     const segCount = segmentCounts[r.name] || 1;
     const mapLabel = segCount > 1 ? 'Show whole road on map (' + segCount + ' segments, snapped)' : 'Show on map (snapped)';
     const checked = selectedIds.has(r.id) ? ' checked' : '';
-    const lengthLine = segCount > 1
+    const lengthLine = (segCount > 1
       ? fmtLength(r.lengthM) + ' this segment &middot; ' + fmtLength(roadTotalLengthM[r.name]) + ' total across ' + segCount + ' segments'
-      : fmtLength(r.lengthM);
+      : fmtLength(r.lengthM)) + ' &middot; curviness ' + r.curviness + ' &deg;/km';
     return '<tr><td><input type="checkbox" class="selChk"' + checked + ' onchange="toggleSelect(' + i + ', this.checked)" /></td>'
       + '<td class="rname">' + esc(r.name) + '<div style="font-size:10.5px;color:#69736c;font-weight:400;margin-top:2px">' + lengthLine + '</div></td>'
       + '<td class="rtype">' + esc(r.highway || '-') + '</td>'
@@ -1153,6 +1174,7 @@ function pullSelectedRoads() {
 
 document.getElementById('q').addEventListener('input', render);
 hwSel.addEventListener('change', render);
+document.getElementById('sortSel').addEventListener('change', render);
 render();
 </script>
 </body></html>"""
