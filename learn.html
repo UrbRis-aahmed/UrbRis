@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UrbRis Learn — Ride, Drive, Fly</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0b0e0d;--sf:#121815;--sf2:#18201c;--b:rgba(255,255,255,.08);--b2:rgba(255,255,255,.14);--tx:#f0f2ec;--mu:#8d9890;--ac:#22b866;--ac2:#3fd884;--ac-soft:rgba(34,184,102,.12);--er:#f09595;--er-soft:rgba(240,149,149,.1);--r:12px}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--tx);font-family:'Inter',system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+body{background:radial-gradient(circle at 70% 0%,rgba(34,184,102,.07),transparent 45%),var(--bg);min-height:100vh}
+a{color:var(--ac2);text-decoration:none}
+.wrap{max-width:1080px;margin:0 auto;padding:28px 24px 80px}
+header{display:flex;justify-content:space-between;align-items:center;margin-bottom:48px}
+.logo{font-weight:800;font-size:22px;letter-spacing:-.02em;color:var(--tx)}.logo span{color:var(--ac2)}
+.logo small{display:block;font-size:9px;letter-spacing:.2em;color:var(--mu);font-weight:600;margin-top:2px}
+nav a{color:var(--mu);font-size:13px;margin-left:20px}nav a:hover{color:var(--tx)}
+.eyebrow{font-size:11px;letter-spacing:.16em;font-weight:700;color:var(--ac2);text-transform:uppercase}
+h1{font-size:clamp(40px,6vw,64px);line-height:1;letter-spacing:-.04em;margin:14px 0 16px;font-weight:800}
+h1 em{font-style:normal;color:var(--mu)}
+.lede{font-size:17px;line-height:1.6;color:var(--mu);max-width:600px;margin:0 0 44px}
+.tracks{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}
+.track{background:linear-gradient(160deg,var(--sf2),var(--sf));border:1px solid var(--b);border-radius:16px;padding:22px;display:flex;flex-direction:column}
+.track h2{margin:6px 0 4px;font-size:22px;letter-spacing:-.02em}
+.track p{color:var(--mu);font-size:14px;line-height:1.5;margin:0 0 18px}
+.ladder{list-style:none;padding:0;margin:0 0 20px;display:flex;flex-direction:column;gap:8px}
+.ladder li{display:flex;align-items:center;gap:12px;padding:10px 12px;border:1px solid var(--b);border-radius:10px;font-size:14px;background:rgba(255,255,255,.015)}
+.ladder .tag{font-weight:800;font-size:13px;min-width:62px;white-space:nowrap;padding:4px 8px;border-radius:6px;background:rgba(255,255,255,.05);text-align:center}
+.ladder .live .tag{background:var(--ac-soft);color:var(--ac2)}
+.ladder .sub{color:var(--mu);font-size:12px;display:block}
+.pill{margin-left:auto;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--mu)}
+.live .pill{color:var(--ac2)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:none;border-radius:10px;padding:12px 18px;font:600 14px 'Inter',sans-serif;cursor:pointer;background:var(--ac);color:#04120a;transition:background .15s}
+.btn:hover{background:var(--ac2)}
+.btn.ghost{background:transparent;color:var(--tx);border:1px solid var(--b2)}.btn.ghost:hover{background:rgba(255,255,255,.04)}
+.btn[disabled]{opacity:.4;cursor:default}
+.track .btn{margin-top:auto}
+.soon{margin-top:auto;font-size:13px;color:var(--mu);padding:12px 0 0;border-top:1px solid var(--b)}
+/* quiz */
+#quiz{display:none}
+.panel{background:var(--sf);border:1px solid var(--b);border-radius:16px;padding:26px}
+.modes{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin:24px 0}
+.mode{background:var(--sf2);border:1px solid var(--b);border-radius:14px;padding:20px}
+.mode h3{margin:0 0 6px;font-size:17px}.mode p{margin:0 0 16px;color:var(--mu);font-size:14px;line-height:1.5}
+.topics{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}
+.chip{border:1px solid var(--b2);background:transparent;color:var(--tx);border-radius:999px;padding:7px 12px;font:500 13px 'Inter',sans-serif;cursor:pointer}
+.chip.on{background:var(--ac-soft);border-color:rgba(34,184,102,.5);color:var(--ac2)}
+.qhead{display:flex;justify-content:space-between;align-items:center;font-size:13px;color:var(--mu);margin-bottom:10px}
+.bar{height:4px;background:rgba(255,255,255,.06);border-radius:4px;overflow:hidden;margin-bottom:24px}.bar i{display:block;height:100%;background:var(--ac);transition:width .2s}
+.qtext{font-size:20px;line-height:1.45;font-weight:600;margin:0 0 20px;letter-spacing:-.01em}
+.opts{display:flex;flex-direction:column;gap:10px}
+.opt{text-align:left;border:1px solid var(--b2);background:rgba(255,255,255,.02);color:var(--tx);border-radius:10px;padding:14px 16px;font:500 15px/1.4 'Inter',sans-serif;cursor:pointer;display:flex;gap:12px}
+.opt:hover:not([disabled]){border-color:rgba(34,184,102,.5)}
+.opt b{color:var(--mu);font-weight:700}
+.opt.sel{border-color:var(--ac);background:var(--ac-soft)}
+.opt.right{border-color:var(--ac);background:var(--ac-soft)}.opt.right b{color:var(--ac2)}
+.opt.wrong{border-color:var(--er);background:var(--er-soft)}.opt.wrong b{color:var(--er)}
+.explain{margin-top:16px;padding:14px 16px;border-left:3px solid var(--ac);background:rgba(255,255,255,.025);border-radius:0 10px 10px 0;font-size:14px;line-height:1.55;color:#cfd6d0;display:none}
+.explain .ref{display:block;margin-top:6px;font-size:12px;color:var(--mu)}
+.qnav{display:flex;justify-content:space-between;gap:10px;margin-top:24px}
+.score{font-size:64px;font-weight:800;letter-spacing:-.04em;margin:4px 0}
+.pass{color:var(--ac2)}.fail{color:var(--er)}
+.review{margin-top:24px;display:flex;flex-direction:column;gap:12px}
+.rv{border:1px solid var(--b);border-radius:12px;padding:16px;font-size:14px;line-height:1.5}
+.rv .q{font-weight:600;margin-bottom:8px}.rv .a{color:var(--mu)}.rv .a span{color:var(--ac2)}.rv .a s{color:var(--er)}
+.stats{display:flex;gap:24px;flex-wrap:wrap;font-size:13px;color:var(--mu);margin-top:8px}.stats b{color:var(--tx);font-size:15px}
+.disclaimer{margin-top:40px;font-size:12px;line-height:1.6;color:var(--mu);max-width:760px}
+.back{font-size:13px;color:var(--mu);cursor:pointer;display:inline-block;margin-bottom:18px}.back:hover{color:var(--tx)}
+@media(max-width:600px){.qtext{font-size:17px}.panel{padding:18px}.wrap{padding:20px 16px 60px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <a class="logo" href="/">Urb<span>Ris</span><small>LEARN</small></a>
+  <nav><a href="#" onclick="showHome();return false">Tracks</a><a href="/">Route tools</a></nav>
+</header>
+
+<!-- ============ HOME ============ -->
+<section id="home">
+  <div class="eyebrow">Ride · Drive · Fly</div>
+  <h1>Learn to operate.<br><em>One licence at a time.</em></h1>
+  <p class="lede">Training for Ontario riders, manual drivers and Canadian student pilots. Start with written test prep, then work up the licence ladder.</p>
+
+  <div class="tracks">
+    <div class="track">
+      <div class="eyebrow">Fly</div>
+      <h2>Private pilot</h2>
+      <p>Transport Canada student pilot to private pilot licence.</p>
+      <ul class="ladder">
+        <li class="live"><span class="tag">PSTAR</span><span>Pre-solo air law test<span class="sub">50 questions · 90% to pass</span></span><span class="pill">Live</span></li>
+        <li><span class="tag">ROC-A</span><span>Restricted radio operator certificate<span class="sub">Aeronautical radio</span></span><span class="pill">Soon</span></li>
+        <li><span class="tag">PPL</span><span>Private pilot licence<span class="sub">PPAER written</span></span><span class="pill">Later</span></li>
+      </ul>
+      <button class="btn" onclick="showQuiz()">Start PSTAR practice →</button>
+    </div>
+    <div class="track">
+      <div class="eyebrow">Ride</div>
+      <h2>Motorcycle</h2>
+      <p>Ontario graduated licensing, taught by a certified motorcycle safety instructor.</p>
+      <ul class="ladder">
+        <li><span class="tag">M1</span><span>Knowledge test<span class="sub">Rules of the road + signs</span></span><span class="pill">Soon</span></li>
+        <li><span class="tag">M2</span><span>Road skills, level one<span class="sub">Clutch, braking, cornering</span></span><span class="pill">Later</span></li>
+        <li><span class="tag">M</span><span>Full licence<span class="sub">Highway + advanced road test</span></span><span class="pill">Later</span></li>
+      </ul>
+      <div class="soon">M1 practice test is next.</div>
+    </div>
+    <div class="track">
+      <div class="eyebrow">Drive</div>
+      <h2>Manual car</h2>
+      <p>Ontario G licensing, with stick-shift skills built in from day one.</p>
+      <ul class="ladder">
+        <li><span class="tag">G1</span><span>Knowledge test<span class="sub">Rules of the road + signs</span></span><span class="pill">Soon</span></li>
+        <li><span class="tag">G2</span><span>Road test, level one<span class="sub">Friction zone, hill starts, shifting</span></span><span class="pill">Later</span></li>
+        <li><span class="tag">G</span><span>Full licence<span class="sub">Highway + advanced road test</span></span><span class="pill">Later</span></li>
+      </ul>
+      <div class="soon">G1 practice test follows M1.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ QUIZ ============ -->
+<section id="quiz">
+  <span class="back" onclick="showHome()">← All tracks</span>
+  <div id="quizBody"></div>
+  <p class="disclaimer">These are original practice questions written by UrbRis to cover the same air law topics as the PSTAR. They are not the official Transport Canada question bank. Study the official guide, <a href="https://tc.canada.ca/en/aviation/publications/student-pilot-permit-private-pilot-licence-foreign-military-applicants-aviation-regulations-tp-11919" target="_blank" rel="noopener">TP 11919</a>, the <a href="https://laws-lois.justice.gc.ca/eng/regulations/SOR-96-433/" target="_blank" rel="noopener">Canadian Aviation Regulations</a> and the TC AIM, and confirm anything you're unsure of with your flight instructor.</p>
+</section>
+</div>
+
+<script>
+// ---------------------------------------------------------------------------
+// PSTAR practice bank. Original wording; each item carries its source reference.
+// a = index of the correct option.
+// ---------------------------------------------------------------------------
+const BANK = [
+// --- Right of way & collision avoidance ---
+{t:"Right of way",q:"Two aircraft are converging at approximately the same altitude. Which one must give way?",o:["The one that has the other on its right","The one that has the other on its left","The faster aircraft","The higher aircraft"],a:0,e:"When converging at about the same altitude, the aircraft that has the other on its right gives way.",r:"CARs 602.19"},
+{t:"Right of way",q:"Two aircraft are approaching head-on. What should each pilot do?",o:["Alter heading to the right","Alter heading to the left","The lower aircraft descends","The heavier aircraft holds course"],a:0,e:"In a head-on or near head-on approach, each pilot alters heading to the right.",r:"CARs 602.19"},
+{t:"Right of way",q:"You are overtaking another aircraft. How do you pass?",o:["Alter heading to the right and stay clear","Alter heading to the left and stay clear","Climb above it","Pass on either side"],a:0,e:"The overtaking aircraft gives way and passes by altering heading to the right.",r:"CARs 602.19"},
+{t:"Right of way",q:"A powered aeroplane is converging with a glider. Which has the right of way?",o:["The glider","The aeroplane","Whichever is higher","Whichever is faster"],a:0,e:"Power-driven heavier-than-air aircraft give way to airships, gliders and balloons.",r:"CARs 602.19"},
+{t:"Right of way",q:"Which aircraft gives way to all of the others listed?",o:["Power-driven aeroplane","Glider","Balloon","Airship"],a:0,e:"Order of priority, lowest first: power-driven heavier-than-air aircraft, then airships, then gliders, then balloons.",r:"CARs 602.19"},
+{t:"Right of way",q:"Two aircraft are on final approach to land at the same aerodrome. Which normally has the right of way?",o:["The aircraft at the lower altitude","The aircraft at the higher altitude","The faster aircraft","The aircraft that called first"],a:0,e:"The lower aircraft has the right of way, but it must not use this to cut in front of or overtake an aircraft already on final.",r:"CARs 602.19"},
+{t:"Right of way",q:"A powered aeroplane meets another powered aeroplane that is towing a banner. Who gives way?",o:["The aeroplane that is not towing","The aeroplane that is towing","Whichever has the other on its right","Neither — both turn left"],a:0,e:"Power-driven heavier-than-air aircraft give way to aircraft seen to be towing other aircraft or objects.",r:"CARs 602.19"},
+// --- Altitudes ---
+{t:"Altitudes",q:"Except for take-off and landing, what is the minimum altitude over a built-up area?",o:["1,000 ft above the highest obstacle within 2,000 ft horizontally","500 ft above the highest obstacle within 500 ft","1,000 ft AGL directly below the aircraft","2,000 ft above the highest obstacle within 1 NM"],a:0,e:"Over built-up areas or open-air assemblies of people: 1,000 ft above the highest obstacle within a 2,000 ft horizontal radius.",r:"CARs 602.14"},
+{t:"Altitudes",q:"Outside built-up areas, how far must you stay from any person, vessel, vehicle or structure (except for take-off and landing)?",o:["500 ft","250 ft","1,000 ft","2,000 ft"],a:0,e:"Elsewhere, keep a distance of at least 500 ft from any person, vessel, vehicle or structure.",r:"CARs 602.14"},
+{t:"Altitudes",q:"Flying VFR in level cruise above 3,000 ft AGL on a magnetic track of 090°, which altitude is correct?",o:["5,500 ft ASL","6,500 ft ASL","5,000 ft ASL","6,000 ft ASL"],a:0,e:"VFR above 3,000 ft AGL, tracks 000°–179°: odd thousands plus 500 ft (3,500, 5,500, 7,500...).",r:"CARs 602.34"},
+{t:"Altitudes",q:"Flying VFR in level cruise above 3,000 ft AGL on a magnetic track of 270°, which altitude is correct?",o:["4,500 ft ASL","5,500 ft ASL","4,000 ft ASL","3,000 ft ASL"],a:0,e:"VFR above 3,000 ft AGL, tracks 180°–359°: even thousands plus 500 ft (4,500, 6,500, 8,500...).",r:"CARs 602.34"},
+{t:"Altitudes",q:"Aerobatic manoeuvres are prohibited below what height?",o:["2,000 ft AGL","1,000 ft AGL","3,000 ft AGL","5,000 ft AGL"],a:0,e:"No aerobatics below 2,000 ft AGL, and never over a built-up area or open-air assembly of people (unless specially authorized).",r:"CARs 602.27"},
+{t:"Altitudes",q:"Without authorization, you may not fly within 5 NM of a forest fire area below what height?",o:["3,000 ft AGL","1,000 ft AGL","2,000 ft AGL","5,000 ft AGL"],a:0,e:"Forest fire areas are restricted within 5 NM and below 3,000 ft AGL unless you're authorized or engaged in firefighting.",r:"CARs 601.15"},
+// --- Speed ---
+{t:"Speed",q:"What is the maximum indicated airspeed below 10,000 ft ASL?",o:["250 KIAS","200 KIAS","300 KIAS","180 KIAS"],a:0,e:"Below 10,000 ft ASL the limit is 250 knots indicated airspeed.",r:"CARs 602.32"},
+{t:"Speed",q:"Within 10 NM of a controlled airport and at or below 3,000 ft AGL, what is the maximum speed?",o:["200 KIAS","250 KIAS","150 KIAS","180 KIAS"],a:0,e:"Within 10 NM of a controlled airport at or below 3,000 ft AGL: 200 KIAS, unless ATC authorizes otherwise.",r:"CARs 602.32"},
+// --- Airspace ---
+{t:"Airspace",q:"In which airspace class is VFR flight not permitted?",o:["Class A","Class B","Class C","Class E"],a:0,e:"Class A is IFR only.",r:"CARs 601 / TC AIM RAC 2.8"},
+{t:"Airspace",q:"What must a VFR pilot have before entering Class C airspace?",o:["An ATC clearance","Only a transponder","Only two-way radio contact","Nothing — Class C is uncontrolled"],a:0,e:"VFR flight in Class C requires a clearance from ATC.",r:"TC AIM RAC 2.8.3"},
+{t:"Airspace",q:"What must a VFR pilot do before entering Class D airspace?",o:["Establish two-way radio contact with ATC","Get a written clearance","File an IFR flight plan","Nothing"],a:0,e:"In Class D, VFR aircraft must establish two-way communication with ATC before entering. A clearance is not required.",r:"TC AIM RAC 2.8.4"},
+{t:"Airspace",q:"Which airspace class is uncontrolled?",o:["Class G","Class E","Class D","Class B"],a:0,e:"Class G is uncontrolled airspace. ATC has neither the authority nor the responsibility to control traffic there.",r:"TC AIM RAC 2.8.7"},
+{t:"Airspace",q:"What does the airspace designator CYR on a chart mean?",o:["Restricted airspace — entry needs permission","Advisory airspace — caution only","A control zone","A mandatory frequency area"],a:0,e:"CYR is Class F restricted airspace. You can't enter without permission from the user agency. CYA is advisory: entry is allowed, but use caution.",r:"TC AIM RAC 2.8.6"},
+{t:"Airspace",q:"Before entering a Mandatory Frequency (MF) area, when must you report?",o:["At least 5 minutes before entering","1 minute before entering","Only after landing","Only if other traffic is reported"],a:0,e:"Report on the MF at least 5 minutes before entering the MF area, then report joining the circuit and on final.",r:"CARs 602.101 / TC AIM RAC 4.5.7"},
+// --- VFR weather ---
+{t:"VFR weather",q:"What is the minimum flight visibility for VFR in a control zone?",o:["3 SM","1 SM","2 SM","5 SM"],a:0,e:"In a control zone: flight visibility at least 3 SM, at least 500 ft vertically and 1 SM horizontally from cloud, and ground visibility 3 SM when reported.",r:"CARs 602.114"},
+{t:"VFR weather",q:"In a control zone, what is the minimum distance from cloud for VFR flight?",o:["500 ft vertically, 1 SM horizontally","Clear of cloud","1,000 ft vertically, 1 SM horizontally","500 ft vertically, 2,000 ft horizontally"],a:0,e:"In controlled airspace, including control zones: 500 ft vertically and 1 SM horizontally from cloud.",r:"CARs 602.114"},
+{t:"VFR weather",q:"In a control zone, except for take-off and landing, VFR flight must not be below what height?",o:["500 ft AGL","1,000 ft AGL","300 ft AGL","No minimum"],a:0,e:"VFR flight in a control zone must not be conducted below 500 ft AGL except during take-off and landing.",r:"CARs 602.114"},
+{t:"VFR weather",q:"Day VFR in uncontrolled airspace below 1,000 ft AGL requires what flight visibility and cloud distance?",o:["2 SM, clear of cloud","1 SM, clear of cloud","3 SM, 500 ft below cloud","1 SM, 500 ft below cloud"],a:0,e:"Day, uncontrolled airspace, below 1,000 ft AGL: flight visibility at least 2 SM and clear of cloud.",r:"CARs 602.115"},
+{t:"VFR weather",q:"Day VFR in uncontrolled airspace at or above 1,000 ft AGL requires what?",o:["1 SM visibility, 500 ft vertically and 2,000 ft horizontally from cloud","3 SM visibility, clear of cloud","2 SM visibility, 1,000 ft from cloud","1 SM visibility, clear of cloud"],a:0,e:"Day, uncontrolled airspace, at or above 1,000 ft AGL: 1 SM flight visibility, 500 ft vertically and 2,000 ft horizontally from cloud.",r:"CARs 602.115"},
+{t:"VFR weather",q:"In controlled airspace outside a control zone, what is the VFR minimum flight visibility?",o:["3 SM","1 SM","2 SM","5 SM"],a:0,e:"Controlled airspace: at least 3 SM flight visibility, plus 500 ft vertically and 1 SM horizontally from cloud.",r:"CARs 602.114"},
+// --- Fuel & flight planning ---
+{t:"Flight planning",q:"For a day VFR flight in a propeller aeroplane, what fuel must you carry?",o:["Enough to reach destination plus 30 minutes at normal cruise","Enough to reach destination plus 45 minutes","Enough to reach destination plus 15 minutes","Enough to reach destination only"],a:0,e:"Day VFR, propeller aeroplane: fuel to the destination, then 30 minutes at normal cruising speed.",r:"CARs 602.88"},
+{t:"Flight planning",q:"For a night VFR flight in a propeller aeroplane, what fuel must you carry?",o:["Enough to reach destination plus 45 minutes at normal cruise","Enough to reach destination plus 30 minutes","Enough to reach destination plus 60 minutes","Enough to reach destination plus 20 minutes"],a:0,e:"Night VFR, propeller aeroplane: fuel to the destination, then 45 minutes at normal cruising speed.",r:"CARs 602.88"},
+{t:"Flight planning",q:"A flight plan or flight itinerary is required for any flight that goes more than how far from the departure aerodrome?",o:["25 NM","10 NM","50 NM","100 NM"],a:0,e:"File a flight plan or flight itinerary for flights beyond 25 NM from the departure aerodrome.",r:"CARs 602.73"},
+{t:"Flight planning",q:"If you don't close a VFR flight plan and no SAR time is specified, when does search and rescue begin?",o:["1 hour after your ETA","30 minutes after your ETA","24 hours after your ETA","3 hours after your ETA"],a:0,e:"For a flight plan, alerting starts 1 hour after the ETA if no other SAR time was given. For a flight itinerary, the default is 24 hours.",r:"CARs 602.73 / TC AIM RAC 3.6"},
+{t:"Flight planning",q:"What is a NOTAM?",o:["A notice about a change to facilities, services, procedures or hazards","A routine weather report","A pilot's position report","A type of flight plan"],a:0,e:"A NOTAM gives timely information about a facility, service, procedure or hazard that pilots need to know. Check NOTAMs before every flight.",r:"TC AIM MAP 5"},
+{t:"Flight planning",q:"You may not take off when frost, ice or snow is adhering to which parts of the aircraft?",o:["Critical surfaces such as wings and control surfaces","Only the windscreen","Only the propeller","Only the landing gear"],a:0,e:"Take-off is prohibited with frost, ice or snow on critical surfaces. This is the clean aircraft concept.",r:"CARs 602.11"},
+// --- Fitness, PIC, documents ---
+{t:"Pilot & documents",q:"How long after drinking alcohol must you wait before acting as a crew member?",o:["12 hours","8 hours","24 hours","4 hours"],a:0,e:"No one may act as a flight crew member within 12 hours of consuming alcohol, or while under its influence.",r:"CARs 602.03"},
+{t:"Pilot & documents",q:"Who has final authority over the operation of the aircraft?",o:["The pilot-in-command","The aircraft owner","Air traffic control","The flight school"],a:0,e:"The PIC is responsible for the operation and safety of the aircraft and has final authority for its operation.",r:"CARs 602 / TC AIM"},
+{t:"Pilot & documents",q:"May a student pilot permit holder carry passengers?",o:["No","Yes, in daylight only","Yes, one passenger","Yes, with instructor approval"],a:0,e:"A student pilot permit doesn't allow carrying passengers.",r:"CARs 401 / Standard 421"},
+{t:"Pilot & documents",q:"When must the PIC direct passengers to fasten their safety belts?",o:["During movement on the surface, take-off and landing, and whenever the PIC considers it necessary","Only during take-off","Only during turbulence","Only on flights over 1 hour"],a:0,e:"The PIC must direct passengers to fasten safety belts for surface movement, take-off and landing, and at any other time it's needed for safety.",r:"CARs Part VI — passenger safety belts"},
+{t:"Pilot & documents",q:"In an unpressurized aircraft, above what altitude must everyone on board use oxygen for the whole time?",o:["13,000 ft ASL","10,000 ft ASL","12,500 ft ASL","18,000 ft ASL"],a:0,e:"Above 13,000 ft ASL everyone on board needs oxygen. From 10,000 to 13,000 ft, crew need it for any time over 30 minutes.",r:"CARs 605.31–605.32"},
+// --- ATC clearances & communication ---
+{t:"ATC & radio",q:"Once you accept an ATC clearance, when may you deviate from it?",o:["Only in an emergency, or once you get an amended clearance","Whenever you think it's safer","When no traffic is visible","When the controller is busy"],a:0,e:"You must comply with an accepted clearance. Deviate only in an emergency (tell ATC as soon as possible) or after getting an amended clearance.",r:"CARs 602.31"},
+{t:"ATC & radio",q:"What should you do if you're unsure of an ATC clearance or instruction?",o:["Ask ATC to clarify it","Follow your best interpretation","Ignore it","Squawk 7600"],a:0,e:"If a clearance is unclear or can't be followed, ask for clarification or an amended clearance.",r:"CARs 602.31"},
+{t:"ATC & radio",q:"What does WILCO mean?",o:["I understand your message and will comply","I have received all of your transmission","Say again","I am unable to comply"],a:0,e:"WILCO means 'will comply'. ROGER only means you received the whole transmission.",r:"TC AIM COM / RAC phraseology"},
+{t:"ATC & radio",q:"What does ROGER mean?",o:["I have received all of your last transmission","I will comply","Yes","Repeat your message"],a:0,e:"ROGER means received; it does not mean you'll comply. Read back clearances rather than just saying 'roger'.",r:"TC AIM COM phraseology"},
+{t:"ATC & radio",q:"Which transponder code indicates an emergency?",o:["7700","7600","7500","1200"],a:0,e:"7700 = emergency. 7600 = communication failure. 7500 = unlawful interference. 1200 = VFR (no code assigned).",r:"TC AIM RAC 1.9"},
+{t:"ATC & radio",q:"Which transponder code indicates radio communication failure?",o:["7600","7700","7500","1200"],a:0,e:"Squawk 7600 for a communication failure.",r:"TC AIM RAC 1.9"},
+{t:"ATC & radio",q:"Which transponder code indicates unlawful interference (hijack)?",o:["7500","7600","7700","2000"],a:0,e:"Squawk 7500 for unlawful interference.",r:"TC AIM RAC 1.9"},
+{t:"ATC & radio",q:"What is the international VHF emergency frequency?",o:["121.5 MHz","126.7 MHz","122.8 MHz","123.2 MHz"],a:0,e:"121.5 MHz is the aeronautical emergency frequency.",r:"TC AIM COM"},
+{t:"ATC & radio",q:"How do you begin a distress message?",o:["MAYDAY, MAYDAY, MAYDAY","PAN PAN, PAN PAN, PAN PAN","SECURITY, SECURITY, SECURITY","EMERGENCY, EMERGENCY, EMERGENCY"],a:0,e:"MAYDAY ×3 is distress: grave and imminent danger. PAN PAN ×3 is urgency.",r:"TC AIM COM 5.11"},
+{t:"ATC & radio",q:"You lose radio contact while flying VFR. What should you generally do?",o:["Squawk 7600, stay in VFR conditions and land at the nearest suitable aerodrome","Climb into cloud and continue","Squawk 7500 and circle","Continue into the control zone without a clearance"],a:0,e:"Squawk 7600, remain VFR, land at the nearest suitable aerodrome and tell ATC as soon as you can. At a controlled aerodrome, watch the tower for light signals.",r:"TC AIM RAC 6.3"},
+{t:"ATC & radio",q:"Surface wind given by a control tower or ATIS is referenced to what?",o:["Magnetic north","True north","Grid north","The runway heading"],a:0,e:"Tower and ATIS winds are magnetic. Winds in METARs and TAFs are true.",r:"TC AIM MET / RAC"},
+// --- Light signals ---
+{t:"Light signals",q:"You're in flight and see a steady green light from the tower. What does it mean?",o:["Cleared to land","Return for landing","Give way and continue circling","Aerodrome unsafe, do not land"],a:0,e:"Steady green in flight = cleared to land.",r:"TC AIM RAC 4.2.11"},
+{t:"Light signals",q:"You're in flight and see a flashing green light. What does it mean?",o:["Return for landing","Cleared to land","Do not land","Exercise extreme caution"],a:0,e:"Flashing green in flight = return for landing. A steady green clearance to land follows.",r:"TC AIM RAC 4.2.11"},
+{t:"Light signals",q:"You're in flight and see a steady red light. What does it mean?",o:["Give way to other aircraft and continue circling","Aerodrome unsafe, do not land","Cleared to land","Return to starting point"],a:0,e:"Steady red in flight = give way to other aircraft and continue circling.",r:"TC AIM RAC 4.2.11"},
+{t:"Light signals",q:"You're in flight and see a flashing red light. What does it mean?",o:["Aerodrome unsafe, do not land","Give way and keep circling","Return for landing","Cleared to land"],a:0,e:"Flashing red in flight = aerodrome unsafe, do not land.",r:"TC AIM RAC 4.2.11"},
+{t:"Light signals",q:"You're on the ground and see a flashing green light. What does it mean?",o:["Cleared to taxi","Cleared for take-off","Stop","Return to starting point"],a:0,e:"On the ground: flashing green = cleared to taxi; steady green = cleared for take-off.",r:"TC AIM RAC 4.2.11"},
+{t:"Light signals",q:"You're on the ground and see a flashing white light. What does it mean?",o:["Return to your starting point on the aerodrome","Cleared to taxi","Cleared for take-off","Taxi clear of the landing area"],a:0,e:"Flashing white on the ground = return to your starting point on the aerodrome.",r:"TC AIM RAC 4.2.11"},
+{t:"Light signals",q:"You're on the ground and see a steady red light. What does it mean?",o:["Stop","Taxi clear of the landing area","Return to starting point","Cleared to taxi"],a:0,e:"Steady red on the ground = stop. Flashing red on the ground = taxi clear of the landing area in use.",r:"TC AIM RAC 4.2.11"},
+{t:"Light signals",q:"What does an alternating red and green light mean?",o:["General warning — exercise extreme caution","Cleared to land","Return for landing","Aerodrome closed"],a:0,e:"Alternating red and green = general warning signal: exercise extreme caution.",r:"TC AIM RAC 4.2.11"},
+// --- Aerodromes & wake turbulence ---
+{t:"Aerodromes",q:"Unless otherwise specified, which direction are circuits flown?",o:["Left-hand","Right-hand","Either, at pilot discretion","As directed by the wind"],a:0,e:"Standard circuits are left-hand unless the CFS or ATC specifies right-hand.",r:"CARs 602.96 / TC AIM RAC 4.3"},
+{t:"Aerodromes",q:"How is a runway number determined?",o:["Its magnetic direction, rounded to the nearest 10° and divided by 10","Its true direction in degrees","The order it was built in","Its length in thousands of feet"],a:0,e:"Runway 27 points about 270° magnetic. In the Northern Domestic Airspace, runways are numbered by true direction.",r:"TC AIM AGA 5"},
+{t:"Aerodromes",q:"What does a large X marked on a runway mean?",o:["The runway is closed","Displaced threshold","Helicopter landing area","Hold short point"],a:0,e:"An X on a runway or taxiway means it's closed.",r:"TC AIM AGA 5"},
+{t:"Aerodromes",q:"At a runway holding position marking (two solid and two dashed lines), which side do you hold on?",o:["The solid-line side","The dashed-line side","Either side","Directly on the lines"],a:0,e:"Hold on the solid-line side. At a controlled aerodrome, don't cross toward the runway without a clearance.",r:"TC AIM AGA 5"},
+{t:"Aerodromes",q:"What may you NOT do on the runway area before a displaced threshold (marked with arrows)?",o:["Land","Taxi","Take off","Roll out after landing from the other direction"],a:0,e:"The arrowed area before a displaced threshold may be used for taxi, take-off and rollout, but not for landing.",r:"TC AIM AGA 5"},
+{t:"Aerodromes",q:"Which position light is on the left (port) wingtip?",o:["Red","Green","White","Amber"],a:0,e:"Red on the left wingtip, green on the right, white on the tail.",r:"CARs 602.40 / TC AIM"},
+{t:"Wake turbulence",q:"When is wake turbulence strongest?",o:["Behind an aircraft that is heavy, clean and slow","Behind an aircraft that is light and fast","Only during cruise","Only at night"],a:0,e:"Wingtip vortices are strongest behind a heavy aircraft in a clean configuration at slow speed, such as just after take-off or before landing.",r:"TC AIM AIR 2.9"},
+{t:"Wake turbulence",q:"Landing behind a larger aircraft, how do you avoid its wake?",o:["Stay above its approach path and land beyond its touchdown point","Stay below its approach path and land short of its touchdown point","Land on the same spot right behind it","Use a steeper flap setting only"],a:0,e:"Vortices sink. Stay at or above the larger aircraft's flight path and touch down beyond its touchdown point.",r:"TC AIM AIR 2.9"},
+{t:"Wake turbulence",q:"Taking off behind a larger aircraft that just departed, how do you avoid its wake?",o:["Rotate before its rotation point and climb above its flight path","Rotate after its rotation point and stay below its path","Take off immediately at the same point","Wake turbulence isn't a factor on take-off"],a:0,e:"Lift off before the point where the larger aircraft rotated, climb above its path, and allow time for vortices to dissipate.",r:"TC AIM AIR 2.9"},
+{t:"Wake turbulence",q:"How do wingtip vortices behave after they're generated?",o:["They sink and drift with the wind","They rise quickly","They stay exactly in place","They only form on the ground"],a:0,e:"Vortices sink below the generating aircraft's flight path and drift with the wind. A light crosswind can hold a vortex over the runway.",r:"TC AIM AIR 2.9"},
+];
+
+// ---------------------------------------------------------------------------
+const $ = s => document.querySelector(s);
+const LETTERS = "ABCD";
+const store = {
+  get(k, d){ try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch(e){ return d; } },
+  set(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} }
+};
+let S = null; // session state
+let chosenTopics = new Set();
+
+function shuffle(a){ a = a.slice(); for (let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+// Shuffle each question's options so the correct answer isn't always first.
+function prep(q){ const order = shuffle([0,1,2,3].slice(0,q.o.length)); return {...q, o: order.map(i=>q.o[i]), a: order.indexOf(q.a)}; }
+function esc(s){ return String(s).replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+
+function showHome(){ $("#quiz").style.display="none"; $("#home").style.display="block"; history.replaceState(null,"","/learn"); scrollTo(0,0); }
+function showQuiz(){ $("#home").style.display="none"; $("#quiz").style.display="block"; history.replaceState(null,"","/learn#pstar"); renderMenu(); scrollTo(0,0); }
+
+function renderMenu(){
+  const topics = [...new Set(BANK.map(q=>q.t))];
+  const hist = store.get("urbris_pstar_history", []);
+  const best = hist.length ? Math.max(...hist.map(h=>h.pct)) : null;
+  const last = hist.length ? hist[hist.length-1] : null;
+  const mockN = Math.min(50, BANK.length);
+  $("#quizBody").innerHTML = `
+    <div class="eyebrow">Fly · Student pilot</div>
+    <h1 style="font-size:clamp(34px,5vw,48px)">PSTAR practice</h1>
+    <p class="lede" style="margin-bottom:8px">The Pre-Solo Test of Air Regulations: 50 multiple-choice questions, and you need 90% (45/50) to pass. Practice until you're over 90% every time.</p>
+    <div class="stats"><span><b>${BANK.length}</b> questions</span><span><b>${topics.length}</b> topics</span>
+      ${best!==null?`<span>Best mock <b>${best}%</b></span><span>Last <b>${last.pct}%</b></span><span>Attempts <b>${hist.length}</b></span>`:""}</div>
+    <div class="modes">
+      <div class="mode">
+        <h3>Mock exam</h3>
+        <p>${mockN} questions in random order. No feedback until the end, scored against the 90% pass mark.</p>
+        <button class="btn" onclick="start('mock')">Start mock exam</button>
+      </div>
+      <div class="mode">
+        <h3>Practice by topic</h3>
+        <p>Pick topics. You see the answer and explanation after each question.</p>
+        <div class="topics">${topics.map(t=>`<button class="chip${chosenTopics.has(t)?" on":""}" onclick="toggleTopic(this,'${esc(t)}')">${esc(t)}</button>`).join("")}</div>
+        <button class="btn ghost" onclick="start('practice')">Start practice</button>
+      </div>
+    </div>`;
+}
+function toggleTopic(el,t){ chosenTopics.has(t)?chosenTopics.delete(t):chosenTopics.add(t); el.classList.toggle("on"); }
+
+function start(mode){
+  let pool = BANK;
+  if (mode==="practice" && chosenTopics.size) pool = BANK.filter(q=>chosenTopics.has(q.t));
+  const qs = shuffle(pool).slice(0, mode==="mock" ? 50 : pool.length).map(prep);
+  S = {mode, qs, i:0, ans:Array(qs.length).fill(null), locked:Array(qs.length).fill(false)};
+  renderQ();
+}
+
+function renderQ(){
+  const q = S.qs[S.i], n = S.qs.length, sel = S.ans[S.i], locked = S.locked[S.i];
+  const practice = S.mode==="practice";
+  const opts = q.o.map((o,k)=>{
+    let cls = "opt";
+    if (practice && locked){ if (k===q.a) cls+=" right"; else if (k===sel) cls+=" wrong"; }
+    else if (k===sel) cls+=" sel";
+    return `<button class="${cls}" ${practice&&locked?"disabled":""} onclick="pick(${k})"><b>${LETTERS[k]}</b><span>${esc(o)}</span></button>`;
+  }).join("");
+  const answered = S.ans.filter(a=>a!==null).length;
+  $("#quizBody").innerHTML = `
+    <div class="panel">
+      <div class="qhead"><span>${practice?"Practice":"Mock exam"} · Question ${S.i+1} of ${n}</span><span>${esc(q.t)}</span></div>
+      <div class="bar"><i style="width:${(answered/n)*100}%"></i></div>
+      <p class="qtext">${esc(q.q)}</p>
+      <div class="opts">${opts}</div>
+      <div class="explain" id="exp" style="display:${practice&&locked?"block":"none"}">${sel===q.a?"<b style='color:var(--ac2)'>Correct.</b> ":"<b style='color:var(--er)'>Not quite.</b> "}${esc(q.e)}<span class="ref">Reference: ${esc(q.r)}</span></div>
+      <div class="qnav">
+        <button class="btn ghost" ${S.i===0?"disabled":""} onclick="go(-1)">← Back</button>
+        ${S.i<n-1
+          ? `<button class="btn" ${practice&&!locked?"disabled":""} onclick="go(1)">Next →</button>`
+          : `<button class="btn" ${(practice&&!locked)||(!practice&&answered<n)?"disabled":""} onclick="finish()">${practice?"See results":"Submit exam"}</button>`}
+      </div>
+      ${!practice&&S.i===n-1&&answered<n?`<p style="font-size:13px;color:var(--mu);margin:12px 0 0;text-align:right">${n-answered} unanswered — go back to finish them.</p>`:""}
+    </div>`;
+}
+function pick(k){
+  if (S.mode==="practice"){ if (S.locked[S.i]) return; S.ans[S.i]=k; S.locked[S.i]=true; }
+  else S.ans[S.i]=k;
+  renderQ();
+}
+function go(d){ S.i=Math.max(0,Math.min(S.qs.length-1,S.i+d)); renderQ(); scrollTo(0,0); }
+
+function finish(){
+  const n = S.qs.length, right = S.qs.filter((q,i)=>S.ans[i]===q.a).length, pct = Math.round(right/n*100);
+  const passed = pct>=90;
+  if (S.mode==="mock"){ const h = store.get("urbris_pstar_history", []); h.push({pct, right, n, at:new Date().toISOString()}); store.set("urbris_pstar_history", h.slice(-50)); }
+  const missed = S.qs.map((q,i)=>({q, a:S.ans[i]})).filter(x=>x.a!==x.q.a);
+  const byTopic = {};
+  S.qs.forEach((q,i)=>{ byTopic[q.t]=byTopic[q.t]||[0,0]; byTopic[q.t][1]++; if (S.ans[i]===q.a) byTopic[q.t][0]++; });
+  const weak = Object.entries(byTopic).filter(([,v])=>v[0]<v[1]).sort((a,b)=>a[1][0]/a[1][1]-b[1][0]/b[1][1]);
+  $("#quizBody").innerHTML = `
+    <div class="panel">
+      <div class="eyebrow">${S.mode==="mock"?"Mock exam result":"Practice result"}</div>
+      <div class="score ${passed?"pass":"fail"}">${pct}%</div>
+      <p style="margin:0 0 6px;font-size:16px">${right} of ${n} correct · ${passed?"<span class='pass'>Pass</span> — at or above the 90% mark.":"<span class='fail'>Below 90%</span> — you need "+Math.ceil(n*0.9)+" of "+n+"."}</p>
+      ${weak.length?`<p style="color:var(--mu);font-size:14px;margin:0">Weakest topics: ${weak.slice(0,3).map(([t,v])=>`${esc(t)} (${v[0]}/${v[1]})`).join(", ")}</p>`:""}
+      <div class="qnav" style="justify-content:flex-start">
+        <button class="btn" onclick="start('${S.mode}')">Try again</button>
+        ${missed.length?`<button class="btn ghost" onclick="retryMissed()">Retry the ${missed.length} I missed</button>`:""}
+        <button class="btn ghost" onclick="renderMenu()">Menu</button>
+      </div>
+      ${missed.length?`<div class="review"><div class="eyebrow" style="margin-top:8px">Review</div>${missed.map(({q,a})=>`
+        <div class="rv"><div class="q">${esc(q.q)}</div>
+          <div class="a">${a!==null?`Your answer: <s>${esc(q.o[a])}</s><br>`:""}Correct: <span>${esc(q.o[q.a])}</span></div>
+          <div style="margin-top:8px;color:#cfd6d0">${esc(q.e)} <span style="color:var(--mu);font-size:12px">(${esc(q.r)})</span></div></div>`).join("")}</div>`:""}
+    </div>`;
+  S.missed = missed.map(x=>x.q);
+  scrollTo(0,0);
+}
+function retryMissed(){
+  const qs = shuffle(S.missed).map(q=>{ const orig = BANK.find(b=>b.q===q.q); return prep(orig); });
+  S = {mode:"practice", qs, i:0, ans:Array(qs.length).fill(null), locked:Array(qs.length).fill(false)};
+  renderQ();
+}
+
+if (location.hash==="#pstar") showQuiz();
+</script>
+</body>
+</html>

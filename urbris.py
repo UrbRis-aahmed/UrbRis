@@ -1932,6 +1932,16 @@ class H(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(json.dumps(obj).encode())
     def do_GET(self):
+        if self.path in ("/learn", "/learn/") or self.path.startswith("/learn?"):
+            learn_path = os.path.join(BASE, "learn.html")
+            with open(learn_path, "rb") as f:
+                body = f.read()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
         if self.path == "/gopro-telemetry.bundle.js":
             bundle_path = os.path.join(BASE, "gopro-telemetry.bundle.js")
             if os.path.exists(bundle_path):
