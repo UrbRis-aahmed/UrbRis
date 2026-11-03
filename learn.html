@@ -69,6 +69,30 @@ h1 em{font-style:normal;color:var(--mu)}
 .stats{display:flex;gap:24px;flex-wrap:wrap;font-size:13px;color:var(--mu);margin-top:8px}.stats b{color:var(--tx);font-size:15px}
 .disclaimer{margin-top:40px;font-size:12px;line-height:1.6;color:var(--mu);max-width:760px}
 .back{font-size:13px;color:var(--mu);cursor:pointer;display:inline-block;margin-bottom:18px}.back:hover{color:var(--tx)}
+/* flight calculator */
+#calc{display:none}
+.calcs{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,330px),1fr));gap:14px;margin-top:28px}
+.card{background:var(--sf);border:1px solid var(--b);border-radius:16px;padding:20px}
+.card h3{margin:0 0 4px;font-size:17px;letter-spacing:-.01em}
+.card .hint{margin:0 0 14px;color:var(--mu);font-size:13px;line-height:1.5}
+.fields{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.fld{display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--mu);font-weight:500}
+.fld.full{grid-column:1/-1}
+.fld input,.fld select{width:100%;background:var(--sf2);border:1px solid var(--b2);border-radius:8px;color:var(--tx);padding:10px 11px;font:500 15px 'Inter',sans-serif;-moz-appearance:textfield;appearance:none}
+.fld input::-webkit-outer-spin-button,.fld input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.fld input:focus,.fld select:focus{outline:none;border-color:var(--ac)}
+.fld select{background-image:linear-gradient(45deg,transparent 50%,var(--mu) 50%),linear-gradient(135deg,var(--mu) 50%,transparent 50%);background-position:calc(100% - 15px) 50%,calc(100% - 10px) 50%;background-size:5px 5px;background-repeat:no-repeat;padding-right:26px}
+.ins{display:flex;gap:6px}.ins input{flex:1;min-width:0}.ins select{width:auto;flex:none}
+.outs{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px;padding-top:16px;border-top:1px solid var(--b)}
+.o{font-size:12px;color:var(--mu)}
+.o b{display:block;font-size:22px;color:var(--tx);font-weight:700;letter-spacing:-.02em;margin-top:2px}
+.o b.hi{color:var(--ac2)}.o b.warn{color:#f0b95a}
+.note{font-size:12.5px;color:var(--mu);margin:12px 0 0;line-height:1.5}
+.note.warn{color:#f0b95a}
+.linkbtn{background:none;border:none;color:var(--ac2);font:600 12px 'Inter',sans-serif;cursor:pointer;padding:0;text-align:left}
+.conv{list-style:none;margin:16px 0 0;padding:16px 0 0;border-top:1px solid var(--b);display:flex;flex-direction:column;gap:8px;font-size:15px}
+.conv li{display:flex;justify-content:space-between}.conv li span{color:var(--mu);font-size:13px}
+.track .acts{margin-top:auto;display:flex;gap:8px;flex-wrap:wrap}
 @media(max-width:600px){.qtext{font-size:17px}.panel{padding:18px}.wrap{padding:20px 16px 60px}}
 </style>
 </head>
@@ -76,7 +100,7 @@ h1 em{font-style:normal;color:var(--mu)}
 <div class="wrap">
 <header>
   <a class="logo" href="/">Urb<span>Ris</span><small>LEARN</small></a>
-  <nav><a href="#" onclick="showHome();return false">Tracks</a><a href="/">Route tools</a></nav>
+  <nav><a href="#" onclick="showHome();return false">Tracks</a><a href="#calc" onclick="showCalc();return false">Flight calculator</a><a href="/">Route tools</a></nav>
 </header>
 
 <!-- ============ HOME ============ -->
@@ -95,7 +119,10 @@ h1 em{font-style:normal;color:var(--mu)}
         <li><span class="tag">ROC-A</span><span>Restricted radio operator certificate<span class="sub">Aeronautical radio</span></span><span class="pill">Soon</span></li>
         <li><span class="tag">PPL</span><span>Private pilot licence<span class="sub">PPAER written</span></span><span class="pill">Later</span></li>
       </ul>
-      <button class="btn" onclick="showQuiz('pstar')">Start PSTAR practice →</button>
+      <div class="acts">
+        <button class="btn" onclick="showQuiz('pstar')">Start PSTAR practice →</button>
+        <button class="btn ghost" onclick="showCalc()">Flight calculator</button>
+      </div>
     </div>
     <div class="track">
       <div class="eyebrow">Ride</div>
@@ -127,6 +154,118 @@ h1 em{font-style:normal;color:var(--mu)}
   <span class="back" onclick="showHome()">← All tracks</span>
   <div id="quizBody"></div>
   <p class="disclaimer" id="disclaimer"></p>
+</section>
+
+<!-- ============ FLIGHT CALCULATOR ============ -->
+<section id="calc">
+  <span class="back" onclick="showHome()">← All tracks</span>
+  <div class="eyebrow">Fly · Flight computer</div>
+  <h1 style="font-size:clamp(34px,5vw,48px)">Flight calculator</h1>
+  <p class="lede" style="margin-bottom:0">The E6B sums for planning a VFR leg: wind correction, groundspeed, time and fuel, runway crosswind and density altitude. Answers update as you type, and your last inputs are remembered.</p>
+
+  <div class="calcs">
+    <!-- Wind correction -->
+    <div class="card">
+      <h3>Wind correction &amp; groundspeed</h3>
+      <p class="hint">Winds from the forecast (FD/TAF) are true. Variation turns true heading into magnetic: west is best, east is least.</p>
+      <div class="fields">
+        <label class="fld">True course °<input id="w_tc" type="number" inputmode="decimal" value="90"></label>
+        <label class="fld">True airspeed kt<input id="w_tas" type="number" inputmode="decimal" value="105"></label>
+        <label class="fld">Wind from °T<input id="w_wd" type="number" inputmode="decimal" value="40"></label>
+        <label class="fld">Wind speed kt<input id="w_ws" type="number" inputmode="decimal" value="15"></label>
+        <label class="fld full">Magnetic variation °<span class="ins"><input id="w_var" type="number" inputmode="decimal" value="10"><select id="w_vdir"><option value="W">West</option><option value="E">East</option></select></span></label>
+      </div>
+      <div class="outs">
+        <div class="o">Wind correction<b id="w_wca">—</b></div>
+        <div class="o">Groundspeed<b id="w_gs" class="hi">—</b></div>
+        <div class="o">True heading<b id="w_th">—</b></div>
+        <div class="o">Magnetic heading<b id="w_mh" class="hi">—</b></div>
+      </div>
+      <p class="note" id="w_note"></p>
+    </div>
+
+    <!-- Leg time & fuel -->
+    <div class="card">
+      <h3>Leg time &amp; fuel</h3>
+      <p class="hint">VFR fuel reserve (CAR 602.88): 30 minutes at normal cruise by day, 45 minutes by night. Add taxi, climb and a margin of your own.</p>
+      <div class="fields">
+        <label class="fld">Distance NM<input id="l_d" type="number" inputmode="decimal" value="85"></label>
+        <label class="fld">Groundspeed kt<input id="l_gs" type="number" inputmode="decimal" value="95"><button class="linkbtn" type="button" onclick="useGS()">Use wind result</button></label>
+        <label class="fld">Fuel burn per hour<span class="ins"><input id="l_burn" type="number" inputmode="decimal" value="8.5"><select id="l_unit"><option value="usg">USG</option><option value="l">L</option></select></span></label>
+        <label class="fld">Reserve<select id="l_res"><option value="30">Day · 30 min</option><option value="45">Night · 45 min</option><option value="custom">Custom</option></select></label>
+        <label class="fld" id="l_rescw" style="display:none">Reserve minutes<input id="l_resc" type="number" inputmode="decimal" value="60"></label>
+        <label class="fld">Fuel on board (optional)<input id="l_fob" type="number" inputmode="decimal" placeholder="same unit"></label>
+      </div>
+      <div class="outs">
+        <div class="o">Time en route<b id="l_ete" class="hi">—</b></div>
+        <div class="o">Trip fuel<b id="l_trip">—</b></div>
+        <div class="o">Reserve fuel<b id="l_resf">—</b></div>
+        <div class="o">Fuel required<b id="l_tot" class="hi">—</b></div>
+      </div>
+      <p class="note" id="l_note"></p>
+    </div>
+
+    <!-- Runway crosswind -->
+    <div class="card">
+      <h3>Runway crosswind</h3>
+      <p class="hint">Runways are numbered by magnetic heading, so use the tower or ATIS wind (magnetic), not the METAR (true).</p>
+      <div class="fields">
+        <label class="fld">Runway<input id="x_rwy" type="number" inputmode="numeric" value="30"></label>
+        <label class="fld">Wind from °M<input id="x_wd" type="number" inputmode="decimal" value="340"></label>
+        <label class="fld">Wind speed kt<input id="x_ws" type="number" inputmode="decimal" value="12"></label>
+        <label class="fld">Gusting kt (optional)<input id="x_g" type="number" inputmode="decimal" value="18"></label>
+        <label class="fld full">Max demonstrated crosswind kt (from your POH)<input id="x_max" type="number" inputmode="decimal" value="15"></label>
+      </div>
+      <div class="outs">
+        <div class="o">Crosswind<b id="x_xw" class="hi">—</b></div>
+        <div class="o"><span id="x_hwl">Headwind</span><b id="x_hw">—</b></div>
+      </div>
+      <p class="note" id="x_note"></p>
+    </div>
+
+    <!-- Density altitude -->
+    <div class="card">
+      <h3>Density altitude &amp; true airspeed</h3>
+      <p class="hint">Altimeter setting in inHg (hPa works too). Density altitude is the altitude the aircraft performs as if it were at.</p>
+      <div class="fields">
+        <label class="fld">Field elevation ft<input id="d_el" type="number" inputmode="decimal" value="780"></label>
+        <label class="fld">Altimeter setting<input id="d_alt" type="number" inputmode="decimal" value="29.92"></label>
+        <label class="fld">Outside air temp °C<input id="d_oat" type="number" inputmode="decimal" value="30"></label>
+        <label class="fld">Calibrated airspeed kt<input id="d_cas" type="number" inputmode="decimal" value="100"></label>
+      </div>
+      <div class="outs">
+        <div class="o">Pressure altitude<b id="d_pa">—</b></div>
+        <div class="o">ISA temp · deviation<b id="d_isa">—</b></div>
+        <div class="o">Density altitude<b id="d_da" class="hi">—</b></div>
+        <div class="o">True airspeed<b id="d_tas" class="hi">—</b></div>
+      </div>
+      <p class="note" id="d_note"></p>
+    </div>
+
+    <!-- Time speed distance -->
+    <div class="card">
+      <h3>Time · speed · distance</h3>
+      <p class="hint">Fill in any two and leave the third blank. Time as minutes (45) or hours:minutes (1:25).</p>
+      <div class="fields">
+        <label class="fld">Distance NM<input id="t_d" type="number" inputmode="decimal" value="60"></label>
+        <label class="fld">Speed kt<input id="t_s" type="number" inputmode="decimal" value="110"></label>
+        <label class="fld full">Time<input id="t_t" type="text" inputmode="decimal" placeholder="blank to solve"></label>
+      </div>
+      <div class="outs"><div class="o" style="grid-column:1/-1"><span id="t_lbl">Answer</span><b id="t_ans" class="hi">—</b></div></div>
+    </div>
+
+    <!-- Converter -->
+    <div class="card">
+      <h3>Unit converter</h3>
+      <p class="hint">Avgas weight uses 6 lb per US gallon, the usual planning figure.</p>
+      <div class="fields">
+        <label class="fld">Value<input id="c_v" type="number" inputmode="decimal" value="100"></label>
+        <label class="fld">From<select id="c_u"></select></label>
+      </div>
+      <ul class="conv" id="c_out"></ul>
+    </div>
+  </div>
+  <p class="disclaimer">A planning aid, not a substitute for your own E6B, the aircraft POH or a weather briefing. Check every number that matters before you fly. Density altitude uses the standard-atmosphere formula; true airspeed ignores compressibility, which is fine below about 200 kt.</p>
 </section>
 </div>
 
@@ -468,12 +607,13 @@ function label(k){ return T.numbered ? "("+(k+1)+")" : "ABCD"[k]; }
 function esc(s){ return String(s).replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
 function histKey(){ return "urbris_"+TK+"_history"; }
 
-function showHome(){ $("#quiz").style.display="none"; $("#home").style.display="block"; history.replaceState(null,"","/learn"); scrollTo(0,0); }
+function showHome(){ $("#quiz").style.display="none"; $("#calc").style.display="none"; $("#home").style.display="block"; history.replaceState(null,"","/learn"); scrollTo(0,0); }
+function showCalc(){ $("#quiz").style.display="none"; $("#home").style.display="none"; $("#calc").style.display="block"; history.replaceState(null,"","/learn#calc"); calcAll(); scrollTo(0,0); }
 function showQuiz(key){
   key = TESTS[key] ? key : "pstar";
   if (TK !== key) chosenTopics = new Set();
   TK = key; T = TESTS[key];
-  $("#home").style.display="none"; $("#quiz").style.display="block";
+  $("#home").style.display="none"; $("#calc").style.display="none"; $("#quiz").style.display="block";
   $("#disclaimer").innerHTML = T.disclaimer;
   history.replaceState(null,"","/learn#"+key); renderMenu(); scrollTo(0,0);
 }
@@ -580,7 +720,160 @@ function retryMissed(){
   renderQ();
 }
 
-if (TESTS[location.hash.slice(1)]) showQuiz(location.hash.slice(1));
+// ============ FLIGHT CALCULATOR ============
+const DASH = "—";
+const el = id => document.getElementById(id);
+const val = id => { const x = parseFloat(el(id).value); return isFinite(x) ? x : NaN; };
+const ok = (...a) => a.every(x => isFinite(x));
+const rad = d => d*Math.PI/180, deg = r => r*180/Math.PI;
+function out(id, text, cls){ const e = el(id); e.textContent = text; if (cls !== undefined) e.className = cls; }
+function hdg(d){ d = Math.round(((d % 360) + 360) % 360); return String(d === 0 ? 360 : d).padStart(3, "0") + "°"; }
+function hm(h){ if (!isFinite(h) || h < 0) return DASH; const m = Math.round(h*60); return Math.floor(m/60) + ":" + String(m % 60).padStart(2, "0"); }
+function n0(x){ return Math.round(x).toLocaleString("en-CA"); }
+const L_PER_USG = 3.78541, LB_PER_USG = 6;
+let lastGS = NaN;
+
+function calcWind(){
+  const tc = val("w_tc"), tas = val("w_tas"), wd = val("w_wd"), ws = val("w_ws");
+  const vr = isFinite(val("w_var")) ? val("w_var") : 0, west = el("w_vdir").value === "W";
+  const clear = msg => { ["w_wca","w_gs","w_th","w_mh"].forEach(i => out(i, DASH)); out("w_note", msg || ""); el("w_note").className = "note" + (msg ? " warn" : ""); lastGS = NaN; };
+  if (!ok(tc, tas, wd, ws) || tas <= 0) return clear();
+  const a = rad(wd - tc), x = ws*Math.sin(a)/tas;
+  if (Math.abs(x) > 1) return clear("The crosswind on this course is stronger than your airspeed. There's no heading that holds it.");
+  const wca = deg(Math.asin(x));
+  const gs = tas*Math.cos(rad(wca)) - ws*Math.cos(a);
+  const th = tc + wca, mh = th + (west ? vr : -vr);
+  const w = Math.round(wca);
+  out("w_wca", w === 0 ? "0°" : Math.abs(w) + "° " + (w > 0 ? "right" : "left"));
+  out("w_gs", gs > 0 ? Math.round(gs) + " kt" : DASH);
+  out("w_th", hdg(th)); out("w_mh", hdg(mh));
+  lastGS = gs;
+  const hw = ws*Math.cos(a), xw = ws*Math.sin(a);
+  el("w_note").className = "note" + (gs <= 0 ? " warn" : "");
+  out("w_note", gs <= 0 ? "The headwind is at least your airspeed, so you won't make progress along this course."
+    : `${hw >= 0 ? "Headwind" : "Tailwind"} ${Math.abs(Math.round(hw))} kt along the course, crosswind ${Math.abs(Math.round(xw))} kt from the ${xw >= 0 ? "right" : "left"}.`);
+}
+function useGS(){ if (isFinite(lastGS) && lastGS > 0){ el("l_gs").value = Math.round(lastGS); calcAll(); } }
+
+function calcLeg(){
+  const d = val("l_d"), gs = val("l_gs"), burn = val("l_burn"), unit = el("l_unit").value, fob = val("l_fob");
+  const custom = el("l_res").value === "custom";
+  el("l_rescw").style.display = custom ? "" : "none";
+  const resMin = custom ? val("l_resc") : +el("l_res").value;
+  const u = unit === "usg" ? "USG" : "L";
+  const f = x => isFinite(x) ? x.toFixed(1) + " " + u : DASH;
+  const t = ok(d, gs) && gs > 0 ? d/gs : NaN;
+  out("l_ete", hm(t));
+  const trip = ok(t, burn) ? t*burn : NaN, res = ok(resMin, burn) ? resMin/60*burn : NaN, tot = trip + res;
+  out("l_trip", f(trip)); out("l_resf", f(res)); out("l_tot", f(tot), "hi");
+  let note = "", warn = false;
+  if (isFinite(tot)){
+    const usg = unit === "usg" ? tot : tot/L_PER_USG;
+    note = unit === "usg" ? `Required = ${(usg*L_PER_USG).toFixed(0)} L` : `Required = ${usg.toFixed(1)} USG`;
+    note += ` · about ${n0(usg*LB_PER_USG)} lb of avgas.`;
+    if (isFinite(fob) && fob > 0 && burn > 0){
+      const left = fob - trip;
+      note += ` Endurance on ${fob} ${u}: ${hm(fob/burn)}. On landing you'd have ${left.toFixed(1)} ${u} (${hm(left/burn)} of flying).`;
+      if (fob < tot){ warn = true; out("l_tot", f(tot), "warn"); note += ` That's ${(tot - fob).toFixed(1)} ${u} short of the legal reserve.`; }
+    }
+  }
+  out("l_note", note); el("l_note").className = "note" + (warn ? " warn" : "");
+}
+
+function calcXwind(){
+  const rwy = val("x_rwy"), wd = val("x_wd"), ws = val("x_ws"), g = val("x_g"), max = val("x_max");
+  if (!ok(rwy, wd, ws) || rwy < 1 || rwy > 36){ out("x_xw", DASH, "hi"); out("x_hw", DASH, ""); out("x_note", rwy > 36 ? "Runway numbers run 01 to 36." : ""); return; }
+  const a = rad(wd - rwy*10), s = Math.sin(a), c = Math.cos(a);
+  const side = s >= 0 ? "right" : "left", gusty = isFinite(g) && g > ws;
+  const xw = Math.abs(ws*s), xg = gusty ? Math.abs(g*s) : xw;
+  const over = isFinite(max) && max > 0 && xg > max;
+  out("x_xw", Math.round(xw) < 1 ? "Calm" : Math.round(xw) + (gusty ? "–" + Math.round(xg) : "") + " kt " + side, over ? "warn" : "hi");
+  const hw = ws*c, hwg = gusty ? g*c : hw;
+  out("x_hwl", hw >= 0 ? "Headwind" : "Tailwind");
+  out("x_hw", Math.abs(Math.round(hw)) + (gusty ? "–" + Math.abs(Math.round(hwg)) : "") + " kt", hw < -0.5 ? "warn" : "");
+  let note = `Wind is ${Math.round(Math.abs(((wd - rwy*10 + 540) % 360) - 180))}° off runway ${String(rwy).padStart(2, "0")}.`;
+  if (over) note += ` The ${gusty ? "gust " : ""}crosswind is above the ${max} kt demonstrated in your POH. Consider another runway or airport.`;
+  else if (hw < -0.5) note += " Tailwind: expect a longer landing roll. Check whether the opposite runway suits better.";
+  if (gusty) note += " Add half the gust factor to your approach speed.";
+  out("x_note", note); el("x_note").className = "note" + (over || hw < -0.5 ? " warn" : "");
+}
+
+function calcDA(){
+  const elev = val("d_el"), oat = val("d_oat"), cas = val("d_cas");
+  let alt = val("d_alt"); if (alt > 100) alt = alt/33.8639; // hPa → inHg
+  if (!ok(elev, alt, oat)){ ["d_pa","d_isa","d_da","d_tas"].forEach(i => out(i, DASH)); out("d_note", ""); return; }
+  const pa = elev + (29.92 - alt)*1000;
+  const isa = 15 - 1.98*pa/1000, dev = oat - isa;
+  const sigma = Math.pow(1 - 6.8756e-6*pa, 5.2559) / ((oat + 273.15)/288.15);
+  const da = (1 - Math.pow(sigma, 0.234969)) / 6.8756e-6;
+  out("d_pa", n0(pa) + " ft");
+  out("d_isa", `${isa.toFixed(0)}° · ${dev >= 0 ? "+" : "−"}${Math.abs(dev).toFixed(0)}°`);
+  const high = da - elev > 1000;
+  out("d_da", n0(da) + " ft", high ? "warn" : "hi");
+  out("d_tas", isFinite(cas) && cas > 0 ? Math.round(cas/Math.sqrt(sigma)) + " kt" : DASH);
+  out("d_note", high
+    ? `The aircraft will perform as if it's ${n0(da - elev)} ft above the field: longer takeoff roll, weaker climb. Work out takeoff distance from the POH charts.`
+    : `Density altitude is within ${n0(Math.max(0, da - elev))} ft of field elevation.`);
+  el("d_note").className = "note" + (high ? " warn" : "");
+}
+
+function parseTime(s){
+  s = String(s).trim(); if (!s) return NaN;
+  if (s.includes(":")){ const [h, m] = s.split(":").map(Number); return ok(h, m) ? h + m/60 : NaN; }
+  const m = parseFloat(s); return isFinite(m) ? m/60 : NaN;
+}
+function calcTSD(){
+  const d = val("t_d"), s = val("t_s"), t = parseTime(el("t_t").value);
+  const have = [d, s, t].filter(x => isFinite(x)).length;
+  if (have !== 2){ out("t_lbl", "Answer"); out("t_ans", have === 3 ? "Clear one box" : DASH); return; }
+  if (!isFinite(t)){ out("t_lbl", "Time"); out("t_ans", s > 0 ? hm(d/s) + "  (" + Math.round(d/s*60) + " min)" : DASH); }
+  else if (!isFinite(s)){ out("t_lbl", "Speed"); out("t_ans", t > 0 ? Math.round(d/t) + " kt" : DASH); }
+  else { out("t_lbl", "Distance"); out("t_ans", (s*t).toFixed(1) + " NM"); }
+}
+
+const UNITS = {
+  "Speed":       {kt:1, mph:1/1.150779, "km/h":1/1.852},
+  "Distance":    {NM:1, SM:1/1.150779, km:1/1.852},
+  "Altitude":    {ft:1, m:3.28084},
+  "Fuel":        {USG:1, L:1/L_PER_USG, "lb avgas":1/LB_PER_USG},
+  "Pressure":    {inHg:1, hPa:1/33.8639},
+  "Temperature": {"°C":"C", "°F":"F"}
+};
+(function initConv(){
+  el("c_u").innerHTML = Object.entries(UNITS).map(([g, us]) => `<optgroup label="${g}">${Object.keys(us).map(u => `<option value="${g}|${u}">${u}</option>`).join("")}</optgroup>`).join("");
+  el("c_u").value = "Speed|kt";
+})();
+function calcConv(){
+  const v = val("c_v"), [g, from] = el("c_u").value.split("|"), us = UNITS[g];
+  if (!isFinite(v)){ el("c_out").innerHTML = ""; return; }
+  const fmt = x => Math.abs(x) >= 100 ? n0(x) : (+x.toFixed(2)).toString();
+  let rows;
+  if (g === "Temperature"){
+    const c = from === "°C" ? v : (v - 32)*5/9;
+    rows = [["°C", c], ["°F", c*9/5 + 32]];
+  } else {
+    const base = v*us[from];
+    rows = Object.keys(us).map(u => [u, base/us[u]]);
+  }
+  el("c_out").innerHTML = rows.filter(([u]) => u !== from).map(([u, x]) => `<li><b>${fmt(x)}</b><span>${u}</span></li>`).join("");
+}
+
+const CALC_KEY = "urbris_calc_inputs";
+function calcAll(){
+  calcWind(); calcLeg(); calcXwind(); calcDA(); calcTSD(); calcConv();
+  const saved = {}; document.querySelectorAll("#calc input, #calc select").forEach(e => saved[e.id] = e.value);
+  store.set(CALC_KEY, saved);
+}
+(function initCalc(){
+  const saved = store.get(CALC_KEY, null);
+  if (saved) Object.entries(saved).forEach(([id, v]) => { const e = el(id); if (e) e.value = v; });
+  el("calc").addEventListener("input", calcAll);
+  el("calc").addEventListener("change", calcAll);
+  calcAll();
+})();
+
+if (location.hash === "#calc") showCalc();
+else if (TESTS[location.hash.slice(1)]) showQuiz(location.hash.slice(1));
 
 </script>
 </body>
