@@ -83,7 +83,7 @@ h1 em{font-style:normal;color:var(--mu)}
 <section id="home">
   <div class="eyebrow">Ride · Drive · Fly</div>
   <h1>Learn to operate.<br><em>One licence at a time.</em></h1>
-  <p class="lede">Training for Ontario riders, manual drivers and Canadian student pilots. Start with written test prep, then work up the licence ladder.</p>
+  <p class="lede">Training for Ontario riders, manual drivers and Canadian student pilots. Start with the written test for each licence, then work up the ladder.</p>
 
   <div class="tracks">
     <div class="track">
@@ -95,29 +95,29 @@ h1 em{font-style:normal;color:var(--mu)}
         <li><span class="tag">ROC-A</span><span>Restricted radio operator certificate<span class="sub">Aeronautical radio</span></span><span class="pill">Soon</span></li>
         <li><span class="tag">PPL</span><span>Private pilot licence<span class="sub">PPAER written</span></span><span class="pill">Later</span></li>
       </ul>
-      <button class="btn" onclick="showQuiz()">Start PSTAR practice →</button>
+      <button class="btn" onclick="showQuiz('pstar')">Start PSTAR practice →</button>
     </div>
     <div class="track">
       <div class="eyebrow">Ride</div>
       <h2>Motorcycle</h2>
       <p>Ontario graduated licensing, taught by a certified motorcycle safety instructor.</p>
       <ul class="ladder">
-        <li><span class="tag">M1</span><span>Knowledge test<span class="sub">Rules of the road + signs</span></span><span class="pill">Soon</span></li>
+        <li class="live"><span class="tag">M1</span><span>Knowledge test<span class="sub">Rules, signs + motorcycle</span></span><span class="pill">Live</span></li>
         <li><span class="tag">M2</span><span>Road skills, level one<span class="sub">Clutch, braking, cornering</span></span><span class="pill">Later</span></li>
         <li><span class="tag">M</span><span>Full licence<span class="sub">Highway + advanced road test</span></span><span class="pill">Later</span></li>
       </ul>
-      <div class="soon">M1 practice test is next.</div>
+      <button class="btn" onclick="showQuiz('m1')">Start M1 practice →</button>
     </div>
     <div class="track">
       <div class="eyebrow">Drive</div>
       <h2>Manual car</h2>
       <p>Ontario G licensing, with stick-shift skills built in from day one.</p>
       <ul class="ladder">
-        <li><span class="tag">G1</span><span>Knowledge test<span class="sub">Rules of the road + signs</span></span><span class="pill">Soon</span></li>
+        <li class="live"><span class="tag">G1</span><span>Knowledge test<span class="sub">Rules of the road + signs</span></span><span class="pill">Live</span></li>
         <li><span class="tag">G2</span><span>Road test, level one<span class="sub">Friction zone, hill starts, shifting</span></span><span class="pill">Later</span></li>
         <li><span class="tag">G</span><span>Full licence<span class="sub">Highway + advanced road test</span></span><span class="pill">Later</span></li>
       </ul>
-      <div class="soon">G1 practice test follows M1.</div>
+      <button class="btn" onclick="showQuiz('g1')">Start G1 practice →</button>
     </div>
   </div>
 </section>
@@ -126,7 +126,7 @@ h1 em{font-style:normal;color:var(--mu)}
 <section id="quiz">
   <span class="back" onclick="showHome()">← All tracks</span>
   <div id="quizBody"></div>
-  <p class="disclaimer">Questions are from Transport Canada's PSTAR study and reference guide, <a href="https://tc.canada.ca/en/aviation/publications/student-pilot-permit-private-pilot-licence-foreign-military-applicants-aviation-regulations-tp-11919" target="_blank" rel="noopener">TP 11919</a> (© His Majesty the King in Right of Canada, Transport Canada), reproduced for non-commercial study. UrbRis is not affiliated with Transport Canada. Your PSTAR is 50 questions drawn from this guide. Transport Canada asks applicants to research each answer in the references, not just memorize them, so check the <a href="https://laws-lois.justice.gc.ca/eng/regulations/SOR-96-433/" target="_blank" rel="noopener">CARs</a> and TC AIM and confirm with your flight instructor.</p>
+  <p class="disclaimer" id="disclaimer"></p>
 </section>
 </div>
 
@@ -325,57 +325,191 @@ const BANK = [{"id":"1.01","t":"Right of way","q":"Which statement is true with 
 {"id":"14.05","t":"Accidents & TSB","q":"What circumstance(s) permit an aircraft to be moved without approval of the Minister after it has been involved in an accident which caused serious injury or death? When it becomes necessary to","o":["rescue survivors.","avoid danger to persons or property.","prevent destruction by fire.","implement (1), (2) or (3) above."],"a":3},
 {"id":"14.06","t":"Accidents & TSB","q":"The TSB considers missing aircraft to be","o":["a reportable aviation incident.","an occurrence which need not be reported.","an aviation incident which need not be reported.","a reportable aviation accident."],"a":3}];
 
+// Ontario knowledge-test practice (M1 / G1). Original questions written from the
+// Official MTO Driver's Handbook and Motorcycle Handbook. a = index of the correct option.
+const MTO_SHARED = [
+// --- Rules of the road ---
+{id:"R01",t:"Rules of the road",q:"Unless a sign says otherwise, what is the maximum speed in a city, town or village in Ontario?",o:["50 km/h","40 km/h","60 km/h","70 km/h"],a:0,e:"The default limit in cities, towns, villages and built-up areas is 50 km/h."},
+{id:"R02",t:"Rules of the road",q:"Unless a sign says otherwise, what is the maximum speed outside cities, towns and villages?",o:["80 km/h","70 km/h","90 km/h","100 km/h"],a:0,e:"Outside built-up areas the default limit is 80 km/h."},
+{id:"R03",t:"Rules of the road",q:"A school bus ahead has stopped with its red lights flashing and stop arm out. There is no median. What must you do?",o:["Stop, whether you're behind it or approaching from the front","Stop only if you're behind it","Slow down and pass carefully","Stop only if children are visible"],a:0,e:"On a road without a median, traffic in both directions must stop for a school bus with red lights flashing. Don't move until the bus moves or the lights stop flashing."},
+{id:"R04",t:"Rules of the road",q:"Coming up behind a stopped school bus with its red lights flashing, how far back must you stop?",o:["At least 20 m","At least 5 m","At least 10 m","At least 50 m"],a:0,e:"Stop at least 20 m behind a stopped school bus with its red lights flashing."},
+{id:"R05",t:"Rules of the road",q:"A streetcar ahead stops and opens its doors, and there's no safety island. What must you do?",o:["Stop at least 2 m behind the rear doors until passengers have cleared","Pass on the left","Pass slowly on the right","Sound your horn and continue"],a:0,e:"Stop at least 2 m behind the streetcar's rear doors and wait until passengers have boarded or reached the curb."},
+{id:"R06",t:"Rules of the road",q:"An emergency vehicle with lights and siren is coming toward you or from behind. What should you do?",o:["Pull to the right as far as safely possible and stop","Speed up to clear the way","Stop immediately where you are, even in an intersection","Keep going at the same speed"],a:0,e:"Signal, pull to the right as far as you safely can, stop, and wait until the emergency vehicle has passed. Don't stop in an intersection."},
+{id:"R07",t:"Rules of the road",q:"You're approaching an emergency vehicle or tow truck stopped on the shoulder with its lights flashing. What does the law require?",o:["Slow down and move over a lane if it's safe","Stop behind it","Keep your speed and lane","Sound your horn as you pass"],a:0,e:"Ontario's Move Over law: slow down and, if you can do it safely, move into a lane away from the stopped vehicle."},
+{id:"R08",t:"Rules of the road",q:"Two vehicles arrive at an intersection with no signs or signals at the same time. Who goes first?",o:["The vehicle on the right","The vehicle on the left","The larger vehicle","Whoever signals first"],a:0,e:"At an uncontrolled intersection, yield to the vehicle on your right if you arrive at the same time."},
+{id:"R09",t:"Rules of the road",q:"At an all-way stop, who has the right of way?",o:["The first vehicle to come to a complete stop","The vehicle going straight","The vehicle turning right","The vehicle on the left"],a:0,e:"The first vehicle to stop goes first. If two stop at the same time, the vehicle on the left yields to the one on the right."},
+{id:"R10",t:"Rules of the road",q:"You're turning left on a green light. Who must you yield to?",o:["Oncoming traffic and pedestrians","No one, a green light gives you the right of way","Only pedestrians","Only vehicles turning right"],a:0,e:"Turning left, wait for a safe gap in oncoming traffic and let pedestrians finish crossing."},
+{id:"R11",t:"Rules of the road",q:"When may you turn right on a red light?",o:["After a complete stop and yielding to traffic and pedestrians, unless a sign forbids it","Never","Anytime if no traffic is coming, without stopping","Only between 9 a.m. and 4 p.m."],a:0,e:"Come to a complete stop, yield to pedestrians and traffic, then turn, unless a sign prohibits turns on red."},
+{id:"R12",t:"Rules of the road",q:"What does a flashing red traffic light mean?",o:["Come to a complete stop, then go when it's safe","Slow down and proceed with caution","The light is about to turn green","Stop only if traffic is coming"],a:0,e:"Treat a flashing red light like a stop sign."},
+{id:"R13",t:"Rules of the road",q:"What does a flashing yellow traffic light mean?",o:["Drive with caution","Stop and wait for green","The light is broken, treat it as a stop sign","Speed up to clear the intersection"],a:0,e:"A flashing yellow light means slow down and proceed with caution."},
+{id:"R14",t:"Rules of the road",q:"What does a flashing green light or green arrow (advance green) mean?",o:["You may turn left, go straight or turn right; oncoming traffic faces a red light","Pedestrians have the right of way","Stop and wait","Only right turns are allowed"],a:0,e:"An advance green lets you turn left, go straight or turn right while oncoming traffic is held."},
+{id:"R15",t:"Rules of the road",q:"A pedestrian is crossing at a pedestrian crossover. When may you go?",o:["Only after the pedestrian has completely crossed the road","When they've passed your lane","When they're halfway across","Right away if you can steer around them"],a:0,e:"At pedestrian crossovers and school crossings with a guard, you must wait until the pedestrian has crossed the entire road."},
+{id:"R16",t:"Rules of the road",q:"When you have to stop at a railway crossing, how far from the nearest rail must you stop?",o:["At least 5 m","At least 2 m","At least 10 m","At least 15 m"],a:0,e:"Stop at least 5 m from the nearest rail or gate. Don't cross until it's safe."},
+{id:"R17",t:"Rules of the road",q:"Entering a roundabout, what must you do?",o:["Yield to traffic already in the roundabout and travel counter-clockwise","Enter first, traffic inside must yield","Travel clockwise","Stop in the roundabout to let others in"],a:0,e:"Slow down, yield to traffic already circulating, then enter and travel counter-clockwise."},
+{id:"R18",t:"Rules of the road",q:"When must you turn on your headlights?",o:["From half an hour before sunset to half an hour after sunrise, and whenever you can't see clearly 150 m ahead","Only after dark","Only in rain","Only on highways"],a:0,e:"Headlights are required from ½ hour before sunset to ½ hour after sunrise, and any time visibility is less than 150 m."},
+{id:"R19",t:"Rules of the road",q:"How close can an oncoming vehicle be before you must dim your high beams?",o:["150 m","60 m","300 m","500 m"],a:0,e:"Dim high beams within 150 m of an oncoming vehicle, and within 60 m when you're following another vehicle."},
+{id:"R20",t:"Rules of the road",q:"How close can you be behind another vehicle before you must dim your high beams?",o:["60 m","150 m","30 m","200 m"],a:0,e:"Dim high beams when you're within 60 m behind another vehicle."},
+{id:"R21",t:"Rules of the road",q:"In good conditions, what is the minimum safe following distance?",o:["At least 2 seconds","At least 1 second","Two car lengths","At least 10 m"],a:0,e:"Keep at least a 2-second gap. Increase it in bad weather, at night or behind large vehicles."},
+{id:"R22",t:"Rules of the road",q:"When passing a cyclist, how much room must you leave, where practical?",o:["At least 1 m","At least 0.5 m","At least 2 m","Enough to clear their handlebars"],a:0,e:"Ontario law requires at least 1 m between your vehicle and a cyclist when passing, where practical."},
+{id:"R23",t:"Rules of the road",q:"What blood alcohol level must a novice driver (G1, G2, M1, M2) have?",o:["Zero","Below 0.05","Below 0.08","Below 0.02"],a:0,e:"Novice drivers, and all drivers 21 and under, must have a blood alcohol level of zero."},
+{id:"R24",t:"Rules of the road",q:"Using a hand-held phone while driving is",o:["Illegal, including at red lights","Allowed at red lights","Allowed for short calls","Allowed if you're under the speed limit"],a:0,e:"Holding or using a hand-held phone or device is illegal while driving, including when stopped in traffic or at a light. Novice drivers face licence suspension."},
+{id:"R25",t:"Rules of the road",q:"Which documents must you carry when driving?",o:["Your driver's licence, the vehicle permit and proof of insurance","Only your driver's licence","Only proof of insurance","Your birth certificate"],a:0,e:"Carry your licence, the vehicle's permit (ownership) and the insurance liability card, and show them to police on request."},
+{id:"R26",t:"Rules of the road",q:"How soon must you tell the Ministry of Transportation that you've changed your address?",o:["Within 6 days","Within 30 days","Within 90 days","At your next renewal"],a:0,e:"Report a change of address to the ministry within 6 days."},
+{id:"R27",t:"Rules of the road",q:"You're in a collision where someone is hurt. What must you do?",o:["Stay at the scene, get help and report it to police right away","Exchange information and leave","Report it at your next renewal","Report it only to your insurance company"],a:0,e:"Stay, help if you safely can, call 911 and report it to police immediately. Collisions with injury always go to police."},
+{id:"R28",t:"Rules of the road",q:"Driving 100 km/h in a 60 km/h zone in Ontario can lead to which charge?",o:["Stunt driving: immediate licence suspension and vehicle impoundment","A warning only","A parking ticket","No penalty if the road is clear"],a:0,e:"Driving 40 km/h or more over the limit where the limit is below 80 km/h is stunt driving, with an immediate roadside licence suspension and vehicle impoundment."},
+{id:"R29",t:"Rules of the road",q:"What is the hand signal for a left turn?",o:["Left arm straight out the window","Left arm bent up at the elbow","Left arm bent down at the elbow","Right arm out the window"],a:0,e:"Left arm straight out = left turn. Arm bent up = right turn. Arm bent down = stopping or slowing."},
+{id:"R30",t:"Rules of the road",q:"What is the hand signal for a right turn?",o:["Left arm bent up at the elbow","Left arm straight out","Left arm bent down","Waving your left arm"],a:0,e:"Left arm out and bent upward at the elbow = right turn."},
+{id:"R31",t:"Rules of the road",q:"Your vehicle starts to hydroplane on a wet road. What should you do?",o:["Ease off the accelerator, keep the wheel straight and don't brake hard","Brake hard","Accelerate to regain traction","Turn the wheel sharply"],a:0,e:"Ease off the gas, keep steering straight and let the tires regain contact with the road. Avoid hard braking."},
+{id:"R32",t:"Rules of the road",q:"Your rear wheels start to skid. What should you do?",o:["Ease off the pedals, look where you want to go and steer there","Brake hard and hold it","Look at the obstacle you want to avoid","Turn the wheel all the way the opposite way"],a:0,e:"Take your feet off the brake and gas, look where you want to go and steer smoothly in that direction."},
+{id:"R33",t:"Rules of the road",q:"What is the only real cure for driver fatigue?",o:["Rest or sleep","Coffee","Opening the window","Loud music"],a:0,e:"Only rest helps. Pull over somewhere safe and sleep, or switch drivers."},
+{id:"R34",t:"Rules of the road",q:"Who is responsible for making sure passengers under 16 wear a seatbelt or proper child seat?",o:["The driver","The passenger","The passenger's parent, even if not in the vehicle","No one"],a:0,e:"The driver is responsible for passengers under 16 being properly buckled up."},
+{id:"R35",t:"Rules of the road",q:"What does a solid yellow line on your side of a broken yellow centre line mean?",o:["You may not pass","You may pass when safe","The lane is ending","Bicycles only"],a:0,e:"A solid line on your side means no passing."},
+{id:"R36",t:"Rules of the road",q:"Merging onto a freeway from an on-ramp, what should you do?",o:["Use the acceleration lane to match the speed of traffic, signal, then merge into a safe gap","Stop at the end of the ramp and wait","Merge slowly so other drivers notice you","Merge without signalling"],a:0,e:"Signal, check your mirror and blind spot, match traffic speed in the acceleration lane and merge smoothly."},
+// --- Signs ---
+{id:"S01",t:"Signs",q:"A red, eight-sided (octagonal) sign means",o:["Stop","Yield","School zone","Do not enter"],a:0,e:"The octagon is used only for stop signs. Come to a complete stop."},
+{id:"S02",t:"Signs",q:"A triangular sign pointing down, white with a red border, means",o:["Yield right of way","Stop","Railway crossing","Slow-moving vehicle"],a:0,e:"A yield sign. Slow down or stop if needed and give the right of way."},
+{id:"S03",t:"Signs",q:"Yellow, diamond-shaped signs are",o:["Warning signs about hazards ahead","Regulatory signs","Guide signs","Construction signs"],a:0,e:"Yellow diamonds warn of hazards such as curves, intersections or animals."},
+{id:"S04",t:"Signs",q:"Orange, diamond-shaped signs mean",o:["Construction zone ahead","School zone","Hospital ahead","Tourist area"],a:0,e:"Orange signs mark construction zones. Slow down and watch for workers."},
+{id:"S05",t:"Signs",q:"A five-sided (pentagon) fluorescent yellow-green sign marks",o:["A school zone or school crossing","A construction zone","A railway crossing","A hospital"],a:0,e:"The pentagon shape means a school zone or school crossing."},
+{id:"S06",t:"Signs",q:"A white X-shaped sign (crossbuck) means",o:["Railway crossing","Intersection ahead","Road closed","No parking"],a:0,e:"The crossbuck marks a railway crossing. Slow down, look and listen."},
+{id:"S07",t:"Signs",q:"A red circle with a red diagonal line through a symbol means",o:["That action is not allowed","That action is recommended","Caution","The road ends"],a:0,e:"A red circle and slash means the action shown is prohibited."},
+{id:"S08",t:"Signs",q:"An orange triangle with a red border on the back of a vehicle means",o:["Slow-moving vehicle","Dangerous goods","Wide load","Emergency vehicle"],a:0,e:"It marks a vehicle that travels slower than 40 km/h, such as farm equipment."},
+{id:"S09",t:"Signs",q:"Rectangular white signs with black or red lettering are generally",o:["Regulatory signs, rules you must obey","Warning signs","Tourism signs","Temporary signs"],a:0,e:"White rectangles such as speed limits are regulatory signs."},
+{id:"S10",t:"Signs",q:"Green signs give",o:["Direction and distance information","Warnings","Rules","Construction information"],a:0,e:"Green signs guide you, with destinations, exits and distances."},
+{id:"S11",t:"Signs",q:"In a posted community safety zone, traffic fines are",o:["Increased (doubled for many offences)","Reduced","Unchanged","Replaced with warnings"],a:0,e:"Community safety zones carry increased fines, including doubled speeding fines."},
+];
+
+const G1_ONLY = [
+{id:"G01",t:"G1 licence",q:"What must your accompanying driver have while you drive on a G1?",o:["A full G licence (or higher) with at least 4 years of driving experience","A G2 licence","Any licence for at least 1 year","A full G licence for at least 1 year"],a:0,e:"The accompanying driver must be fully licensed with at least 4 years of driving experience, and must be the only other person in the front seat."},
+{id:"G02",t:"G1 licence",q:"What blood alcohol limit applies to a G1 driver's accompanying driver who is over 21?",o:["Less than 0.05","Less than 0.08","Zero","No limit"],a:0,e:"An accompanying driver over 21 must be below 0.05. If they're 21 or under, it must be zero."},
+{id:"G03",t:"G1 licence",q:"During which hours may a G1 driver not drive?",o:["Midnight to 5 a.m.","10 p.m. to 6 a.m.","Sunset to sunrise","1 a.m. to 6 a.m."],a:0,e:"G1 drivers may not drive between midnight and 5 a.m."},
+{id:"G04",t:"G1 licence",q:"May a G1 driver drive on a 400-series highway?",o:["Only with an Ontario-licensed driving instructor","Yes, with any accompanying driver","Yes, outside rush hour","Never"],a:0,e:"G1 drivers can't use 400-series highways or high-speed expressways (e.g. the QEW) unless the accompanying driver is an Ontario-licensed driving instructor."},
+{id:"G05",t:"G1 licence",q:"Who may sit in the front passenger seat while a G1 driver is driving?",o:["Only the accompanying driver","Anyone over 16","Anyone with a seatbelt","Any family member"],a:0,e:"The accompanying driver must be the only other person in the front seat."},
+{id:"G06",t:"G1 licence",q:"How many passengers can a G1 driver carry?",o:["No more than the number of working seatbelts","Two","One","Unlimited"],a:0,e:"Everyone in the vehicle must have a working seatbelt, so passengers are limited to the number of working seatbelts."},
+{id:"G07",t:"G1 licence",q:"How long must you normally hold a G1 before taking the G2 road test?",o:["12 months, or 8 months with an approved driver education course","6 months","24 months","3 months"],a:0,e:"G1 is normally 12 months, reduced to 8 months with a ministry-approved driver education course."},
+{id:"G08",t:"G1 licence",q:"For the first six months of G2, a driver 19 or under may carry how many passengers 19 or under between midnight and 5 a.m.?",o:["One","None","Three","No limit"],a:0,e:"First six months of G2: one passenger 19 or under between midnight and 5 a.m. After that, up to three. This doesn't apply with a fully licensed accompanying driver or immediate family members."},
+{id:"G09",t:"G1 licence",q:"A novice driver convicted of breaking a licence condition (e.g. driving with alcohol in their blood) faces what on a first offence?",o:["A 30-day licence suspension","A warning letter only","A $10 fine","Nothing"],a:0,e:"Novice drivers convicted of breaking a graduated licence condition face a licence suspension, 30 days for the first offence."},
+{id:"G10",t:"G1 licence",q:"What is the minimum age to apply for a G1 licence?",o:["16","15","17","18"],a:0,e:"You must be at least 16."},
+];
+
+const M1_ONLY = [
+// --- M1 licence ---
+{id:"M01",t:"M1 licence",q:"How long is an M1 licence valid?",o:["90 days","60 days","1 year","5 years"],a:0,e:"M1 is valid for 90 days. If it expires before you move to M2, you start over."},
+{id:"M02",t:"M1 licence",q:"How long must you hold an M1 before taking the M1 road test?",o:["At least 60 days","At least 30 days","At least 90 days","At least 6 months"],a:0,e:"Hold your M1 at least 60 days before the Level One road test, and do it before day 90."},
+{id:"M03",t:"M1 licence",q:"When may an M1 rider ride?",o:["Only from half an hour before sunrise to half an hour after sunset","Any time","Only on weekends","Only from 9 a.m. to 5 p.m."],a:0,e:"M1 riders may ride only during daylight: ½ hour before sunrise to ½ hour after sunset."},
+{id:"M04",t:"M1 licence",q:"May an M1 rider carry a passenger?",o:["No","Yes, if the passenger wears a helmet","Yes, in daylight","Yes, if the passenger is fully licensed"],a:0,e:"M1 riders may not carry passengers."},
+{id:"M05",t:"M1 licence",q:"Which roads are generally off-limits to M1 riders?",o:["400-series highways and roads with speed limits over 80 km/h, except certain listed highways","All highways","Only gravel roads","Only city streets"],a:0,e:"M1 riders can't use 400-series highways or high-speed roads over 80 km/h, apart from certain listed exceptions (e.g. sections of Highways 11, 17 and 69)."},
+{id:"M06",t:"M1 licence",q:"How long must you hold an M2 before taking the M2 road test?",o:["22 months, or 18 with an approved motorcycle safety course","12 months","6 months","5 years"],a:0,e:"M2 lasts at least 22 months, or 18 months if you complete a recognized motorcycle safety course."},
+{id:"M07",t:"M1 licence",q:"What must every motorcycle rider and passenger wear in Ontario?",o:["An approved motorcycle helmet, securely fastened","A reflective vest","Leather gloves","Motorcycle boots"],a:0,e:"An approved helmet, properly fastened, is required by law for riders and passengers."},
+// --- Riding skills ---
+{id:"M08",t:"Riding skills",q:"To start a turn to the right at speed, you press the",o:["Right handgrip forward (countersteering)","Left handgrip forward","Right footpeg only","Rear brake"],a:0,e:"Countersteering: press forward on the grip on the side you want to turn. Press right to lean and go right."},
+{id:"M09",t:"Riding skills",q:"Which brake gives most of a motorcycle's stopping power?",o:["The front brake","The rear brake","Both are equal","The engine"],a:0,e:"The front brake provides most of the stopping power (roughly 70% or more). Use both brakes every time you stop."},
+{id:"M10",t:"Riding skills",q:"To stop quickly in a straight line, you should",o:["Apply both brakes firmly and progressively, without locking the wheels","Use only the rear brake","Use only the front brake, grabbing it hard","Pull in the clutch and coast"],a:0,e:"Squeeze the front and press the rear, progressively and firmly, keeping the bike upright and straight."},
+{id:"M11",t:"Riding skills",q:"Where should you look when riding through a curve?",o:["Through the turn, to where you want to go","At the road just in front of your wheel","At the centre line","At the edge of the road"],a:0,e:"Turn your head and look through the turn. The motorcycle tends to go where you look."},
+{id:"M12",t:"Riding skills",q:"When should you slow down for a curve?",o:["Before entering it, then gently roll on the throttle through it","In the middle of the curve","After the apex, by braking hard","You shouldn't slow down"],a:0,e:"Do your slowing before the curve, then hold steady or slightly increasing throttle through it to keep the bike stable."},
+{id:"M13",t:"Riding skills",q:"What is the 'friction zone'?",o:["The range of clutch-lever travel where the clutch starts to engage","The part of the tire that touches the road","The area between the brake pads","The space between two vehicles"],a:0,e:"The friction zone is where the clutch begins to transmit power. Mastering it gives smooth starts and slow-speed control."},
+{id:"M14",t:"Riding skills",q:"On most motorcycles, where is neutral?",o:["Between first and second gear","Below first gear","Above top gear","Between second and third"],a:0,e:"The usual pattern is 1-N-2-3-4-5: neutral is a half-click between first and second."},
+{id:"M15",t:"Riding skills",q:"What is the engine cut-off (kill) switch for?",o:["Stopping the engine quickly, e.g. if the throttle sticks","Turning off the headlight","Locking the steering","Cancelling turn signals"],a:0,e:"Use the cut-off switch to stop the engine fast in an emergency such as a stuck throttle."},
+{id:"M16",t:"Riding skills",q:"Before changing lanes on a motorcycle, you should",o:["Signal, check mirrors and do a shoulder check of your blind spot","Rely on your mirrors only","Sound your horn","Speed up first"],a:0,e:"Mirrors don't show everything. Always shoulder check before changing lanes or position."},
+{id:"M17",t:"Riding skills",q:"Many motorcycle turn signals don't cancel by themselves. What should you do after a turn?",o:["Cancel the signal manually","Leave it on until the next turn","Turn the bike off","Nothing, it doesn't matter"],a:0,e:"A signal left on misleads other drivers. Cancel it after every turn or lane change."},
+// --- Hazards ---
+{id:"M18",t:"Riding hazards",q:"How should you cross railway tracks on a motorcycle?",o:["As close to a 90° angle as possible","At a shallow angle","At high speed","Standing on the brakes"],a:0,e:"Cross tracks as close to straight-on (90°) as you can, so the tire doesn't get caught in the groove."},
+{id:"M19",t:"Riding hazards",q:"When is a road most slippery in the rain?",o:["In the first few minutes after rain starts","After an hour of heavy rain","Only at night","Only in winter"],a:0,e:"Fresh rain lifts oil and dirt to the surface, so the first few minutes are the most slippery."},
+{id:"M20",t:"Riding hazards",q:"Riding in a group, which formation is recommended on a straight road?",o:["Staggered formation","Side by side in one lane","Single file in the middle of the lane","Any formation"],a:0,e:"Staggered formation keeps the group compact while giving each rider space and an escape route."},
+{id:"M21",t:"Riding hazards",q:"Your front tire suddenly goes flat. What should you do?",o:["Hold the handlebars firmly, ease off the throttle and avoid braking until you've slowed","Brake hard immediately","Accelerate","Steer sharply to the shoulder"],a:0,e:"Grip firmly, keep a straight course, ease off the throttle and brake gently (if at all) with the good tire once you've slowed down."},
+{id:"M22",t:"Riding hazards",q:"Your front wheel starts to wobble at speed. What should you do?",o:["Grip firmly, gradually close the throttle and don't brake hard or accelerate","Accelerate out of it","Brake hard","Let go of the handlebars"],a:0,e:"Hold the grips firmly without fighting the wobble, roll off the throttle gradually and let the bike slow down."},
+{id:"M23",t:"Riding hazards",q:"Why should riders wear bright or reflective clothing?",o:["To be more visible to other road users","It's required by law","To stay cooler","To reduce wind noise"],a:0,e:"Motorcycles are hard to see. Bright and reflective gear helps drivers notice you."},
+{id:"M24",t:"Riding hazards",q:"On a gravel or loose surface, you should",o:["Slow down, avoid sudden braking or steering and keep a light, steady grip","Brake hard to stay in control","Lean the bike far into turns","Ride faster to skim over it"],a:0,e:"Loose surfaces offer less traction. Smooth, gentle inputs and lower speed keep the tires gripping."},
+{id:"M25",t:"Riding hazards",q:"Before carrying a passenger (once you're allowed to), the motorcycle must have",o:["Passenger footrests and a seat for the passenger","A top case","Saddlebags","A backrest"],a:0,e:"The bike must be designed to carry a passenger, with a seat and footrests for them."},
+{id:"M26",t:"Riding hazards",q:"Is it legal in Ontario to ride between lanes of slow or stopped traffic (lane splitting)?",o:["No","Yes, below 30 km/h","Yes, on highways only","Yes, if you signal"],a:0,e:"Lane splitting and filtering aren't permitted in Ontario."},
+{id:"M27",t:"Riding hazards",q:"Your tires are cold at the start of a ride. What does this mean?",o:["They have less grip until they warm up","They have more grip","Tire temperature doesn't matter","You should inflate them more"],a:0,e:"Cold tires grip less. Ride gently for the first few kilometres."},
+];
+
 // ---------------------------------------------------------------------------
+// Test definitions. Each test has its own bank, pass mark, mock length and source note.
+const TESTS = {
+  pstar: {
+    bank: BANK, eyebrow: "Fly · Student pilot", title: "PSTAR practice", mockN: 50, pass: 90, shuffle: false, numbered: true,
+    lede: "The Pre-Solo Test of Air Regulations: 50 multiple-choice questions, and you need 90% (45/50) to pass. Practice until you're over 90% every time.",
+    ref: q => "TP 11919 · Question " + q.id,
+    disclaimer: `Questions are from Transport Canada's PSTAR study and reference guide, <a href="https://tc.canada.ca/en/aviation/publications/student-pilot-permit-private-pilot-licence-foreign-military-applicants-aviation-regulations-tp-11919" target="_blank" rel="noopener">TP 11919</a> (© His Majesty the King in Right of Canada, Transport Canada), reproduced for non-commercial study. UrbRis is not affiliated with Transport Canada. Your PSTAR is 50 questions drawn from this guide. Transport Canada asks applicants to research each answer in the references, not just memorize them, so check the <a href="https://laws-lois.justice.gc.ca/eng/regulations/SOR-96-433/" target="_blank" rel="noopener">CARs</a> and TC AIM and confirm with your flight instructor.`
+  },
+  m1: {
+    bank: MTO_SHARED.concat(M1_ONLY), eyebrow: "Ride · Ontario motorcycle", title: "M1 knowledge test practice", mockN: 40, pass: 80, shuffle: true,
+    lede: "The M1 knowledge test covers rules of the road, traffic signs and motorcycle riding. Practice until you're scoring well above 80% every time.",
+    ref: q => "Ontario MTO Motorcycle / Driver's Handbook",
+    disclaimer: `Original practice questions written by UrbRis from the <a href="https://www.ontario.ca/document/official-ministry-transportation-mto-motorcycle-handbook" target="_blank" rel="noopener">Official MTO Motorcycle Handbook</a> and <a href="https://www.ontario.ca/document/official-mto-drivers-handbook" target="_blank" rel="noopener">Driver's Handbook</a>. They are not the actual DriveTest questions. Rules and fines change, so confirm anything you're unsure of in the current handbooks.`
+  },
+  g1: {
+    bank: MTO_SHARED.concat(G1_ONLY), eyebrow: "Drive · Ontario car", title: "G1 knowledge test practice", mockN: 40, pass: 80, shuffle: true,
+    lede: "The G1 knowledge test covers rules of the road and traffic signs. Practice until you're scoring well above 80% every time.",
+    ref: q => "Ontario MTO Driver's Handbook",
+    disclaimer: `Original practice questions written by UrbRis from the <a href="https://www.ontario.ca/document/official-mto-drivers-handbook" target="_blank" rel="noopener">Official MTO Driver's Handbook</a>. They are not the actual DriveTest questions. Rules and fines change, so confirm anything you're unsure of in the current handbook.`
+  }
+};
+
 const $ = s => document.querySelector(s);
-const LETTERS = ["(1)","(2)","(3)","(4)"];
 const store = {
   get(k, d){ try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch(e){ return d; } },
   set(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} }
 };
-let S = null; // session state
+let T = null, TK = null; // current test + key
+let S = null;            // session state
 let chosenTopics = new Set();
 
 function shuffle(a){ a = a.slice(); for (let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
-// Shuffle each question's options so the correct answer isn't always first.
-// Options are NOT shuffled: several questions reference other options ("(1), (2) and (3) are correct").
-function prep(q){ return q; }
+// PSTAR options keep their published order (some reference other options). MTO options are shuffled.
+function prep(q){
+  if (!T.shuffle) return q;
+  const order = shuffle(q.o.map((_,i)=>i));
+  return {...q, o: order.map(i=>q.o[i]), a: order.indexOf(q.a)};
+}
+function label(k){ return T.numbered ? "("+(k+1)+")" : "ABCD"[k]; }
 function esc(s){ return String(s).replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+function histKey(){ return "urbris_"+TK+"_history"; }
 
 function showHome(){ $("#quiz").style.display="none"; $("#home").style.display="block"; history.replaceState(null,"","/learn"); scrollTo(0,0); }
-function showQuiz(){ $("#home").style.display="none"; $("#quiz").style.display="block"; history.replaceState(null,"","/learn#pstar"); renderMenu(); scrollTo(0,0); }
+function showQuiz(key){
+  key = TESTS[key] ? key : "pstar";
+  if (TK !== key) chosenTopics = new Set();
+  TK = key; T = TESTS[key];
+  $("#home").style.display="none"; $("#quiz").style.display="block";
+  $("#disclaimer").innerHTML = T.disclaimer;
+  history.replaceState(null,"","/learn#"+key); renderMenu(); scrollTo(0,0);
+}
 
 function renderMenu(){
-  const topics = [...new Set(BANK.map(q=>q.t))];
-  const hist = store.get("urbris_pstar_history", []);
+  const topics = [...new Set(T.bank.map(q=>q.t))];
+  const hist = store.get(histKey(), []);
   const best = hist.length ? Math.max(...hist.map(h=>h.pct)) : null;
   const last = hist.length ? hist[hist.length-1] : null;
-  const mockN = Math.min(50, BANK.length);
+  const mockN = Math.min(T.mockN, T.bank.length);
   $("#quizBody").innerHTML = `
-    <div class="eyebrow">Fly · Student pilot</div>
-    <h1 style="font-size:clamp(34px,5vw,48px)">PSTAR practice</h1>
-    <p class="lede" style="margin-bottom:8px">The Pre-Solo Test of Air Regulations: 50 multiple-choice questions, and you need 90% (45/50) to pass. Practice until you're over 90% every time.</p>
-    <div class="stats"><span><b>${BANK.length}</b> questions</span><span><b>${topics.length}</b> sections</span>
+    <div class="eyebrow">${esc(T.eyebrow)}</div>
+    <h1 style="font-size:clamp(34px,5vw,48px)">${esc(T.title)}</h1>
+    <p class="lede" style="margin-bottom:8px">${esc(T.lede)}</p>
+    <div class="stats"><span><b>${T.bank.length}</b> questions</span><span><b>${topics.length}</b> sections</span>
       ${best!==null?`<span>Best mock <b>${best}%</b></span><span>Last <b>${last.pct}%</b></span><span>Attempts <b>${hist.length}</b></span>`:""}</div>
     <div class="modes">
       <div class="mode">
         <h3>Mock exam</h3>
-        <p>${mockN} questions drawn at random from the full study guide. You see your score at the end, against the 90% pass mark.</p>
+        <p>${mockN} questions drawn at random. You see your score at the end, against a ${T.pass}% pass mark.</p>
         <button class="btn" onclick="start('mock')">Start mock exam</button>
       </div>
       <div class="mode">
-        <h3>Practice by topic</h3>
-        <p>Work through the study guide by section. You see the correct answer after each question.</p>
-        <div class="topics">${topics.map(t=>`<button class="chip${chosenTopics.has(t)?" on":""}" onclick="toggleTopic(this,'${esc(t)}')">${esc(t)}</button>`).join("")}</div>
+        <h3>Practice by section</h3>
+        <p>Pick sections (or none for all). You see the correct answer after each question.</p>
+        <div class="topics">${topics.map(t=>`<button class="chip${chosenTopics.has(t)?" on":""}" data-t="${esc(t)}" onclick="toggleTopic(this)">${esc(t)}</button>`).join("")}</div>
         <button class="btn ghost" onclick="start('practice')">Start practice</button>
       </div>
     </div>`;
 }
-function toggleTopic(el,t){ chosenTopics.has(t)?chosenTopics.delete(t):chosenTopics.add(t); el.classList.toggle("on"); }
+function toggleTopic(el){ const t = el.dataset.t; chosenTopics.has(t)?chosenTopics.delete(t):chosenTopics.add(t); el.classList.toggle("on"); }
 
 function start(mode){
-  let pool = BANK;
-  if (mode==="practice" && chosenTopics.size) pool = BANK.filter(q=>chosenTopics.has(q.t));
-  const qs = shuffle(pool).slice(0, mode==="mock" ? 50 : pool.length).map(prep);
+  let pool = T.bank;
+  if (mode==="practice" && chosenTopics.size) pool = T.bank.filter(q=>chosenTopics.has(q.t));
+  const qs = shuffle(pool).slice(0, mode==="mock" ? T.mockN : pool.length).map(prep);
   S = {mode, qs, i:0, ans:Array(qs.length).fill(null), locked:Array(qs.length).fill(false)};
   renderQ();
 }
@@ -387,16 +521,16 @@ function renderQ(){
     let cls = "opt";
     if (practice && locked){ if (k===q.a) cls+=" right"; else if (k===sel) cls+=" wrong"; }
     else if (k===sel) cls+=" sel";
-    return `<button class="${cls}" ${practice&&locked?"disabled":""} onclick="pick(${k})"><b>${LETTERS[k]}</b><span>${esc(o)}</span></button>`;
+    return `<button class="${cls}" ${practice&&locked?"disabled":""} onclick="pick(${k})"><b>${label(k)}</b><span>${esc(o)}</span></button>`;
   }).join("");
   const answered = S.ans.filter(a=>a!==null).length;
   $("#quizBody").innerHTML = `
     <div class="panel">
-      <div class="qhead"><span>${practice?"Practice":"Mock exam"} · Question ${S.i+1} of ${n}</span><span>${esc(q.t)} · Q ${q.id}</span></div>
+      <div class="qhead"><span>${practice?"Practice":"Mock exam"} · Question ${S.i+1} of ${n}</span><span>${esc(q.t)}${T.numbered?" · Q "+q.id:""}</span></div>
       <div class="bar"><i style="width:${(answered/n)*100}%"></i></div>
       <p class="qtext">${esc(q.q)}</p>${q.pre?`<ul class="pre">${q.pre.map(x=>`<li>${esc(x)}</li>`).join("")}</ul>`:""}
       <div class="opts">${opts}</div>
-      <div class="explain" id="exp" style="display:${practice&&locked?"block":"none"}">${sel===q.a?"<b style='color:var(--ac2)'>Correct.</b> ":"<b style='color:var(--er)'>Not quite.</b> The answer is "+LETTERS[q.a]+". "}${q.e?esc(q.e):""}<span class="ref">TP 11919 · Question ${q.id}</span></div>
+      <div class="explain" style="display:${practice&&locked?"block":"none"}">${sel===q.a?"<b style='color:var(--ac2)'>Correct.</b> ":"<b style='color:var(--er)'>Not quite.</b> The answer is "+label(q.a)+". "}${q.e?esc(q.e):""}<span class="ref">${esc(T.ref(q))}</span></div>
       <div class="qnav">
         <button class="btn ghost" ${S.i===0?"disabled":""} onclick="go(-1)">← Back</button>
         ${S.i<n-1
@@ -415,8 +549,8 @@ function go(d){ S.i=Math.max(0,Math.min(S.qs.length-1,S.i+d)); renderQ(); scroll
 
 function finish(){
   const n = S.qs.length, right = S.qs.filter((q,i)=>S.ans[i]===q.a).length, pct = Math.round(right/n*100);
-  const passed = pct>=90;
-  if (S.mode==="mock"){ const h = store.get("urbris_pstar_history", []); h.push({pct, right, n, at:new Date().toISOString()}); store.set("urbris_pstar_history", h.slice(-50)); }
+  const passed = pct>=T.pass, need = Math.ceil(n*T.pass/100);
+  if (S.mode==="mock"){ const h = store.get(histKey(), []); h.push({pct, right, n, at:new Date().toISOString()}); store.set(histKey(), h.slice(-50)); }
   const missed = S.qs.map((q,i)=>({q, a:S.ans[i]})).filter(x=>x.a!==x.q.a);
   const byTopic = {};
   S.qs.forEach((q,i)=>{ byTopic[q.t]=byTopic[q.t]||[0,0]; byTopic[q.t][1]++; if (S.ans[i]===q.a) byTopic[q.t][0]++; });
@@ -425,28 +559,29 @@ function finish(){
     <div class="panel">
       <div class="eyebrow">${S.mode==="mock"?"Mock exam result":"Practice result"}</div>
       <div class="score ${passed?"pass":"fail"}">${pct}%</div>
-      <p style="margin:0 0 6px;font-size:16px">${right} of ${n} correct · ${passed?"<span class='pass'>Pass</span> — at or above the 90% mark.":"<span class='fail'>Below 90%</span> — you need "+Math.ceil(n*0.9)+" of "+n+"."}</p>
-      ${weak.length?`<p style="color:var(--mu);font-size:14px;margin:0">Weakest topics: ${weak.slice(0,3).map(([t,v])=>`${esc(t)} (${v[0]}/${v[1]})`).join(", ")}</p>`:""}
+      <p style="margin:0 0 6px;font-size:16px">${right} of ${n} correct · ${passed?`<span class='pass'>Pass</span> — at or above the ${T.pass}% mark.`:`<span class='fail'>Below ${T.pass}%</span> — you need ${need} of ${n}.`}</p>
+      ${weak.length?`<p style="color:var(--mu);font-size:14px;margin:0">Weakest sections: ${weak.slice(0,3).map(([t,v])=>`${esc(t)} (${v[0]}/${v[1]})`).join(", ")}</p>`:""}
       <div class="qnav" style="justify-content:flex-start">
         <button class="btn" onclick="start('${S.mode}')">Try again</button>
         ${missed.length?`<button class="btn ghost" onclick="retryMissed()">Retry the ${missed.length} I missed</button>`:""}
         <button class="btn ghost" onclick="renderMenu()">Menu</button>
       </div>
       ${missed.length?`<div class="review"><div class="eyebrow" style="margin-top:8px">Review</div>${missed.map(({q,a})=>`
-        <div class="rv"><div class="q">${q.id} · ${esc(q.q)}${q.pre?" — "+q.pre.map(esc).join("; "):""}</div>
+        <div class="rv"><div class="q">${T.numbered?q.id+" · ":""}${esc(q.q)}${q.pre?" — "+q.pre.map(esc).join("; "):""}</div>
           <div class="a">${a!==null?`Your answer: <s>${esc(q.o[a])}</s><br>`:""}Correct: <span>${esc(q.o[q.a])}</span></div>
-          <div style="margin-top:8px;color:#cfd6d0">${q.e?esc(q.e)+" ":""}<span style="color:var(--mu);font-size:12px">(TP 11919 · Q ${q.id})</span></div></div>`).join("")}</div>`:""}
+          <div style="margin-top:8px;color:#cfd6d0">${q.e?esc(q.e)+" ":""}<span style="color:var(--mu);font-size:12px">(${esc(T.ref(q))})</span></div></div>`).join("")}</div>`:""}
     </div>`;
-  S.missed = missed.map(x=>x.q);
+  S.missed = missed.map(x=>x.q.id);
   scrollTo(0,0);
 }
 function retryMissed(){
-  const qs = shuffle(S.missed).map(q=>{ const orig = BANK.find(b=>b.id===q.id); return prep(orig); });
+  const qs = shuffle(S.missed).map(id=>prep(T.bank.find(b=>b.id===id)));
   S = {mode:"practice", qs, i:0, ans:Array(qs.length).fill(null), locked:Array(qs.length).fill(false)};
   renderQ();
 }
 
-if (location.hash==="#pstar") showQuiz();
+if (TESTS[location.hash.slice(1)]) showQuiz(location.hash.slice(1));
+
 </script>
 </body>
 </html>
