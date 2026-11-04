@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Join UrbRis — Riders, drivers and pilots</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0b0e0d;--sf:#121815;--sf2:#18201c;--b:rgba(255,255,255,.08);--b2:rgba(255,255,255,.14);--tx:#f0f2ec;--mu:#8d9890;--ac:#22b866;--ac2:#3fd884;--ac-soft:rgba(34,184,102,.12);--er:#f09595}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--tx);font-family:'Inter',system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+body{background:radial-gradient(circle at 70% 0%,rgba(34,184,102,.07),transparent 45%),var(--bg);min-height:100vh}
+a{color:var(--ac2);text-decoration:none}
+.wrap{max-width:1080px;margin:0 auto;padding:28px 24px 80px}
+header{display:flex;justify-content:space-between;align-items:center;margin-bottom:48px}
+.logo{font-weight:800;font-size:22px;letter-spacing:-.02em;color:var(--tx)}.logo span{color:var(--ac2)}
+.logo small{display:block;font-size:9px;letter-spacing:.2em;color:var(--mu);font-weight:600;margin-top:2px}
+nav a{color:var(--mu);font-size:13px;margin-left:20px}nav a:hover{color:var(--tx)}
+.grid{display:grid;grid-template-columns:1.05fr 1fr;gap:40px;align-items:start}
+@media(max-width:860px){.grid{grid-template-columns:1fr}}
+.eyebrow{font-size:11px;letter-spacing:.16em;font-weight:700;color:var(--ac2);text-transform:uppercase}
+h1{font-size:clamp(40px,6vw,60px);line-height:1;letter-spacing:-.04em;margin:14px 0 18px;font-weight:800}
+h1 em{font-style:normal;color:var(--mu)}
+.lede{font-size:17px;line-height:1.6;color:var(--mu);margin:0 0 28px}
+.goal{background:linear-gradient(160deg,var(--sf2),var(--sf));border:1px solid var(--b);border-radius:16px;padding:22px;margin-bottom:24px}
+.goal .n{font-size:44px;font-weight:800;letter-spacing:-.03em}.goal .n span{color:var(--mu);font-size:20px;font-weight:600}
+.track{height:10px;background:rgba(255,255,255,.06);border-radius:10px;overflow:hidden;margin:14px 0 10px}
+.track i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--ac),var(--ac2));border-radius:10px;transition:width .8s ease}
+.goal p{margin:0;color:var(--mu);font-size:13px;line-height:1.5}
+.perks{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:12px}
+.perks li{display:flex;gap:12px;font-size:15px;line-height:1.5}
+.perks b{display:block}.perks span{color:var(--mu);font-size:14px}
+.perks .dot{flex:none;width:8px;height:8px;border-radius:50%;background:var(--ac);margin-top:8px}
+form{background:var(--sf);border:1px solid var(--b);border-radius:16px;padding:26px}
+form h2{margin:0 0 4px;font-size:22px;letter-spacing:-.02em}
+form .sub{color:var(--mu);font-size:14px;margin:0 0 20px}
+label.f{display:block;font-size:13px;font-weight:600;margin:16px 0 6px}
+input[type=text],input[type=email]{width:100%;background:rgba(255,255,255,.03);border:1px solid var(--b2);border-radius:10px;color:var(--tx);font:500 15px 'Inter',sans-serif;padding:12px 14px;outline:none}
+input:focus{border-color:rgba(34,184,102,.7);box-shadow:0 0 0 3px rgba(34,184,102,.15)}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}@media(max-width:520px){.row{grid-template-columns:1fr}}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{border:1px solid var(--b2);background:transparent;color:var(--tx);border-radius:999px;padding:7px 12px;font:500 13px 'Inter',sans-serif;cursor:pointer}
+.chip.on{background:var(--ac-soft);border-color:rgba(34,184,102,.5);color:var(--ac2)}
+.consent{display:flex;gap:10px;align-items:flex-start;margin:20px 0 0;font-size:13px;line-height:1.55;color:#cfd6d0}
+.consent input{margin-top:3px;accent-color:var(--ac);width:16px;height:16px;flex:none}
+.hp{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden}
+.btn{display:flex;width:100%;align-items:center;justify-content:center;border:none;border-radius:10px;padding:14px 18px;font:700 15px 'Inter',sans-serif;cursor:pointer;background:var(--ac);color:#04120a;margin-top:20px}
+.btn:hover{background:var(--ac2)}.btn[disabled]{opacity:.5;cursor:default}
+.msg{margin-top:14px;font-size:14px;min-height:20px}.msg.err{color:var(--er)}
+.done{text-align:center;padding:20px 0}.done h2{font-size:28px;margin:8px 0}.done p{color:var(--mu);line-height:1.6}
+.fine{margin-top:40px;font-size:12px;line-height:1.6;color:var(--mu);max-width:760px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <a class="logo" href="/">Urb<span>Ris</span><small>MEMBERS</small></a>
+  <nav><a href="/learn">Learn</a><a href="/">Route tools</a></nav>
+</header>
+
+<div class="grid">
+  <section>
+    <div class="eyebrow">Riders · Drivers · Pilots</div>
+    <h1>Join the group.<br><em>Free, and it counts.</em></h1>
+    <p class="lede">UrbRis is a safety and training community for people who ride motorcycles, drive manual and fly. Membership is free. Once we reach 5,000 members, we can negotiate a group insurance discount for everyone.</p>
+
+    <div class="goal">
+      <div class="n" id="count">—<span> / 5,000 members</span></div>
+      <div class="track"><i id="bar"></i></div>
+      <p id="goalText">Every verified member moves us closer to the group rate.</p>
+    </div>
+
+    <ul class="perks">
+      <li><i class="dot"></i><div><b>Training tools</b><span>PSTAR, M1 and G1 practice exams, with more licences coming.</span></div></li>
+      <li><i class="dot"></i><div><b>Verified routes</b><span>Rural roads that have been ridden and assessed for risk, with a new verified road delivered every week.</span></div></li>
+      <li><i class="dot"></i><div><b>Meetups</b><span>Coffee and BBQ meetups for people who ride, drive stick and fly.</span></div></li>
+      <li><i class="dot"></i><div><b>A group insurance rate</b><span>The goal at 5,000 members. A discount depends on an insurer agreeing to offer it, so it isn't guaranteed.</span></div></li>
+    </ul>
+  </section>
+
+  <section>
+    <form id="joinForm" novalidate>
+      <div id="formBody">
+        <h2>Become a member</h2>
+        <p class="sub">Takes 30 seconds. One membership per person.</p>
+
+        <label class="f" for="name">Full name</label>
+        <input type="text" id="name" autocomplete="name" required>
+
+        <div class="row">
+          <div><label class="f" for="email">Email</label><input type="email" id="email" autocomplete="email" required></div>
+          <div><label class="f" for="postal">Postal code</label><input type="text" id="postal" autocomplete="postal-code" placeholder="L8P 4R5" maxlength="7" required></div>
+        </div>
+
+        <label class="f">Licences you hold <span style="color:var(--mu);font-weight:500">(optional)</span></label>
+        <div class="chips" data-group="licences">
+          <button type="button" class="chip">M1</button><button type="button" class="chip">M2</button><button type="button" class="chip">M</button>
+          <button type="button" class="chip">G1</button><button type="button" class="chip">G2</button><button type="button" class="chip">G</button>
+          <button type="button" class="chip">Student pilot</button><button type="button" class="chip">PPL</button><button type="button" class="chip">None yet</button>
+        </div>
+
+        <label class="f">What are you into?</label>
+        <div class="chips" data-group="interests">
+          <button type="button" class="chip">Riding</button><button type="button" class="chip">Manual driving</button><button type="button" class="chip">Flying</button>
+        </div>
+
+        <div class="hp" aria-hidden="true"><label>Website<input type="text" id="website" tabindex="-1" autocomplete="off"></label></div>
+
+        <label class="consent"><input type="checkbox" id="consent">
+          <span>I'm joining UrbRis as a member. UrbRis may store my name, email, postal code and the details above to manage my membership. If I ask for the group insurance rate, UrbRis may confirm my membership to the participating insurer. My information won't be sold. I can leave and have my details deleted at any time by emailing <a href="mailto:members@urbris.com">members@urbris.com</a>.</span></label>
+
+        <button class="btn" type="submit" id="submit">Join free</button>
+        <div class="msg" id="msg"></div>
+      </div>
+    </form>
+  </section>
+</div>
+
+<p class="fine">UrbRis is a free, donation-supported community. Membership doesn't sign you up for insurance or share your details with any insurer unless you ask for the group rate. Any future group discount would be offered and underwritten by a licensed insurer under its own eligibility rules.</p>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const fmt = n => n.toLocaleString("en-CA");
+let GOAL = 5000;
+
+function showCount(n, goal){
+  if (goal) GOAL = goal;
+  if (n === null || n === undefined) return;
+  $("#count").innerHTML = fmt(n) + '<span> / ' + fmt(GOAL) + ' members</span>';
+  $("#bar").style.width = Math.min(100, n / GOAL * 100).toFixed(1) + "%";
+  const left = Math.max(0, GOAL - n);
+  $("#goalText").textContent = left ? fmt(left) + " to go until we can negotiate the group rate." : "Goal reached. We're working on the group rate.";
+}
+fetch("/members/count").then(r => r.json()).then(d => showCount(d.count, d.goal)).catch(() => {});
+
+document.querySelectorAll(".chip").forEach(c => c.addEventListener("click", () => c.classList.toggle("on")));
+const picked = g => [...document.querySelectorAll(`[data-group="${g}"] .chip.on`)].map(c => c.textContent);
+
+$("#joinForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  const msg = $("#msg"); msg.className = "msg"; msg.textContent = "";
+  const body = {
+    name: $("#name").value, email: $("#email").value, postal_code: $("#postal").value,
+    licences: picked("licences"), interests: picked("interests"),
+    consent: $("#consent").checked, website: $("#website").value,
+    source: new URLSearchParams(location.search).get("src") || ""
+  };
+  if (!body.consent){ msg.className = "msg err"; msg.textContent = "Please agree to the membership terms to join."; return; }
+  $("#submit").disabled = true; $("#submit").textContent = "Joining…";
+  try {
+    const r = await fetch("/join", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
+    const d = await r.json();
+    if (!r.ok || d.error) throw new Error(d.error || "Something went wrong.");
+    showCount(d.count, d.goal);
+    $("#formBody").innerHTML = `<div class="done"><div class="eyebrow">You're in</div><h2>Welcome to UrbRis.</h2>
+      <p>You're one of the members counting toward the group rate. The fastest way to get there is to share this page with people who ride, drive stick or fly.</p>
+      <button class="btn" type="button" onclick="share()">Share the join link</button><div class="msg" id="msg"></div></div>`;
+  } catch (err) {
+    msg.className = "msg err"; msg.textContent = err.message;
+    $("#submit").disabled = false; $("#submit").textContent = "Join free";
+  }
+});
+
+function share(){
+  const url = location.origin + "/join?src=share";
+  if (navigator.share) navigator.share({title: "Join UrbRis", text: "Free membership for riders, manual drivers and pilots. Help us reach 5,000 for a group insurance rate.", url}).catch(() => {});
+  else navigator.clipboard.writeText(url).then(() => { $("#msg").textContent = "Link copied."; }).catch(() => { $("#msg").textContent = url; });
+}
+</script>
+</body>
+</html>

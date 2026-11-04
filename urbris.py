@@ -1750,6 +1750,80 @@ def fetch_overpass(query):
             print(f"  {last_err} - trying next mirror")
     return None, last_err
 
+# ---- Membership (insurance group) --------------------------------------------
+# Members are stored in Supabase so the roll survives redeploys and can be exported
+# for an insurer's eligibility audit. Create the table once in the Supabase SQL editor
+# (see MEMBERS.md). Export: GET /members/export.csv?key=<MEMBERS_ADMIN_KEY>.
+MEMBER_GOAL = int(os.environ.get("MEMBER_GOAL", "5000"))
+_member_count_cache = {"n": None, "at": 0.0}
+_join_hits = {}  # ip -> [timestamps], simple in-memory rate limit
+
+EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+POSTAL_RE = re.compile(r"^[A-Za-z]\d[A-Za-z][ -]?\d[A-Za-z]\d$")
+MEMBER_LICENCES = {"M1", "M2", "M", "G1", "G2", "G", "Student pilot", "PPL", "None yet"}
+MEMBER_INTERESTS = {"Riding", "Manual driving", "Flying"}
+
+def member_count(force=False):
+    """Exact member count from Supabase, cached for 60 s."""
+    if not supabase_configured():
+        return None
+    if not force and _member_count_cache["n"] is not None and time.time() - _member_count_cache["at"] < 60:
+        return _member_count_cache["n"]
+    req = urllib.request.Request(SUPABASE_URL + "/rest/v1/members?select=id", method="GET", headers={
+        "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY,
+        "Prefer": "count=exact", "Range": "0-0"})
+    with urllib.request.urlopen(req) as r:
+        cr = r.headers.get("Content-Range", "*/0")
+    n = int(cr.split("/")[-1]) if cr.split("/")[-1].isdigit() else 0
+    _member_count_cache.update(n=n, at=time.time())
+    return n
+
+def join_rate_limited(ip):
+    now = time.time()
+    hits = [t for t in _join_hits.get(ip, []) if now - t < 3600]
+    hits.append(now)
+    _join_hits[ip] = hits
+    return len(hits) > 10
+
+def validate_member(data):
+    """Returns (row, error). Only stores what an insurer needs to verify membership."""
+    if data.get("website"):  # honeypot field, hidden from people
+        return None, "spam"
+    name = str(data.get("name", "")).strip()[:120]
+    email = str(data.get("email", "")).strip().lower()[:200]
+    postal = str(data.get("postal_code", "")).strip().upper().replace("-", " ")[:7]
+    if len(name) < 2:
+        return None, "Please enter your full name."
+    if not EMAIL_RE.match(email):
+        return None, "Please enter a valid email address."
+    if not POSTAL_RE.match(postal):
+        return None, "Please enter a valid Canadian postal code (e.g. L8P 4R5)."
+    if len(postal) == 6:
+        postal = postal[:3] + " " + postal[3:]
+    if data.get("consent") is not True:
+        return None, "Please agree to the membership terms to join."
+    licences = [l for l in data.get("licences", []) if l in MEMBER_LICENCES][:9]
+    interests = [i for i in data.get("interests", []) if i in MEMBER_INTERESTS]
+    return {
+        "name": name, "email": email, "postal_code": postal,
+        "licences": licences, "interests": interests,
+        "source": str(data.get("source", ""))[:60],
+        "consent_text_version": "2026-11-04",
+        "consented_at": now_iso(),
+    }, None
+
+def members_csv():
+    rows = supabase_request("GET", "members?select=joined_at,name,email,postal_code,licences,interests,source,consented_at&order=joined_at.asc") or []
+    import io
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(["joined_at", "name", "email", "postal_code", "licences", "interests", "source", "consented_at"])
+    for r in rows:
+        w.writerow([r.get("joined_at"), r.get("name"), r.get("email"), r.get("postal_code"),
+                    "; ".join(r.get("licences") or []), "; ".join(r.get("interests") or []), r.get("source"), r.get("consented_at")])
+    return buf.getvalue()
+
+
 class H(BaseHTTPRequestHandler):
     def _parse_multipart(self, body_bytes, content_type):
         # Direct byte-boundary splitting instead of the email module. The email
@@ -1932,6 +2006,37 @@ class H(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(json.dumps(obj).encode())
     def do_GET(self):
+        if self.path in ("/join", "/join/") or self.path.startswith("/join?"):
+            with open(os.path.join(BASE, "join.html"), "rb") as f:
+                body = f.read()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        if self.path == "/members/count":
+            try:
+                n = member_count()
+            except Exception as e:
+                print("  [members] count failed:", e)
+                n = None
+            self._json({"count": n, "goal": MEMBER_GOAL})
+            return
+        if self.path.startswith("/members/export.csv"):
+            q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            admin = os.environ.get("MEMBERS_ADMIN_KEY", "")
+            if not admin or q.get("key", [""])[0] != admin:
+                self._json({"error": "not authorized"}, code=403)
+                return
+            body = members_csv().encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/csv; charset=utf-8")
+            self.send_header("Content-Disposition", "attachment; filename=urbris-members.csv")
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(body)
+            return
         if self.path in ("/learn", "/learn/") or self.path.startswith("/learn?"):
             learn_path = os.path.join(BASE, "learn.html")
             with open(learn_path, "rb") as f:
@@ -2136,6 +2241,34 @@ class H(BaseHTTPRequestHandler):
             except json.JSONDecodeError as e:
                 self._json({"error": "Request body was not valid JSON: " + str(e)}, code=400)
                 return
+        if self.path == "/join":
+            ip = (self.headers.get("X-Forwarded-For") or self.client_address[0]).split(",")[0].strip()
+            if join_rate_limited(ip):
+                self._json({"error": "Too many attempts. Please try again later."}, code=429)
+                return
+            row, err = validate_member(data)
+            if err == "spam":
+                self._json({"ok": True})
+                return
+            if err:
+                self._json({"error": err}, code=400)
+                return
+            if not supabase_configured():
+                self._json({"error": "Membership isn't set up on the server yet."}, code=503)
+                return
+            try:
+                supabase_request("POST", "members?on_conflict=email", body=row,
+                                 extra_headers={"Prefer": "resolution=ignore-duplicates,return=minimal"})
+            except urllib.error.HTTPError as e:
+                print("  [members] insert failed:", e.code, e.read().decode("utf-8", "ignore")[:300])
+                self._json({"error": "Couldn't save your membership. Please try again."}, code=502)
+                return
+            try:
+                n = member_count(force=True)
+            except Exception:
+                n = None
+            self._json({"ok": True, "count": n, "goal": MEMBER_GOAL})
+            return
         if self.path == "/cellcoverage":
             points = data.get("points", [])
             distances = [nearest_tower_km(p.get("lat"), p.get("lon")) for p in points]
