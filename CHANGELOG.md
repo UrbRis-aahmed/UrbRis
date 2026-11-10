@@ -2,6 +2,9 @@
 
 Newest first. One entry per change set to the site or server.
 
+## 2026-11-10
+- PSTAR daily goal: 20 correct answers a day. Progress card with bar and day streak on the PSTAR menu, a "Today x/20" counter on every question, a toast when the goal is hit, and today's total on the results screen. Practice answers count as you answer; mock answers count when you submit. Stored in the browser.
+
 ## 2026-11-04
 - New /join membership page for the insurance group: free sign-up (name, email, postal code, optional licences and interests, explicit consent), live X / 5,000 counter, share link, ?src= tracking. Members stored in a Supabase `members` table (one per email); admin CSV export at /members/export.csv for insurer verification. Join links added to the homepage and /learn. Setup steps in MEMBERS.md.
 

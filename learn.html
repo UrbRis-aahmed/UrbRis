@@ -58,6 +58,14 @@ h1 em{font-style:normal;color:var(--mu)}
 .opt.right{border-color:var(--ac);background:var(--ac-soft)}.opt.right b{color:var(--ac2)}
 .opt.wrong{border-color:var(--er);background:var(--er-soft)}.opt.wrong b{color:var(--er)}
 .pre{margin:-8px 0 20px;padding-left:20px;color:#cfd6d0;font-size:15px;line-height:1.7}
+.daily{display:grid;grid-template-columns:1fr auto;gap:6px 20px;align-items:center;background:linear-gradient(160deg,var(--sf2),var(--sf));border:1px solid var(--b);border-radius:14px;padding:18px 20px;margin:24px 0 0}
+.daily.done{border-color:rgba(34,184,102,.45)}
+.daily .dn{font-size:34px;font-weight:800;letter-spacing:-.03em;margin:4px 0}.daily .dn span{font-size:16px;color:var(--mu);font-weight:600}
+.daily p{margin:0;color:var(--mu);font-size:13px;line-height:1.5}
+.daily .streak{text-align:center;border-left:1px solid var(--b);padding-left:20px}.daily .streak b{display:block;font-size:30px;font-weight:800;color:var(--ac2)}.daily .streak span{font-size:11px;color:var(--mu);text-transform:uppercase;letter-spacing:.1em}
+.daily .dtrack{grid-column:1/-1;height:6px;background:rgba(255,255,255,.06);border-radius:6px;overflow:hidden;margin-top:6px}.daily .dtrack i{display:block;height:100%;background:var(--ac);border-radius:6px}
+#toast{position:fixed;left:50%;bottom:28px;transform:translate(-50%,20px);background:var(--ac);color:#04120a;font-weight:700;font-size:14px;padding:12px 18px;border-radius:10px;opacity:0;transition:all .25s;pointer-events:none;z-index:50}
+#toast.on{opacity:1;transform:translate(-50%,0)}
 .explain{margin-top:16px;padding:14px 16px;border-left:3px solid var(--ac);background:rgba(255,255,255,.025);border-radius:0 10px 10px 0;font-size:14px;line-height:1.55;color:#cfd6d0;display:none}
 .explain .ref{display:block;margin-top:6px;font-size:12px;color:var(--mu)}
 .qnav{display:flex;justify-content:space-between;gap:10px;margin-top:24px}
@@ -568,7 +576,7 @@ const M1_ONLY = [
 // Test definitions. Each test has its own bank, pass mark, mock length and source note.
 const TESTS = {
   pstar: {
-    bank: BANK, eyebrow: "Fly · Student pilot", title: "PSTAR practice", mockN: 50, pass: 90, shuffle: false, numbered: true,
+    bank: BANK, eyebrow: "Fly · Student pilot", title: "PSTAR practice", mockN: 50, pass: 90, shuffle: false, numbered: true, dailyGoal: 20,
     lede: "The Pre-Solo Test of Air Regulations: 50 multiple-choice questions, and you need 90% (45/50) to pass. Practice until you're over 90% every time.",
     ref: q => "TP 11919 · Question " + q.id,
     disclaimer: `Questions are from Transport Canada's PSTAR study and reference guide, <a href="https://tc.canada.ca/en/aviation/publications/student-pilot-permit-private-pilot-licence-foreign-military-applicants-aviation-regulations-tp-11919" target="_blank" rel="noopener">TP 11919</a> (© His Majesty the King in Right of Canada, Transport Canada), reproduced for non-commercial study. UrbRis is not affiliated with Transport Canada. Your PSTAR is 50 questions drawn from this guide. Transport Canada asks applicants to research each answer in the references, not just memorize them, so check the <a href="https://laws-lois.justice.gc.ca/eng/regulations/SOR-96-433/" target="_blank" rel="noopener">CARs</a> and TC AIM and confirm with your flight instructor.`
@@ -607,6 +615,45 @@ function label(k){ return T.numbered ? "("+(k+1)+")" : "ABCD"[k]; }
 function esc(s){ return String(s).replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
 function histKey(){ return "urbris_"+TK+"_history"; }
 
+// ---- Daily goal: N correct answers per local calendar day (PSTAR: 20) ----
+function dayStr(d){ return (d||new Date()).toLocaleDateString("en-CA"); } // YYYY-MM-DD, local time
+function dailyKey(){ return "urbris_"+TK+"_daily"; }
+function todayCorrect(){ return (store.get(dailyKey(), {})[dayStr()]) || 0; }
+function addCorrect(n){
+  if (!T.dailyGoal || n<=0) return;
+  const days = store.get(dailyKey(), {}), k = dayStr(), before = days[k] || 0;
+  days[k] = before + n;
+  // keep ~a year of history
+  const keys = Object.keys(days).sort(); while (keys.length > 400) delete days[keys.shift()];
+  store.set(dailyKey(), days);
+  if (before < T.dailyGoal && days[k] >= T.dailyGoal) toast("Daily goal done: " + T.dailyGoal + " correct today.");
+}
+function streak(){
+  const days = store.get(dailyKey(), {}), d = new Date();
+  if ((days[dayStr(d)]||0) < T.dailyGoal) d.setDate(d.getDate()-1); // today still in progress
+  let n = 0;
+  while ((days[dayStr(d)]||0) >= T.dailyGoal){ n++; d.setDate(d.getDate()-1); }
+  return n;
+}
+function dailyCard(){
+  if (!T.dailyGoal) return "";
+  const c = todayCorrect(), g = T.dailyGoal, done = c >= g, st = streak();
+  return `<div class="daily${done?" done":""}">
+    <div><div class="eyebrow">Today's goal</div>
+      <div class="dn">${Math.min(c,g)} <span>/ ${g} correct</span></div>
+      <p>${done ? (c>g ? `Done, with ${c-g} extra. ` : "Done for today. ") + "Come back tomorrow to keep your streak." : `${g-c} more correct answer${g-c===1?"":"s"} to hit today's goal. Practice or mock answers both count.`}</p></div>
+    <div class="streak"><b>${st}</b><span>day streak</span></div>
+    <div class="dtrack"><i style="width:${Math.min(100,c/g*100)}%"></i></div>
+  </div>`;
+}
+function dailyChip(){ return T.dailyGoal ? ` · Today ${Math.min(todayCorrect(),T.dailyGoal)}/${T.dailyGoal}${todayCorrect()>=T.dailyGoal?" ✓":""}` : ""; }
+function toast(msg){
+  let el = document.getElementById("toast");
+  if (!el){ el = document.createElement("div"); el.id = "toast"; document.body.appendChild(el); }
+  el.textContent = msg; el.classList.add("on");
+  clearTimeout(el._t); el._t = setTimeout(()=>el.classList.remove("on"), 3500);
+}
+
 function showHome(){ $("#quiz").style.display="none"; $("#calc").style.display="none"; $("#home").style.display="block"; history.replaceState(null,"","/learn"); scrollTo(0,0); }
 function showCalc(){ $("#quiz").style.display="none"; $("#home").style.display="none"; $("#calc").style.display="block"; history.replaceState(null,"","/learn#calc"); calcAll(); scrollTo(0,0); }
 function showQuiz(key){
@@ -630,6 +677,7 @@ function renderMenu(){
     <p class="lede" style="margin-bottom:8px">${esc(T.lede)}</p>
     <div class="stats"><span><b>${T.bank.length}</b> questions</span><span><b>${topics.length}</b> sections</span>
       ${best!==null?`<span>Best mock <b>${best}%</b></span><span>Last <b>${last.pct}%</b></span><span>Attempts <b>${hist.length}</b></span>`:""}</div>
+    ${dailyCard()}
     <div class="modes">
       <div class="mode">
         <h3>Mock exam</h3>
@@ -666,7 +714,7 @@ function renderQ(){
   const answered = S.ans.filter(a=>a!==null).length;
   $("#quizBody").innerHTML = `
     <div class="panel">
-      <div class="qhead"><span>${practice?"Practice":"Mock exam"} · Question ${S.i+1} of ${n}</span><span>${esc(q.t)}${T.numbered?" · Q "+q.id:""}</span></div>
+      <div class="qhead"><span>${practice?"Practice":"Mock exam"} · Question ${S.i+1} of ${n}${dailyChip()}</span><span>${esc(q.t)}${T.numbered?" · Q "+q.id:""}</span></div>
       <div class="bar"><i style="width:${(answered/n)*100}%"></i></div>
       <p class="qtext">${esc(q.q)}</p>${q.pre?`<ul class="pre">${q.pre.map(x=>`<li>${esc(x)}</li>`).join("")}</ul>`:""}
       <div class="opts">${opts}</div>
@@ -681,7 +729,7 @@ function renderQ(){
     </div>`;
 }
 function pick(k){
-  if (S.mode==="practice"){ if (S.locked[S.i]) return; S.ans[S.i]=k; S.locked[S.i]=true; }
+  if (S.mode==="practice"){ if (S.locked[S.i]) return; S.ans[S.i]=k; S.locked[S.i]=true; if (k===S.qs[S.i].a) addCorrect(1); }
   else S.ans[S.i]=k;
   renderQ();
 }
@@ -690,6 +738,7 @@ function go(d){ S.i=Math.max(0,Math.min(S.qs.length-1,S.i+d)); renderQ(); scroll
 function finish(){
   const n = S.qs.length, right = S.qs.filter((q,i)=>S.ans[i]===q.a).length, pct = Math.round(right/n*100);
   const passed = pct>=T.pass, need = Math.ceil(n*T.pass/100);
+  if (S.mode==="mock") addCorrect(right);
   if (S.mode==="mock"){ const h = store.get(histKey(), []); h.push({pct, right, n, at:new Date().toISOString()}); store.set(histKey(), h.slice(-50)); }
   const missed = S.qs.map((q,i)=>({q, a:S.ans[i]})).filter(x=>x.a!==x.q.a);
   const byTopic = {};
@@ -700,6 +749,7 @@ function finish(){
       <div class="eyebrow">${S.mode==="mock"?"Mock exam result":"Practice result"}</div>
       <div class="score ${passed?"pass":"fail"}">${pct}%</div>
       <p style="margin:0 0 6px;font-size:16px">${right} of ${n} correct · ${passed?`<span class='pass'>Pass</span> — at or above the ${T.pass}% mark.`:`<span class='fail'>Below ${T.pass}%</span> — you need ${need} of ${n}.`}</p>
+      ${T.dailyGoal?`<p style="color:var(--mu);font-size:14px;margin:0 0 4px">Today: <b style="color:var(--tx)">${todayCorrect()}</b> correct of your ${T.dailyGoal}-a-day goal${todayCorrect()>=T.dailyGoal?" ✓":""}.</p>`:""}
       ${weak.length?`<p style="color:var(--mu);font-size:14px;margin:0">Weakest sections: ${weak.slice(0,3).map(([t,v])=>`${esc(t)} (${v[0]}/${v[1]})`).join(", ")}</p>`:""}
       <div class="qnav" style="justify-content:flex-start">
         <button class="btn" onclick="start('${S.mode}')">Try again</button>
