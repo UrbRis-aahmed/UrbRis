@@ -2,6 +2,9 @@
 
 Newest first. One entry per change set to the site or server.
 
+## 2026-11-11
+- New Progress page at /learn#progress. Every answer is now logged by day, test and section (practice on answer, mock on submit). Consistency: day streak, longest streak, active days and PSTAR goal days in the last 30, a 12-month activity calendar, and correct/answered bars for the last 30 days with the 20/day goal line. Performance: accuracy, total answered, best mock, mock score trend per test against its pass mark, and accuracy by section (weakest first). Filter by All / PSTAR / M1 / G1. Hover tooltips on every mark. Earlier PSTAR daily counts carried over. Stored in the browser.
+
 ## 2026-11-10
 - PSTAR daily goal: 20 correct answers a day. Progress card with bar and day streak on the PSTAR menu, a "Today x/20" counter on every question, a toast when the goal is hit, and today's total on the results screen. Practice answers count as you answer; mock answers count when you submit. Stored in the browser.
 

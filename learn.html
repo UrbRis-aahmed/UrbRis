@@ -101,6 +101,35 @@ h1 em{font-style:normal;color:var(--mu)}
 .conv{list-style:none;margin:16px 0 0;padding:16px 0 0;border-top:1px solid var(--b);display:flex;flex-direction:column;gap:8px;font-size:15px}
 .conv li{display:flex;justify-content:space-between}.conv li span{color:var(--mu);font-size:13px}
 .track .acts{margin-top:auto;display:flex;gap:8px;flex-wrap:wrap}
+.ph{font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:var(--mu);margin:32px 0 12px;font-weight:700}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:14px}
+.tile{background:linear-gradient(160deg,var(--sf2),var(--sf));border:1px solid var(--b);border-radius:14px;padding:16px 18px}
+.tv{font-size:34px;font-weight:800;letter-spacing:-.03em}.tv span{font-size:16px;color:var(--mu);font-weight:600}
+.tl{font-size:13px;font-weight:600;margin-top:2px}.ts{font-size:12px;color:var(--mu);margin-top:4px;line-height:1.4}
+.pc{margin-bottom:14px}.pch{font-size:14px;font-weight:600;margin-bottom:12px}
+.mgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:14px}
+svg .ax,.ax{fill:var(--mu);color:var(--mu);font-size:11px}
+svg .lab{fill:var(--tx);font-size:12px;font-weight:700}
+svg .grid{stroke:rgba(255,255,255,.06);stroke-width:1}
+svg .goal{stroke:var(--ac2);stroke-width:1.5;stroke-dasharray:5 4;opacity:.8}
+svg .ba{fill:rgba(255,255,255,.12)}svg .bc{fill:var(--ac)}
+svg .ln{fill:none;stroke:var(--ac);stroke-width:2;stroke-linejoin:round}
+svg .dot{fill:var(--sf);stroke:var(--mu);stroke-width:2}svg .dot.ok{stroke:var(--ac2);fill:var(--ac2)}
+svg.fluid{width:100%;height:auto;display:block}
+.scrollx{overflow-x:auto}
+.hc.l0,.hlegend .l0{fill:rgba(255,255,255,.05);background:rgba(255,255,255,.05)}
+.hc.l1,.hlegend .l1{fill:#173d29;background:#173d29}.hc.l2,.hlegend .l2{fill:#1c6b40;background:#1c6b40}
+.hc.l3,.hlegend .l3{fill:#22b866;background:#22b866}.hc.l4,.hlegend .l4{fill:#7ff0b3;background:#7ff0b3}
+.hc{stroke:var(--sf);stroke-width:1}
+.hlegend{display:flex;align-items:center;gap:4px;font-size:11px;color:var(--mu);margin-top:10px;justify-content:flex-end}.hlegend i{width:12px;height:12px;border-radius:3px;display:inline-block}.hlegend span{margin:0 4px}
+.legend{display:flex;gap:16px;font-size:12px;color:var(--mu);margin:-4px 0 8px}.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}.legend i.dash{height:0;width:14px;border-top:2px dashed var(--ac2);border-radius:0}
+.sbars{display:flex;flex-direction:column;gap:8px}
+.sb{display:grid;grid-template-columns:minmax(120px,240px) 1fr 90px;gap:12px;align-items:center;font-size:13px;padding:2px 0}
+.sl{color:#cfd6d0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.st{height:10px;background:rgba(255,255,255,.06);border-radius:5px;overflow:hidden}.st i{display:block;height:100%;background:var(--ac);border-radius:5px}
+.sv{text-align:right;font-weight:700}.sv span{color:var(--mu);font-weight:500}
+#tip{position:fixed;display:none;pointer-events:none;background:#202a25;border:1px solid var(--b2);color:var(--tx);font-size:12px;line-height:1.5;padding:8px 10px;border-radius:8px;z-index:60;box-shadow:0 6px 20px rgba(0,0,0,.4)}
+@media(max-width:600px){.sb{grid-template-columns:110px 1fr 70px}}
 @media(max-width:600px){.qtext{font-size:17px}.panel{padding:18px}.wrap{padding:20px 16px 60px}}
 </style>
 </head>
@@ -108,7 +137,7 @@ h1 em{font-style:normal;color:var(--mu)}
 <div class="wrap">
 <header>
   <a class="logo" href="/">Urb<span>Ris</span><small>LEARN</small></a>
-  <nav><a href="#" onclick="showHome();return false">Tracks</a><a href="#calc" onclick="showCalc();return false">Flight calculator</a><a href="/">Route tools</a><a href="/join?src=learn" style="color:var(--ac2);font-weight:600">Join free</a></nav>
+  <nav><a href="#" onclick="showHome();return false">Tracks</a><a href="#progress" onclick="showProgress();return false">Progress</a><a href="#calc" onclick="showCalc();return false">Flight calculator</a><a href="/">Route tools</a><a href="/join?src=learn" style="color:var(--ac2);font-weight:600">Join free</a></nav>
 </header>
 
 <!-- ============ HOME ============ -->
@@ -162,6 +191,12 @@ h1 em{font-style:normal;color:var(--mu)}
   <span class="back" onclick="showHome()">← All tracks</span>
   <div id="quizBody"></div>
   <p class="disclaimer" id="disclaimer"></p>
+</section>
+
+<!-- ============ PROGRESS ============ -->
+<section id="progress" style="display:none">
+  <span class="back" onclick="showHome()">← All tracks</span>
+  <div id="progressBody"></div>
 </section>
 
 <!-- ============ FLIGHT CALCULATOR ============ -->
@@ -654,13 +689,13 @@ function toast(msg){
   clearTimeout(el._t); el._t = setTimeout(()=>el.classList.remove("on"), 3500);
 }
 
-function showHome(){ $("#quiz").style.display="none"; $("#calc").style.display="none"; $("#home").style.display="block"; history.replaceState(null,"","/learn"); scrollTo(0,0); }
-function showCalc(){ $("#quiz").style.display="none"; $("#home").style.display="none"; $("#calc").style.display="block"; history.replaceState(null,"","/learn#calc"); calcAll(); scrollTo(0,0); }
+function showHome(){ $("#progress").style.display="none"; $("#quiz").style.display="none"; $("#calc").style.display="none"; $("#home").style.display="block"; history.replaceState(null,"","/learn"); scrollTo(0,0); }
+function showCalc(){ $("#progress").style.display="none"; $("#quiz").style.display="none"; $("#home").style.display="none"; $("#calc").style.display="block"; history.replaceState(null,"","/learn#calc"); calcAll(); scrollTo(0,0); }
 function showQuiz(key){
   key = TESTS[key] ? key : "pstar";
   if (TK !== key) chosenTopics = new Set();
   TK = key; T = TESTS[key];
-  $("#home").style.display="none"; $("#calc").style.display="none"; $("#quiz").style.display="block";
+  $("#home").style.display="none"; $("#calc").style.display="none"; $("#progress").style.display="none"; $("#quiz").style.display="block";
   $("#disclaimer").innerHTML = T.disclaimer;
   history.replaceState(null,"","/learn#"+key); renderMenu(); scrollTo(0,0);
 }
@@ -729,7 +764,7 @@ function renderQ(){
     </div>`;
 }
 function pick(k){
-  if (S.mode==="practice"){ if (S.locked[S.i]) return; S.ans[S.i]=k; S.locked[S.i]=true; if (k===S.qs[S.i].a) addCorrect(1); }
+  if (S.mode==="practice"){ if (S.locked[S.i]) return; S.ans[S.i]=k; S.locked[S.i]=true; if (k===S.qs[S.i].a) addCorrect(1); logAnswers(TK, [{t:S.qs[S.i].t, ok:k===S.qs[S.i].a}]); }
   else S.ans[S.i]=k;
   renderQ();
 }
@@ -738,7 +773,7 @@ function go(d){ S.i=Math.max(0,Math.min(S.qs.length-1,S.i+d)); renderQ(); scroll
 function finish(){
   const n = S.qs.length, right = S.qs.filter((q,i)=>S.ans[i]===q.a).length, pct = Math.round(right/n*100);
   const passed = pct>=T.pass, need = Math.ceil(n*T.pass/100);
-  if (S.mode==="mock") addCorrect(right);
+  if (S.mode==="mock"){ addCorrect(right); logAnswers(TK, S.qs.map((q,i)=>({t:q.t, ok:S.ans[i]===q.a}))); }
   if (S.mode==="mock"){ const h = store.get(histKey(), []); h.push({pct, right, n, at:new Date().toISOString()}); store.set(histKey(), h.slice(-50)); }
   const missed = S.qs.map((q,i)=>({q, a:S.ans[i]})).filter(x=>x.a!==x.q.a);
   const byTopic = {};
@@ -923,6 +958,182 @@ function calcAll(){
 })();
 
 if (location.hash === "#calc") showCalc();
+// ===========================================================================
+// Progress tracker. Logs every answered question (practice on answer, mock on
+// submit) by local day, test and section. Stored in this browser.
+// ===========================================================================
+const ACT_KEY = "urbris_activity";   // {date: {test: [answered, correct]}}
+const SEC_KEY = "urbris_sections";   // {test: {section: [answered, correct]}}
+function logAnswers(test, items){    // items: [{t: section, ok: bool}]
+  if (!items.length) return;
+  const act = store.get(ACT_KEY, {}), sec = store.get(SEC_KEY, {}), d = dayStr();
+  act[d] = act[d] || {}; const day = act[d][test] = act[d][test] || [0, 0];
+  sec[test] = sec[test] || {};
+  items.forEach(({t, ok}) => {
+    day[0]++; if (ok) day[1]++;
+    const s = sec[test][t] = sec[test][t] || [0, 0]; s[0]++; if (ok) s[1]++;
+  });
+  store.set(ACT_KEY, act); store.set(SEC_KEY, sec);
+}
+// One-time carry-over of PSTAR daily counts saved before the tracker existed.
+(function backfill(){
+  if (store.get("urbris_activity_bf", false)) return;
+  const act = store.get(ACT_KEY, {}), daily = store.get("urbris_pstar_daily", {});
+  Object.entries(daily).forEach(([d, c]) => { if (!(act[d] && act[d].pstar) && c > 0){ act[d] = act[d] || {}; act[d].pstar = [c, c, 1]; } });
+  store.set(ACT_KEY, act); store.set("urbris_activity_bf", true);
+})();
+
+let PF = "all"; // progress filter
+const TNAME = {pstar: "PSTAR", m1: "M1", g1: "G1"};
+function showProgress(){
+  ["home","quiz","calc"].forEach(id => $("#"+id).style.display = "none");
+  $("#progress").style.display = "block";
+  history.replaceState(null, "", "/learn#progress"); renderProgress(); scrollTo(0,0);
+}
+function dayTotals(act, d){ // [answered, correct, answeredForAccuracy]
+  const r = [0, 0, 0, 0], day = act[d] || {};
+  Object.entries(day).forEach(([t, v]) => {
+    if (PF !== "all" && PF !== t) return;
+    r[0] += v[0]; r[1] += v[1]; if (!v[2]){ r[2] += v[0]; r[3] += v[1]; }
+  });
+  return r;
+}
+function addDays(d, n){ const x = new Date(d); x.setDate(x.getDate() + n); return x; }
+function fmtDay(s){ const [y,m,dd] = s.split("-").map(Number); return new Date(y, m-1, dd).toLocaleDateString("en-CA", {weekday:"short", month:"short", day:"numeric"}); }
+
+function renderProgress(){
+  const act = store.get(ACT_KEY, {}), sec = store.get(SEC_KEY, {}), today = new Date();
+  // ---- consistency stats ----
+  const active = d => dayTotals(act, dayStr(d))[0] > 0;
+  let cur = 0, c = new Date(today); if (!active(c)) c = addDays(c, -1);
+  while (active(c)){ cur++; c = addDays(c, -1); }
+  const days = Object.keys(act).filter(d => dayTotals(act, d)[0] > 0).sort();
+  let longest = 0, run = 0, prev = null;
+  days.forEach(d => { run = prev && dayStr(addDays(new Date(prev+"T12:00"), 1)) === d ? run + 1 : 1; longest = Math.max(longest, run); prev = d; });
+  let last30 = 0, goal30 = 0; const pDaily = store.get("urbris_pstar_daily", {});
+  for (let i = 0; i < 30; i++){ const d = dayStr(addDays(today, -i)); if (dayTotals(act, d)[0] > 0) last30++; if ((pDaily[d]||0) >= 20) goal30++; }
+  let ans = 0, cor = 0, accA = 0, accC = 0;
+  Object.keys(act).forEach(d => { const r = dayTotals(act, d); ans += r[0]; cor += r[1]; accA += r[2]; accC += r[3]; });
+  const acc = accA ? Math.round(accC / accA * 100) : null;
+  const tests = PF === "all" ? Object.keys(TNAME) : [PF];
+  const mocks = tests.map(t => ({t, h: store.get("urbris_"+t+"_history", [])})).filter(x => x.h.length);
+  const bestMock = mocks.length ? Math.max(...mocks.flatMap(x => x.h.map(h => h.pct))) : null;
+
+  const tile = (v, l, s) => `<div class="tile"><div class="tv">${v}</div><div class="tl">${l}</div>${s?`<div class="ts">${s}</div>`:""}</div>`;
+  const filt = ["all","pstar","m1","g1"].map(k => `<button class="chip${PF===k?" on":""}" onclick="PF='${k}';renderProgress()">${k==="all"?"All tests":TNAME[k]}</button>`).join("");
+
+  $("#progressBody").innerHTML = `
+    <div class="eyebrow">Your progress</div>
+    <h1 style="font-size:clamp(34px,5vw,48px)">How you're doing</h1>
+    <div class="topics" style="margin:0 0 24px">${filt}</div>
+    ${ans === 0 ? `<div class="panel" style="text-align:center;color:var(--mu)">Nothing logged ${PF==="all"?"yet":"for "+TNAME[PF]+" yet"}. Answer a few practice questions and come back. Every answer from now on is tracked.</div>` : `
+    <h2 class="ph">Consistency</h2>
+    <div class="tiles">
+      ${tile(cur, "Day streak", cur ? "Answered at least one question each day" : "Answer a question today to start one")}
+      ${tile(longest, "Longest streak", "days in a row")}
+      ${tile(last30 + "<span>/30</span>", "Active days", "in the last 30")}
+      ${PF==="all"||PF==="pstar" ? tile(goal30 + "<span>/30</span>", "PSTAR goal days", "20+ correct, last 30") : ""}
+    </div>
+    <div class="panel pc"><div class="pch">Daily activity · last 12 months</div>${heatmap(act)}
+      <div class="hlegend"><span>Less</span>${[0,1,2,3,4].map(l=>`<i class="l${l}"></i>`).join("")}<span>More correct</span></div></div>
+    <div class="panel pc"><div class="pch">Correct answers per day · last 30 days</div>
+      <div class="legend"><span><i style="background:var(--ac)"></i>Correct</span><span><i style="background:rgba(255,255,255,.14)"></i>Answered</span>${PF==="pstar"?`<span><i class="dash"></i>Daily goal (20)</span>`:""}</div>
+      ${dailyBars(act, today)}</div>
+
+    <h2 class="ph">Performance</h2>
+    <div class="tiles">
+      ${tile(acc === null ? "—" : acc + "<span>%</span>", "Accuracy", "all answers logged")}
+      ${tile(ans.toLocaleString(), "Questions answered", cor.toLocaleString() + " correct")}
+      ${tile(bestMock === null ? "—" : bestMock + "<span>%</span>", "Best mock", mocks.length ? mocks.map(x => TNAME[x.t] + ": " + x.h.length + " taken").join(" · ") : "No mock exams yet")}
+    </div>
+    ${mocks.length ? `<div class="mgrid">${mocks.map(x => `<div class="panel pc"><div class="pch">${TNAME[x.t]} mock scores · pass ${TESTS[x.t].pass}%</div>${mockLine(x.h, TESTS[x.t].pass)}</div>`).join("")}</div>` : ""}
+    ${sectionBars(sec, tests)}
+    `}
+    <p class="disclaimer">Progress is saved in this browser only, so another device starts from zero. Answers are logged from 11 Nov 2026. PSTAR daily counts from before that are included, without accuracy.</p>`;
+  bindTips();
+  $("#progressBody").querySelectorAll(".scrollx").forEach(el => el.scrollLeft = el.scrollWidth); // show most recent first
+}
+
+function heatmap(act){
+  const today = new Date(), weeks = 52, cell = 12, gap = 3, top = 18, left = 28;
+  const start = addDays(today, -(weeks * 7 - 1) - today.getDay()); // align to Sunday
+  let out = "", months = "", lastM = -1;
+  for (let w = 0; w <= weeks; w++){
+    for (let dw = 0; dw < 7; dw++){
+      const d = addDays(start, w * 7 + dw); if (d > today) continue;
+      const s = dayStr(d), r = dayTotals(act, s), c = r[1];
+      const l = r[0] === 0 ? 0 : c < 5 ? 1 : c < 13 ? 2 : c < 20 ? 3 : 4;
+      const tip = `<b>${fmtDay(s)}</b><br>${r[0] ? `${r[1]} correct of ${r[0]} answered` : "No practice"}`;
+      out += `<rect class="hc l${l}" x="${left + w*(cell+gap)}" y="${top + dw*(cell+gap)}" width="${cell}" height="${cell}" rx="3" data-tip="${esc(tip)}"/>`;
+      if (dw === 0 && d.getMonth() !== lastM){ lastM = d.getMonth(); months += `<text x="${left + w*(cell+gap)}" y="11" class="ax">${d.toLocaleDateString("en-CA",{month:"short"})}</text>`; }
+    }
+  }
+  const W = left + (weeks+1)*(cell+gap), H = top + 7*(cell+gap);
+  const dl = ["","Mon","","Wed","","Fri",""].map((t,i) => t ? `<text x="0" y="${top + i*(cell+gap) + 10}" class="ax">${t}</text>` : "").join("");
+  return `<div class="scrollx"><svg viewBox="0 0 ${W} ${H}" class="fluid" style="min-width:640px" role="img" aria-label="Daily activity calendar">${months}${dl}${out}</svg></div>`;
+}
+
+function dailyBars(act, today){
+  const n = 30, W = 900, H = 200, pl = 34, pr = 8, pt = 10, pb = 26, iw = W - pl - pr, ih = H - pt - pb;
+  const data = []; for (let i = n - 1; i >= 0; i--){ const s = dayStr(addDays(today, -i)); const r = dayTotals(act, s); data.push({s, a: r[0], c: r[1]}); }
+  const goal = PF === "pstar" ? 20 : 0;
+  const max = Math.max(goal, ...data.map(d => d.a), 5), yMax = Math.ceil(max / 10) * 10 || 10;
+  const y = v => pt + ih - v / yMax * ih, bw = iw / n, w = Math.max(4, bw - 4);
+  let g = "";
+  [0, yMax/2, yMax].forEach(v => { g += `<line x1="${pl}" x2="${W-pr}" y1="${y(v)}" y2="${y(v)}" class="grid"/><text x="${pl-6}" y="${y(v)+4}" text-anchor="end" class="ax">${v}</text>`; });
+  data.forEach((d, i) => {
+    const x = pl + i * bw + (bw - w) / 2, tip = `<b>${fmtDay(d.s)}</b><br>${d.a ? `${d.c} correct · ${d.a} answered` : "No practice"}`;
+    if (d.a) g += `<rect x="${x}" y="${y(d.a)}" width="${w}" height="${y(0)-y(d.a)}" rx="3" class="ba"/>`;
+    if (d.c) g += `<rect x="${x}" y="${y(d.c)}" width="${w}" height="${y(0)-y(d.c)}" rx="3" class="bc"/>`;
+    g += `<rect x="${pl + i*bw}" y="${pt}" width="${bw}" height="${ih}" fill="transparent" data-tip="${esc(tip)}"/>`;
+    if ((n - 1 - i) % 7 === 0) g += `<text x="${pl + i*bw + bw/2}" y="${H-6}" text-anchor="middle" class="ax">${i === n-1 ? "Today" : fmtDay(d.s).replace(/^\w+, /,"")}</text>`;
+  });
+  if (goal) g += `<line x1="${pl}" x2="${W-pr}" y1="${y(goal)}" y2="${y(goal)}" class="goal"/>`;
+  return `<div class="scrollx"><svg viewBox="0 0 ${W} ${H}" class="fluid" style="min-width:620px" role="img" aria-label="Correct answers per day, last 30 days">${g}</svg></div>`;
+}
+
+function mockLine(h, pass){
+  const W = 440, H = 180, pl = 34, pr = 12, pt = 12, pb = 24, iw = W - pl - pr, ih = H - pt - pb;
+  const pts = h.slice(-20), n = pts.length;
+  const x = i => n === 1 ? pl + iw / 2 : pl + i / (n - 1) * iw, y = v => pt + ih - v / 100 * ih;
+  let g = "";
+  [0, 50, 100].forEach(v => { g += `<line x1="${pl}" x2="${W-pr}" y1="${y(v)}" y2="${y(v)}" class="grid"/><text x="${pl-6}" y="${y(v)+4}" text-anchor="end" class="ax">${v}%</text>`; });
+  g += `<line x1="${pl}" x2="${W-pr}" y1="${y(pass)}" y2="${y(pass)}" class="goal"/><text x="${pl+6}" y="${y(pass)+14}" class="ax">Pass ${pass}%</text>`;
+  if (n > 1) g += `<polyline points="${pts.map((p,i)=>x(i)+","+y(p.pct)).join(" ")}" class="ln"/>`;
+  pts.forEach((p, i) => {
+    const tip = `<b>${p.pct}%</b> · ${p.right}/${p.n}<br>${new Date(p.at).toLocaleDateString("en-CA",{month:"short",day:"numeric"})} · ${p.pct >= pass ? "Pass" : "Below pass"}`;
+    g += `<circle cx="${x(i)}" cy="${y(p.pct)}" r="4.5" class="dot${p.pct>=pass?" ok":""}"/><circle cx="${x(i)}" cy="${y(p.pct)}" r="12" fill="transparent" data-tip="${esc(tip)}"/>`;
+  });
+  const lp = pts[n-1]; g += `<text x="${Math.min(x(n-1)+8, W-pr-30)}" y="${y(lp.pct)-9}" class="lab">${lp.pct}%</text>`;
+  return `<svg viewBox="0 0 ${W} ${H}" class="fluid" role="img" aria-label="Mock exam scores">${g}</svg><div class="ax" style="text-align:right">Last ${n} attempt${n>1?"s":""}</div>`;
+}
+
+function sectionBars(sec, tests){
+  const rows = [];
+  tests.forEach(t => Object.entries(sec[t] || {}).forEach(([s, v]) => rows.push({label: (tests.length > 1 ? TNAME[t] + " · " : "") + s, a: v[0], c: v[1], p: v[1] / v[0]})));
+  if (!rows.length) return "";
+  rows.sort((a, b) => a.p - b.p || b.a - a.a);
+  const shown = rows.slice(0, 14);
+  return `<div class="panel pc"><div class="pch">Accuracy by section · weakest first</div>
+    <div class="sbars">${shown.map(r => `<div class="sb" data-tip="${esc(`<b>${r.label}</b><br>${r.c} of ${r.a} correct`)}">
+      <div class="sl">${esc(r.label)}</div>
+      <div class="st"><i style="width:${Math.max(2, r.p*100)}%"></i></div>
+      <div class="sv">${Math.round(r.p*100)}%<span> · ${r.a}</span></div></div>`).join("")}</div>
+    ${rows.length > shown.length ? `<div class="ax" style="margin-top:8px">${rows.length - shown.length} stronger sections not shown</div>` : ""}
+    <div class="ax" style="margin-top:6px">Number after the % = questions answered in that section. Small numbers mean the score can still swing a lot.</div></div>`;
+}
+
+function bindTips(){
+  let tip = document.getElementById("tip");
+  if (!tip){ tip = document.createElement("div"); tip.id = "tip"; document.body.appendChild(tip); }
+  $("#progressBody").querySelectorAll("[data-tip]").forEach(el => {
+    el.addEventListener("mousemove", e => { tip.innerHTML = el.dataset.tip; tip.style.display = "block";
+      const x = Math.min(e.clientX + 14, innerWidth - tip.offsetWidth - 8); tip.style.left = x + "px"; tip.style.top = (e.clientY + 14) + "px"; });
+    el.addEventListener("mouseleave", () => tip.style.display = "none");
+  });
+}
+if (location.hash === "#progress") showProgress();
+
 else if (TESTS[location.hash.slice(1)]) showQuiz(location.hash.slice(1));
 
 </script>
